@@ -2,33 +2,33 @@
 
 /* ── DESIGN TOKENS ── */
 :root {
-  /* Green SaaS theme */
+  /* Light theme - expert recommended contrast improvements */
   color-scheme: light;
-  --bg: #F6FAF8;
-  --bg-soft: #EEF5F1;
+  --bg: #F7F9FC;
+  --bg-soft: #F1F4F8;
   --card: #FFFFFF;
-  --card-hover: #F5FAF7;
-  --card-alt: #F1F8F4;
-  --text: #0F1F17;
-  --text-muted: #4B6357;
-  --text-soft: #8CA599;
-  --border: #E1EBE5;
-  --border-strong: #C9DBD0;
-  --primary: #0F9D58;
-  --primary-hover: #0B7C44;
+  --card-hover: #F9FAFB;
+  --card-alt: #F8FAFC;
+  --text: #0F172A;
+  --text-muted: #475569;
+  --text-soft: #94A3B8;
+  --border: #E5E7EB;
+  --border-strong: #D1D5DB;
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
   --primary-text: #FFFFFF;
   --success: #16A34A;
   --warning: #F59E0B;
   --danger: #EF4444;
-  --shell-bg: #EEF5F1;
+  --shell-bg: #F1F4F8;
   --sidebar-bg: #FFFFFF;
-  --sidebar-border: #E1EBE5;
+  --sidebar-border: #E5E7EB;
   --topbar-bg: #FFFFFF;
-  --topbar-border: #E1EBE5;
-  --main-bg: #F6FAF8;
-  --shadow-sm: 0 1px 2px rgba(15,157,88,0.05);
-  --shadow: 0 1px 3px rgba(15,157,88,0.08);
-  --shadow-lg: 0 4px 12px rgba(15,157,88,0.10);
+  --topbar-border: #E5E7EB;
+  --main-bg: #F7F9FC;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.08);
   --radius: 12px;
   --font-family: 'Inter', sans-serif;
 }
@@ -73,21 +73,21 @@
   --text-soft: #94A3B8;
   --border: #E5E7EB;
   --border-strong: #D1D5DB;
-  --primary: #0F9D58;
-  --primary-hover: #0B7C44;
+  --primary: #1740C8;
+  --primary-hover: #0F2A8F;
   --primary-text: #FFFFFF;
   --success: #16A34A;
   --warning: #F59E0B;
   --danger: #EF4444;
   --shell-bg: #F1F4F8;
-  --sidebar-bg: linear-gradient(155deg, #021B0E 0%, #04331A 22%, #085C30 50%, #0B7C44 78%, #0F9D58 100%);
+  --sidebar-bg: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%);
   --sidebar-border: rgba(255,255,255,0.12);
-  --topbar-bg: linear-gradient(155deg, #021B0E 0%, #04331A 22%, #085C30 50%, #0B7C44 78%, #0F9D58 100%);
+  --topbar-bg: linear-gradient(155deg, #04092E 0%, #071352 18%, #0F2280 40%, #1740C8 72%, #1E55E8 100%);
   --topbar-border: transparent;
   --main-bg: #FFFFFF;
-  --shadow-sm: 0 1px 2px rgba(15,157,88,0.06);
-  --shadow: 0 1px 3px rgba(15,157,88,0.08);
-  --shadow-lg: 0 4px 12px rgba(15,157,88,0.12);
+  --shadow-sm: 0 1px 2px rgba(23,64,200,0.06);
+  --shadow: 0 1px 3px rgba(23,64,200,0.08);
+  --shadow-lg: 0 4px 12px rgba(23,64,200,0.12);
 }
 
 /* ── GLOBAL RESET ── */
@@ -161,5 +161,5 @@ body {
 [data-theme="oneaccounts"] .dl-main-content h1,
 [data-theme="oneaccounts"] .dl-main-content h2,
 [data-theme="oneaccounts"] .dl-main-content h3 {
-  color: #0F9D58;
+  color: #1740C8;
 }
