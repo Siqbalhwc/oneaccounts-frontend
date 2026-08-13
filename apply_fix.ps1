@@ -1,112 +1,66 @@
-$filePath = "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\app\dashboard\receipts\new\page.tsx"
+$filePath = "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\app\dashboard\invoices\new\page.tsx"
 $backupPath = "$filePath.bak_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 
 $content = [System.IO.File]::ReadAllText($filePath, [System.Text.Encoding]::UTF8)
 [System.IO.File]::WriteAllText($backupPath, $content, [System.Text.Encoding]::UTF8)
 
 $old1 = @'
-  const [customerOpeningBalance, setCustomerOpeningBalance] = useState(0)
-  const [customerOpeningTotal, setCustomerOpeningTotal] = useState(0)
-  const [customerOpeningPaid, setCustomerOpeningPaid] = useState(0)
+import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
+import RecordHistory from "@/components/RecordHistory"
+import { usePlan } from "@/contexts/PlanContext"
+import EntityPicker from "@/components/entity-picker/EntityPicker"
 '@
 
 $new1 = @'
-  const [customerOpeningBalance, setCustomerOpeningBalance] = useState(0)
-  const [customerOpeningTotal, setCustomerOpeningTotal] = useState(0)
-  const [customerOpeningPaid, setCustomerOpeningPaid] = useState(0)
-  const [ownOpeningAllocation, setOwnOpeningAllocation] = useState(0)
+import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
+import RecordHistory from "@/components/RecordHistory"
+import { usePlan } from "@/contexts/PlanContext"
+import EntityPicker from "@/components/entity-picker/EntityPicker"
+import { useTheme } from "@/contexts/ThemeContext"
 '@
 
 $old2 = @'
-        const allocs: Record<string, number> = {}
-        data.receipt_allocations?.forEach((a: any) => {
-          allocs[String(a.invoice_id)] = a.amount
-        })
-        setAllocations(allocs)
-      })
-  }, [editId, companyId])
+  const { hasFeature } = usePlan()
+  const showProducts = hasFeature("inventory")
+  const taxEnabled = hasFeature("tax_management")
+  const automationFeatureEnabled = hasFeature("invoice_automation")
 '@
 
 $new2 = @'
-        const allocs: Record<string, number> = {}
-        data.receipt_allocations?.forEach((a: any) => {
-          allocs[String(a.invoice_id)] = a.amount
-        })
-        setAllocations(allocs)
-
-        supabase.from("customer_opening_allocations")
-          .select("amount")
-          .eq("receipt_id", editId)
-          .eq("company_id", companyId)
-          .then(({ data: openingAllocs }) => {
-            const amt = (openingAllocs || []).reduce((s: number, r: any) => s + (r.amount || 0), 0)
-            if (amt > 0) {
-              setOwnOpeningAllocation(amt)
-              setAllocations(prev => ({ ...prev, opening: amt }))
-            }
-          })
-      })
-  }, [editId, companyId])
+  const { hasFeature } = usePlan()
+  const showProducts = hasFeature("inventory")
+  const taxEnabled = hasFeature("tax_management")
+  const automationFeatureEnabled = hasFeature("invoice_automation")
+  const { theme: themeMode } = useTheme()
+  const isDark = themeMode === "dark" || themeMode === "oneaccounts"
 '@
 
 $old3 = @'
-    Promise.all([
-      supabase.rpc("get_customer_opening_total", { p_company_id: companyId, p_customer_id: customerId }),
-      supabase.rpc("get_customer_opening_paid", { p_company_id: companyId, p_customer_id: customerId }),
-    ]).then(([totalRes, paidRes]) => {
-      const total = totalRes.data || 0
-      const paid = paidRes.data || 0
-      setCustomerOpeningTotal(total)
-      setCustomerOpeningPaid(paid)
-      setCustomerOpeningBalance(Math.max(0, total - paid))
-    })
-  }, [companyId, customerId, isDonation])
+        {flash && (
+          <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+            <CheckCircle size={16} /> {flash}
+            {savedInvoiceId && !editId && <button className="inv-btn" style={{ marginLeft: 8, borderColor: "#ECFDF5", color: "#ECFDF5" }} onClick={() => router.push(`/dashboard/invoices/${savedInvoiceId}`)}><ExternalLink size={14} /> View Invoice</button>}
+          </div>
+        )}
 '@
 
 $new3 = @'
-    Promise.all([
-      supabase.rpc("get_customer_opening_total", { p_company_id: companyId, p_customer_id: customerId }),
-      supabase.rpc("get_customer_opening_paid", { p_company_id: companyId, p_customer_id: customerId }),
-    ]).then(([totalRes, paidRes]) => {
-      const total = totalRes.data || 0
-      const rawPaid = paidRes.data || 0
-      const paid = editId ? Math.max(0, rawPaid - ownOpeningAllocation) : rawPaid
-      setCustomerOpeningTotal(total)
-      setCustomerOpeningPaid(paid)
-      setCustomerOpeningBalance(Math.max(0, total - paid))
-    })
-  }, [companyId, customerId, isDonation, editId, ownOpeningAllocation])
+        {flash && (
+          <div style={{ background: isDark ? "var(--card)" : "#ECFDF5", border: isDark ? "1px solid #065F46" : "1px solid #10B981", color: isDark ? "#6EE7B7" : "#065F46", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+            <CheckCircle size={16} /> {flash}
+            {savedInvoiceId && !editId && <button className="inv-btn" style={{ marginLeft: 8, borderColor: isDark ? "#ECFDF5" : "#065F46", color: isDark ? "#ECFDF5" : "#065F46" }} onClick={() => router.push(`/dashboard/invoices/${savedInvoiceId}`)}><ExternalLink size={14} /> View Invoice</button>}
+          </div>
+        )}
 '@
 
 $allFound = $true
-
-if ($content.Contains($old1)) {
-    $content = $content.Replace($old1, $new1)
-    Write-Host "Step 1 of 3: OK"
-} else {
-    Write-Host "Step 1 of 3: NOT FOUND"
-    $allFound = $false
-}
-
-if ($content.Contains($old2)) {
-    $content = $content.Replace($old2, $new2)
-    Write-Host "Step 2 of 3: OK"
-} else {
-    Write-Host "Step 2 of 3: NOT FOUND"
-    $allFound = $false
-}
-
-if ($content.Contains($old3)) {
-    $content = $content.Replace($old3, $new3)
-    Write-Host "Step 3 of 3: OK"
-} else {
-    Write-Host "Step 3 of 3: NOT FOUND"
-    $allFound = $false
-}
+if ($content.Contains($old1)) { $content = $content.Replace($old1, $new1); Write-Host "Step 1 of 3: OK" } else { Write-Host "Step 1 of 3: NOT FOUND"; $allFound = $false }
+if ($content.Contains($old2)) { $content = $content.Replace($old2, $new2); Write-Host "Step 2 of 3: OK" } else { Write-Host "Step 2 of 3: NOT FOUND"; $allFound = $false }
+if ($content.Contains($old3)) { $content = $content.Replace($old3, $new3); Write-Host "Step 3 of 3: OK" } else { Write-Host "Step 3 of 3: NOT FOUND"; $allFound = $false }
 
 if ($allFound) {
     [System.IO.File]::WriteAllText($filePath, $content, [System.Text.Encoding]::UTF8)
-    Write-Host "SUCCESS: Receipt opening balance edit fix applied. Backup saved at $backupPath"
+    Write-Host "SUCCESS: Invoice saved message contrast fixed. Backup saved at $backupPath"
 } else {
-    Write-Host "ERROR: One or more blocks not found. No changes were written to the real file. Please tell Claude which steps said NOT FOUND."
+    Write-Host "ERROR: One or more blocks not found. No changes were written. Please tell Claude which steps said NOT FOUND."
 }

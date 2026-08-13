@@ -12,7 +12,6 @@ import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
-import { useTheme } from "@/contexts/ThemeContext"
 
 function getCreditDays(term?: string | null): number {
   if (!term) return 30
@@ -39,8 +38,6 @@ function NewInvoicePageContent() {
   const showProducts = hasFeature("inventory")
   const taxEnabled = hasFeature("tax_management")
   const automationFeatureEnabled = hasFeature("invoice_automation")
-  const { theme: themeMode } = useTheme()
-  const isDark = themeMode === "dark" || themeMode === "oneaccounts"
 
   const [companyId, setCompanyId] = useState("")
   const [businessType, setBusinessType] = useState("")
@@ -882,9 +879,9 @@ function NewInvoicePageContent() {
 
         {error && <div style={{ background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
         {flash && (
-          <div style={{ background: isDark ? "var(--card)" : "#ECFDF5", border: isDark ? "1px solid #065F46" : "1px solid #10B981", color: isDark ? "#6EE7B7" : "#065F46", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
             <CheckCircle size={16} /> {flash}
-            {savedInvoiceId && !editId && <button className="inv-btn" style={{ marginLeft: 8, borderColor: isDark ? "#ECFDF5" : "#065F46", color: isDark ? "#ECFDF5" : "#065F46" }} onClick={() => router.push(`/dashboard/invoices/${savedInvoiceId}`)}><ExternalLink size={14} /> View Invoice</button>}
+            {savedInvoiceId && !editId && <button className="inv-btn" style={{ marginLeft: 8, borderColor: "#ECFDF5", color: "#ECFDF5" }} onClick={() => router.push(`/dashboard/invoices/${savedInvoiceId}`)}><ExternalLink size={14} /> View Invoice</button>}
           </div>
         )}
 
