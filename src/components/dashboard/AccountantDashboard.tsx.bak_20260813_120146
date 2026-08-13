@@ -164,7 +164,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
         style={{
           padding: 40,
           textAlign: "center",
-          color: "var(--kpi-negative)",
+          color: "#F87171",
           background: "var(--bg)",
           minHeight: "100vh",
         }}

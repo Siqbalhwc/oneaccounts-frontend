@@ -243,7 +243,7 @@ function NotificationCenter({
             <div>
               <div style={{ padding: "8px 14px 4px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#EF4444", textTransform: "uppercase", letterSpacing: "0.05em" }}>{invoiceCount} Overdue Invoices</span>
-                <button onClick={(e) => { e.stopPropagation(); setOpen(false); onViewInvoices() }} style={{ fontSize: "0.68rem", color: "var(--kpi-link)", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>View All →</button>
+                <button onClick={(e) => { e.stopPropagation(); setOpen(false); onViewInvoices() }} style={{ fontSize: "0.68rem", color: "#93C5FD", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>View All →</button>
               </div>
               <div style={{ maxHeight: 150, overflowY: "auto" }}>
                 {invoiceItems.slice(0, 5).map((item, i) => (
@@ -263,7 +263,7 @@ function NotificationCenter({
             <div>
               <div style={{ padding: "8px 14px 4px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#EF4444", textTransform: "uppercase", letterSpacing: "0.05em" }}>{billCount} Overdue Bills</span>
-                <button onClick={(e) => { e.stopPropagation(); setOpen(false); onViewBills() }} style={{ fontSize: "0.68rem", color: "var(--kpi-link)", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>View All →</button>
+                <button onClick={(e) => { e.stopPropagation(); setOpen(false); onViewBills() }} style={{ fontSize: "0.68rem", color: "#93C5FD", background: "none", border: "none", cursor: "pointer", fontWeight: 600, fontFamily: "inherit" }}>View All →</button>
               </div>
               <div style={{ maxHeight: 150, overflowY: "auto" }}>
                 {billItems.slice(0, 5).map((item, i) => (
@@ -354,7 +354,7 @@ function OdooLoader({ isDark }: { isDark: boolean }) {
         </div>
         <div style={{
           fontSize: "1.5rem", fontWeight: 800,
-          background: "linear-gradient(135deg, #6366f1, var(--kpi-info))",
+          background: "linear-gradient(135deg, #6366f1, #A78BFA)",
           WebkitBackgroundClip: "text",
           WebkitTextFillColor: "transparent",
           letterSpacing: "-0.02em",
@@ -389,7 +389,7 @@ function OdooLoader({ isDark }: { isDark: boolean }) {
         width: 44, height: 44,
         borderRadius: "50%",
         border: "3px solid var(--border)",
-        borderTop: "3px solid var(--kpi-info)",
+        borderTop: "3px solid #A78BFA",
         animation: "spin 1s linear infinite",
         marginBottom: 28,
       }} />
@@ -421,7 +421,7 @@ function OdooLoader({ isDark }: { isDark: boolean }) {
               width: i === stepIdx ? 20 : 6,
               height: 6,
               borderRadius: 3,
-              background: i === stepIdx ? "var(--kpi-info)" : isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)",
+              background: i === stepIdx ? "#A78BFA" : isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)",
               transition: "all 0.3s ease",
             }}
           />
@@ -486,7 +486,7 @@ function NewCompanyEmptyState({
           color: var(--text);
         }
         .setup-step-btn:hover {
-          border-color: var(--kpi-info);
+          border-color: #A78BFA;
           transform: translateX(4px);
           background: ${isDark ? "rgba(167,139,250,0.08)" : "rgba(167,139,250,0.05)"};
         }
@@ -554,7 +554,7 @@ function NewCompanyEmptyState({
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--kpi-info)", letterSpacing: "0.05em" }}>
+                <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#A78BFA", letterSpacing: "0.05em" }}>
                   STEP {item.step}
                 </span>
               </div>
@@ -1000,7 +1000,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   if (!companyId) {
     return (
       <div style={{ padding: 40, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>
-        <div style={{ fontSize: "1.2rem", color: "var(--kpi-negative)" }}>Could not load dashboard</div>
+        <div style={{ fontSize: "1.2rem", color: "#F87171" }}>Could not load dashboard</div>
         <div style={{ fontSize: "0.85rem", marginTop: 8 }}>Account not linked to a company. Contact your administrator.</div>
       </div>
     )
@@ -1085,7 +1085,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           transition: border-color 0.15s, background 0.15s;
           color-scheme: ${isDark ? "dark" : "light"};
         }
-        .tsd .period-select:focus { outline: none; border-color: var(--kpi-info); }
+        .tsd .period-select:focus { outline: none; border-color: #A78BFA; }
 
         .tsd .refresh-btn {
           display: inline-flex; align-items: center; justify-content: center;
@@ -1094,7 +1094,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           border: 1px solid var(--border); cursor: pointer;
           color: var(--text-muted); transition: all 0.15s;
         }
-        .tsd .refresh-btn:hover { color: var(--text); border-color: var(--kpi-info); }
+        .tsd .refresh-btn:hover { color: var(--text); border-color: #A78BFA; }
         .tsd .refresh-btn.spinning svg { animation: spin 0.7s linear infinite; }
 
         .tsd .last-updated {
@@ -1255,8 +1255,8 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
             { label: "💰 Total Revenue",   value: formatPKR(animRevenue), color: "#10B981", link: "/dashboard/reports/profit-loss", delta: revenueDelta, goodWhenUp: true },
             { label: "📤 Total Expenses",  value: formatPKR(animExpense), color: "#EF4444", link: "/dashboard/reports/profit-loss", delta: expenseDelta, goodWhenUp: false },
             { label: "📈 Gross Profit",    value: formatPKR(animProfit),  color: grossProfit >= 0 ? "#10B981" : "#EF4444", link: "/dashboard/reports/profit-loss", delta: profitDelta, goodWhenUp: true },
-            { label: "🏦 Cash & Bank",     value: formatPKR(animCash),   color: "var(--kpi-info)", link: "/dashboard/banking/bank-accounts" },
-            { label: "🧾 Receivables",     value: formatPKR(animRecv),   color: "var(--kpi-warn)", link: "/dashboard/customers" },
+            { label: "🏦 Cash & Bank",     value: formatPKR(animCash),   color: "#A78BFA", link: "/dashboard/banking/bank-accounts" },
+            { label: "🧾 Receivables",     value: formatPKR(animRecv),   color: "#F97316", link: "/dashboard/customers" },
             { label: "📋 Payables",        value: formatPKR(animPay),    color: "#EF4444", link: "/dashboard/suppliers" },
             {
               label: "⚠️ Overdue Inv.",

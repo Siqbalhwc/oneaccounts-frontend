@@ -1,66 +1,44 @@
-$filePath = "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\app\globals.css"
-$backupPath = "$filePath.bak_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-
-$rawContent = [System.IO.File]::ReadAllText($filePath, [System.Text.Encoding]::UTF8)
-[System.IO.File]::WriteAllText($backupPath, $rawContent, [System.Text.Encoding]::UTF8)
-$content = $rawContent -replace "`r`n", "`n"
-function Norm($s) { return ($s -replace "`r`n", "`n").TrimEnd("`n") }
-
-$oldPrimary = Norm @'
-  --primary: #0F9D58;
-  --primary-hover: #0B7C44;
-'@
-$newPrimary = Norm @'
-  --primary: #1740C8;
-  --primary-hover: #0F2A8F;
-'@
-
-$oldShadow = Norm @'
-  --shadow-sm: 0 1px 2px rgba(15,157,88,0.06);
-  --shadow: 0 1px 3px rgba(15,157,88,0.08);
-  --shadow-lg: 0 4px 12px rgba(15,157,88,0.12);
-'@
-$newShadow = Norm @'
-  --shadow-sm: 0 1px 2px rgba(23,64,200,0.06);
-  --shadow: 0 1px 3px rgba(23,64,200,0.08);
-  --shadow-lg: 0 4px 12px rgba(23,64,200,0.12);
-'@
-
-$oldHeading = Norm @'
-[data-theme="oneaccounts"] .dl-main-content h1,
-[data-theme="oneaccounts"] .dl-main-content h2,
-[data-theme="oneaccounts"] .dl-main-content h3 {
-  color: #0F9D58;
-}
-'@
-$newHeading = Norm @'
-[data-theme="oneaccounts"] .dl-main-content h1,
-[data-theme="oneaccounts"] .dl-main-content h2,
-[data-theme="oneaccounts"] .dl-main-content h3 {
-  color: #1740C8;
-}
-'@
-
-$blocks = @(
-  @{old=$oldPrimary; new=$newPrimary; label="1 of 3 (oneaccounts primary revert)"},
-  @{old=$oldShadow; new=$newShadow; label="2 of 3 (oneaccounts shadow revert)"},
-  @{old=$oldHeading; new=$newHeading; label="3 of 3 (heading color revert)"}
+$files = @(
+  "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\components\dashboard\ManagementDashboard.tsx",
+  "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\components\dashboard\TradingServiceDashboard.tsx",
+  "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\components\dashboard\AccountantDashboard.tsx"
 )
 
-$allFound = $true
-foreach ($b in $blocks) {
-    if ($content.Contains($b.old)) {
-        $content = $content.Replace($b.old, $b.new)
-        Write-Host "Step $($b.label): OK"
-    } else {
-        Write-Host "Step $($b.label): NOT FOUND"
-        $allFound = $false
-    }
-}
+$map = @(
+  @{hex="#A78BFA"; var="var(--kpi-info)"},
+  @{hex="#F97316"; var="var(--kpi-warn)"},
+  @{hex="#2DD4BF"; var="var(--kpi-positive)"},
+  @{hex="#F87171"; var="var(--kpi-negative)"},
+  @{hex="#93C5FD"; var="var(--kpi-link)"}
+)
 
-if ($allFound) {
-    [System.IO.File]::WriteAllText($filePath, $content, [System.Text.Encoding]::UTF8)
-    Write-Host "SUCCESS: oneaccounts theme reverted to blue. Backup saved at $backupPath"
-} else {
-    Write-Host "ERROR: One or more blocks not found. No changes were written."
+foreach ($filePath in $files) {
+    $fileName = Split-Path $filePath -Leaf
+    if (-not (Test-Path $filePath)) {
+        Write-Host "$fileName : FILE NOT FOUND"
+        continue
+    }
+    $content = [System.IO.File]::ReadAllText($filePath, [System.Text.Encoding]::UTF8)
+    $original = $content
+
+    $totalReplaced = 0
+    foreach ($m in $map) {
+        $before = $content
+        $content = $content.Replace($m.hex, $m.var)
+        if ($content -ne $before) {
+            $count = ([regex]::Matches($before, [regex]::Escape($m.hex))).Count
+            Write-Host "$fileName : replaced $count occurrence(s) of $($m.hex) -> $($m.var)"
+            $totalReplaced += $count
+        }
+    }
+
+    if ($totalReplaced -gt 0) {
+        $backupPath = "$filePath.bak_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+        [System.IO.File]::WriteAllText($backupPath, $original, [System.Text.Encoding]::UTF8)
+        [System.IO.File]::WriteAllText($filePath, $content, [System.Text.Encoding]::UTF8)
+        Write-Host "$fileName : SUCCESS, $totalReplaced total replacement(s). Backup saved at $backupPath"
+    } else {
+        Write-Host "$fileName : no matching hex colors found, no changes made"
+    }
+    Write-Host "---"
 }
