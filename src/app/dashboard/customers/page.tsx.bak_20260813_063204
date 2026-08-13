@@ -52,8 +52,6 @@ export default function CustomersPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState("")
-  const [showArchived, setShowArchived] = useState(false)
-  const [confirmTarget, setConfirmTarget] = useState<any>(null)
 
   // -- Fetch company ID from JWT --
   useEffect(() => {
@@ -82,10 +80,8 @@ export default function CustomersPage() {
       })
   }, [role, canView, companyId, sortField, sortDir])
 
-  const visibleCustomers = showArchived ? customers : customers.filter(c => !c.archived_at)
-
   // -- Filter by search --
-  const filtered = visibleCustomers.filter((c) => {
+  const filtered = customers.filter((c) => {
     if (!search.trim()) return true
     const q = search.toLowerCase()
     return c.code?.toLowerCase().includes(q) ||
@@ -121,28 +117,10 @@ export default function CustomersPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  const handleArchiveOrDelete = (cust: any) => {
-    setConfirmTarget(cust)
-  }
-
-  const confirmArchiveOrDelete = async () => {
-    if (!confirmTarget) return
-    const cust = confirmTarget
-    const hasTransactions = Math.abs(cust.balance || 0) > 0 || Math.abs(cust.opening_balance || 0) > 0
-
-    if (hasTransactions) {
-      await supabase.from("customers").update({ archived_at: new Date().toISOString() }).eq("id", cust.id)
-      setCustomers(prev => prev.map(c => c.id === cust.id ? { ...c, archived_at: new Date().toISOString() } : c))
-    } else {
-      await supabase.from("customers").update({ deleted_at: new Date().toISOString() }).eq("id", cust.id)
-      setCustomers(prev => prev.filter(c => c.id !== cust.id))
-    }
-    setConfirmTarget(null)
-  }
-
-  const restoreCustomer = async (cust: any) => {
-    await supabase.from("customers").update({ archived_at: null }).eq("id", cust.id)
-    setCustomers(prev => prev.map(c => c.id === cust.id ? { ...c, archived_at: null } : c))
+  const handleDelete = async (id: number) => {
+    if (!confirm("Delete this customer? This will not remove their transactions.")) return
+    await supabase.from("customers").update({ deleted_at: new Date().toISOString() }).eq("id", id)
+    setCustomers(prev => prev.filter(c => c.id !== id))
   }
 
   // WhatsApp for customer  send a friendly message with balance info
@@ -431,15 +409,9 @@ export default function CustomersPage() {
         </div>
 
         {/* -- Search (below summary) -- */}
-        <div className="search-section" style={{ display: "flex", alignItems: "center", gap: 16, maxWidth: "none" }}>
-          <div style={{ position: "relative", maxWidth: 320, flex: 1 }}>
-            <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-            <input className="input" placeholder="Search by code, name, phone, email..." value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text-muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
-            <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-            Show Archived
-          </label>
+        <div className="search-section">
+          <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+          <input className="input" placeholder="Search by code, name, phone, email..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
 
         {/* -- Table -- */}
@@ -474,15 +446,13 @@ export default function CustomersPage() {
                 ) : (
                   sortedFiltered.map((cust) => {
                     const balance = cust.balance || 0
-                    const isArchived = !!cust.archived_at
                     return (
-                      <tr key={cust.id} style={isArchived ? { opacity: 0.5 } : {}}>
+                      <tr key={cust.id}>
                         <td style={tdStyle}>
                           <span style={{ fontWeight: 600, color: "var(--primary)" }}>{cust.code}</span>
                         </td>
                         <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {cust.name}
-                          {isArchived && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", border: "1px solid var(--border)", borderRadius: 4, padding: "1px 6px" }}>ARCHIVED</span>}
                         </td>
                         <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{cust.phone || "-"}</td>
                         <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: balance >= 0 ? "#10B981" : "#EF4444", whiteSpace: "nowrap" }}>
@@ -498,13 +468,8 @@ export default function CustomersPage() {
                                 <Edit size={13} />
                               </button>
                             )}
-                            {canEdit && isArchived && (
-                              <button className="btn-icon" onClick={() => restoreCustomer(cust)} style={{ color: "#10B981" }} title="Restore">
-                                <Trash2 size={13} style={{ transform: "scaleY(-1)" }} />
-                              </button>
-                            )}
-                            {canEdit && !isArchived && (
-                              <button className="btn-icon" onClick={() => handleArchiveOrDelete(cust)} style={{ color: "#EF4444" }} title="Archive / Delete">
+                            {canEdit && (
+                              <button className="btn-icon" onClick={() => handleDelete(cust.id)} style={{ color: "#EF4444" }} title="Delete">
                                 <Trash2 size={13} />
                               </button>
                             )}
@@ -526,25 +491,6 @@ export default function CustomersPage() {
           </div>
         </div>
         {importing && <div style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>Importing...</div>}
-
-        {confirmTarget && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setConfirmTarget(null)}>
-            <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, maxWidth: 380, width: "90%", boxShadow: "0 12px 32px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>
-              <h3 style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
-                {(Math.abs(confirmTarget.balance || 0) > 0 || Math.abs(confirmTarget.opening_balance || 0) > 0) ? "Archive Customer?" : "Delete Customer?"}
-              </h3>
-              <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px 0", lineHeight: 1.5 }}>
-                {(Math.abs(confirmTarget.balance || 0) > 0 || Math.abs(confirmTarget.opening_balance || 0) > 0)
-                  ? ` has existing balance or transactions, so it will be archived (hidden from the list, fully recoverable) instead of deleted.`
-                  : ` has no transactions and can be safely deleted. This cannot be undone.`}
-              </p>
-              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button className="btn btn-outline" onClick={() => setConfirmTarget(null)}>Cancel</button>
-                <button className="btn" onClick={confirmArchiveOrDelete}>Confirm</button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </RoleGuard>
   )
