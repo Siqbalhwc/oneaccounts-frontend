@@ -340,7 +340,7 @@ export default function GeneralLedgerPage() {
                   <span>Description</span>
                   <button className="sort-btn" onClick={() => handleSort("debit")}            style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
                   <button className="sort-btn" onClick={() => handleSort("credit")}           style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
-                  <span className="sort-btn" style={{ textAlign: "right", justifyContent: "flex-end", cursor: "default" }}>Balance</span>
+                  <button className="sort-btn" onClick={() => handleSort("running_balance")}  style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
                 </div>
                 {paginatedLines.map((line, idx) => (
                   <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>

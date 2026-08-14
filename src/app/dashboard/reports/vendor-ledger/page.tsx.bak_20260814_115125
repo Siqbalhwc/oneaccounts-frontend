@@ -6,12 +6,12 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Printer } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { useCompany } from "@/contexts/CompanyContext"
-import { generateCustomerLedgerPDF } from "@/lib/pdf/customerLedgerPDF"
+import { generateVendorLedgerPDF } from "@/lib/pdf/vendorLedgerPDF"
 
 type SortField = "date" | "entry_no" | "description" | "debit" | "credit" | "running_balance"
 type SortDir = "asc" | "desc"
 
-export default function CustomerLedgerPage() {
+export default function VendorLedgerPage() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -22,10 +22,10 @@ export default function CustomerLedgerPage() {
   const { companyName, companyTagline, logoUrl } = useCompany()
   const canView = role === "admin" || role === "accountant"
 
-  const urlCustomerId = searchParams.get("customerId")
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(urlCustomerId || "")
-  const [customers, setCustomers] = useState<any[]>([])
-  const [customer, setCustomer] = useState<any>(null)
+  const urlSupplierId = searchParams.get("supplierId")
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string>(urlSupplierId || "")
+  const [suppliers, setSuppliers] = useState<any[]>([])
+  const [supplier, setSupplier] = useState<any>(null)
   const [companyId, setCompanyId] = useState<string>("")
 
   const now = new Date()
@@ -39,84 +39,78 @@ export default function CustomerLedgerPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  // Fetch company ID and all customers
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
         supabase
-          .from("customers")
+          .from("suppliers")
           .select("id, code, name")
           .eq("company_id", cid)
           .is("deleted_at", null)
           .order("name")
-          .then(({ data }) => data && setCustomers(data))
+          .then(({ data }) => data && setSuppliers(data))
       }
     })
   }, [])
 
   useEffect(() => {
-    if (urlCustomerId && customers.length > 0) {
-      setSelectedCustomerId(urlCustomerId)
+    if (urlSupplierId && suppliers.length > 0) {
+      setSelectedSupplierId(urlSupplierId)
     }
-  }, [urlCustomerId, customers])
+  }, [urlSupplierId, suppliers])
 
   useEffect(() => {
-    if (!selectedCustomerId || !companyId) {
-      setCustomer(null)
+    if (!selectedSupplierId || !companyId) {
+      setSupplier(null)
       return
     }
     supabase
-      .from("customers")
+      .from("suppliers")
       .select("id, code, name, balance, opening_balance")   // ← now includes opening_balance
-      .eq("id", selectedCustomerId)
+      .eq("id", selectedSupplierId)
       .eq("company_id", companyId)
       .single()
-      .then(({ data }) => data && setCustomer(data))
-  }, [selectedCustomerId, companyId])
+      .then(({ data }) => data && setSupplier(data))
+  }, [selectedSupplierId, companyId])
 
-  // ── LEDGER FETCH ──
   const fetchLedger = async () => {
-    if (!selectedCustomerId || !companyId || !customer) return
+    if (!selectedSupplierId || !companyId || !supplier) return
     setLoading(true)
     setErrorMsg("")
 
     try {
-      // 1. Find the AR account for this company
-      const { data: arAccount } = await supabase
+      // 1. Find the AP account for this company
+      const { data: apAccount } = await supabase
         .from("accounts")
         .select("id")
         .eq("company_id", companyId)
-        .eq("code", "1100")
+        .eq("code", "2000")
         .single()
 
-      // 2. Sale invoices & returns for this customer — ALL of them, no date filter here.
-      //    We need pre-startDate rows to compute a correct opening balance.
-      const { data: allInvoices } = await supabase
+      // 2. Fetch ALL purchase bills for this supplier
+      const { data: allBills } = await supabase
         .from("invoices")
         .select("id, total, invoice_no, date, type")
-        .eq("party_id", selectedCustomerId)
-        .in("type", ["sale", "sale_return"])
+        .eq("party_id", selectedSupplierId)
+        .eq("type", "purchase")
         .is("deleted_at", null)
         .order("date", { ascending: true })
 
-      // 3. Every receipt ID ever created for this customer (id + receipt_no only —
-      //    the receipts table gets overwritten in place on edit, so we don't trust
-      //    amount/date/status on it for history)
-      const { data: customerReceipts } = await supabase
-        .from("receipts")
-        .select("id, receipt_no")
-        .eq("party_id", selectedCustomerId)
+      // 3. Get all payment IDs that belong to this supplier
+      const { data: supplierPayments } = await supabase
+        .from("payments")
+        .select("id, payment_no")
+        .eq("party_id", selectedSupplierId)
 
-      const receiptIds = (customerReceipts || []).map(r => r.id)
-      const receiptNoById = new Map((customerReceipts || []).map(r => [r.id, r.receipt_no]))
+      const paymentIds = (supplierPayments || []).map(p => p.id)
+      const paymentNoById = new Map((supplierPayments || []).map(p => [p.id, p.payment_no]))
 
-      // 3b. Real creation timestamps for invoice/return journal lines posted to AR â€”
-      // used purely as a same-day tiebreaker so entries sort in true creation order,
-      // not just by their (time-less) transaction date.
-      const invoiceIds = (allInvoices || []).map(inv => inv.id)
-      const { data: invoiceJournalLines } = arAccount && invoiceIds.length
+      // Real creation timestamps for bill journal lines posted to AP â€”
+      // used purely as a same-day tiebreaker so entries sort in true creation order.
+      const billIds = (allBills || []).map(b => b.id)
+      const { data: billJournalLines } = apAccount && billIds.length
         ? await supabase
             .from("journal_lines")
             .select(`
@@ -124,23 +118,21 @@ export default function CustomerLedgerPage() {
               journal_entries ( created_at )
             `)
             .eq("company_id", companyId)
-            .eq("account_id", arAccount.id)
-            .in("source_id", invoiceIds)
-            .not("source_type", "in", "(receipt,receipt_reversal,customer_opening,opening_balance)")
+            .eq("account_id", apAccount.id)
+            .in("source_id", billIds)
+            .not("source_type", "in", "(payment,payment_reversal,supplier_opening)")
         : { data: [] as any[] }
 
-      const invoiceCreatedAtById = new Map<number, string>()
-      for (const line of invoiceJournalLines || []) {
+      const billCreatedAtById = new Map<number, string>()
+      for (const line of billJournalLines || []) {
         const je = (line as any).journal_entries
         if (je?.created_at && line.source_id != null) {
-          invoiceCreatedAtById.set(line.source_id, je.created_at)
+          billCreatedAtById.set(line.source_id, je.created_at)
         }
       }
 
-      // 4. EVERY journal line ever posted to AR for those receipts — original posting,
-      //    reversal, and any re-posted edit — each with its real date. No date filter;
-      //    we bucket them into opening vs period below.
-      const { data: receiptJournalLines } = arAccount && receiptIds.length
+      // 4. Fetch ALL journal lines for the AP account that are linked to those payments
+      const { data: paymentJournalLines } = apAccount && paymentIds.length
         ? await supabase
             .from("journal_lines")
             .select(`
@@ -148,55 +140,54 @@ export default function CustomerLedgerPage() {
               journal_entries ( date, description, entry_no, created_at )
             `)
             .eq("company_id", companyId)
-            .eq("account_id", arAccount.id)
-            .in("source_type", ["receipt", "receipt_reversal"])
-            .in("source_id", receiptIds)
+            .eq("account_id", apAccount.id)
+            .in("source_type", ["payment", "payment_reversal"])
+            .in("source_id", paymentIds)
             .order("entry_id", { ascending: true })
         : { data: [] as any[] }
-      // 4b. Opening balance journal lines tagged directly to this customer
-      const { data: openingEntryLines } = arAccount
-        ? await supabase
-            .from("journal_lines")
-            .select(`
-              id, debit, credit, entry_id, source_type, source_id,
-              journal_entries ( date, description, entry_no, created_at )
-            `)
-            .eq("company_id", companyId)
-            .eq("account_id", arAccount.id)
-            .in("source_type", ["customer_opening", "opening_balance"])
-            .eq("source_id", selectedCustomerId)
-        : { data: [] as any[] }
 
-      // 5. Walk every line once, bucketing into "opening" (before startDate) or
-      //    "period" (within [startDate, endDate]). Anything after endDate is dropped.
+      // 4b. Opening balance journal lines tagged directly to this supplier
+      const { data: openingBalanceLines } = apAccount
+      ? await supabase
+      .from("journal_lines")
+      .select(`
+      id, debit, credit, entry_id, source_type, source_id,
+      journal_entries ( date, description, entry_no, created_at )
+      `)
+      .eq("company_id", companyId)
+      .eq("account_id", apAccount.id)
+      .eq("source_type", "supplier_opening")
+      .eq("source_id", selectedSupplierId)
+      : { data: [] as any[] }
+
+      // 5. Build ledger lines
       const periodLines: any[] = []
       let openingDebit = 0
       let openingCredit = 0
 
-      for (const inv of allInvoices || []) {
-        const debit = inv.type === "sale" ? (inv.total || 0) : 0
-        const credit = inv.type === "sale_return" ? (inv.total || 0) : 0
-
-        if (inv.date < startDate) {
-          openingDebit += debit
+      // Bills
+      for (const bill of allBills || []) {
+        const credit = bill.total || 0
+        if (bill.date < startDate) {
           openingCredit += credit
           continue
         }
-        if (inv.date > endDate) continue
+        if (bill.date > endDate) continue
 
         periodLines.push({
-          id: inv.type === "sale" ? `inv-${inv.id}` : `ret-${inv.id}`,
-          entry_no: inv.type === "sale" ? `INV-${inv.invoice_no}` : `SR-${inv.invoice_no}`,
-          date: inv.date,
-          created_at: invoiceCreatedAtById.get(inv.id) || `${inv.date}T00:00:00`,
-          description: inv.type === "sale" ? `Sales Invoice ${inv.invoice_no}` : `Sales Return ${inv.invoice_no}`,
-          debit,
+          id: `bill-${bill.id}`,
+          entry_no: `BILL-${bill.invoice_no}`,
+          date: bill.date,
+          created_at: billCreatedAtById.get(bill.id) || `${bill.date}T00:00:00`,
+          description: `Purchase Bill ${bill.invoice_no}`,
+          debit: 0,
           credit,
           running_balance: 0,
         })
       }
 
-      for (const line of receiptJournalLines || []) {
+      // Payment journal lines
+      for (const line of paymentJournalLines || []) {
         const je = (line as any).journal_entries
         const lineDate: string | undefined = je?.date
         if (!lineDate) continue
@@ -211,54 +202,55 @@ export default function CustomerLedgerPage() {
         }
         if (lineDate > endDate) continue
 
-        const receiptNo = receiptNoById.get(line.source_id) || "REC"
-        const isReversal = line.source_type === "receipt_reversal"
+        const paymentNo = paymentNoById.get(line.source_id) || "PAY"
+        const isReversal = line.source_type === "payment_reversal"
 
         periodLines.push({
-          id: `rec-${line.id}`,
-          entry_no: isReversal ? `Rev-${receiptNo}` : `REC-${receiptNo}`,
+          id: `pay-${line.id}`,
+          entry_no: isReversal ? `Rev-${paymentNo}` : `PAY-${paymentNo}`,
           date: lineDate,
           created_at: je?.created_at || `${lineDate}T00:00:00`,
-          description: isReversal ? `Receipt Reversal - ${receiptNo}` : `Receipt ${receiptNo}`,
+          description: isReversal ? `Payment Reversal - ${paymentNo}` : `Payment ${paymentNo}`,
           debit,
           credit,
           running_balance: 0,
         })
       }
 
-      for (const line of openingEntryLines || []) {
-        const je = (line as any).journal_entries
-        const lineDate: string | undefined = je?.date
-        if (!lineDate) continue
-        const debit = line.debit || 0
-        const credit = line.credit || 0
-        if (lineDate < startDate) {
-          openingDebit += debit
-          openingCredit += credit
-          continue
-        }
-        if (lineDate > endDate) continue
-        periodLines.push({
-          id: `op-${line.id}`,
-          entry_no: "OB",
-          date: lineDate,
-          created_at: je?.created_at || `${lineDate}T00:00:00`,
-          description: "Opening Balance Entry",
-          debit,
-          credit,
-          running_balance: 0,
-        })
+      for (const line of openingBalanceLines || []) {
+      const je = (line as any).journal_entries
+      const lineDate: string | undefined = je?.date
+      if (!lineDate) continue
+      const debit = line.debit || 0
+      const credit = line.credit || 0
+      if (lineDate < startDate) {
+      openingDebit += debit
+      openingCredit += credit
+      continue
       }
+      if (lineDate > endDate) continue
+      periodLines.push({
+      id: `ob-${line.id}`,
+      entry_no: je?.entry_no || "OB",
+      date: lineDate,
+      created_at: je?.created_at || `${lineDate}T00:00:00`,
+      description: je?.description || "Opening Balance Entry",
+      debit,
+      credit,
+      running_balance: 0,
+      })
+      }
+
       periodLines.sort((a, b) => {
         const dateCompare = a.date.localeCompare(b.date)
         if (dateCompare !== 0) return dateCompare
         return (a.created_at || "").localeCompare(b.created_at || "")
       })
 
-      // 6. Opening balance = net of every AR line before startDate + customer's manual opening_balance
-      //    opening_balance is treated as an initial debit (money owed by customer)
-      const hasTaggedOpeningEntry = (openingEntryLines || []).length > 0
-      const openingNet = openingDebit - openingCredit + (hasTaggedOpeningEntry ? 0 : (customer.opening_balance || 0))
+      // 6. Opening balance = net of transactions before startDate + supplier's manual opening_balance
+      //    (opening_balance is a credit from the supplier's perspective – money owed to them)
+      const hasTaggedOpeningEntry = (openingBalanceLines || []).length > 0
+      const openingNet = openingDebit - openingCredit - (hasTaggedOpeningEntry ? 0 : (supplier.opening_balance || 0))
       const openingLine = {
         id: "opening-calc",
         entry_no: "",
@@ -270,10 +262,8 @@ export default function CustomerLedgerPage() {
         isOpening: true,
       }
 
-      // 7. Combine: opening line first, then period lines
       const allLines: any[] = openingNet !== 0 ? [openingLine, ...periodLines] : [...periodLines]
 
-      // 8. Calculate running balance from zero
       let running = 0
       for (const line of allLines) {
         running += (line.debit || 0) - (line.credit || 0)
@@ -289,10 +279,9 @@ export default function CustomerLedgerPage() {
   }
 
   useEffect(() => {
-    if (selectedCustomerId && companyId && customer) fetchLedger()
-  }, [selectedCustomerId, companyId, startDate, endDate, customer])
+    if (selectedSupplierId && companyId && supplier) fetchLedger()
+  }, [selectedSupplierId, companyId, startDate, endDate, supplier])
 
-  // Sorting
   const sortedLines = useMemo(() => {
     const list = [...ledgerLines]
     list.sort((a, b) => {
@@ -327,8 +316,7 @@ export default function CustomerLedgerPage() {
   const closingBalance = sortedLines.length > 0 ? sortedLines[sortedLines.length - 1].running_balance : 0
 
   const handlePrintPDF = async () => {
-    if (!customer || sortedLines.length === 0) return
-
+    if (!supplier || sortedLines.length === 0) return
     const pdfData = {
       companyName:    companyName || "",
       companyAddress: "",
@@ -336,8 +324,8 @@ export default function CustomerLedgerPage() {
       companyEmail:   "",
       companyTagline: companyTagline || "",
       logoUrl:        logoUrl,
-      customerName:   customer.name,
-      customerCode:   customer.code,
+      supplierName:   supplier.name,
+      supplierCode:   supplier.code,
       startDate:      startDate,
       endDate:        endDate,
       totalDebit:     totalDebit,
@@ -345,9 +333,8 @@ export default function CustomerLedgerPage() {
       closingBalance: closingBalance,
       ledgerLines:    sortedLines,
     }
-
-    const doc = await generateCustomerLedgerPDF(pdfData)
-    doc.save(`Customer_Ledger_${customer.code}.pdf`)
+    const doc = await generateVendorLedgerPDF(pdfData)
+    doc.save(`Vendor_Ledger_${supplier.code}.pdf`)
   }
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
@@ -375,7 +362,6 @@ export default function CustomerLedgerPage() {
           border-bottom: 1px solid var(--border);
           white-space: nowrap;
           user-select: none;
-          box-sizing: border-box;
         }
         .ledger-row {
           display: grid;
@@ -385,28 +371,21 @@ export default function CustomerLedgerPage() {
           font-size: 13px;
           align-items: center;
           transition: background 0.15s;
-          white-space: nowrap;
-          box-sizing: border-box;
         }
         .ledger-row:hover { background: var(--card-hover); }
         .ledger-row:last-child { border-bottom: none; }
         .opening-row { background: var(--bg-soft); font-weight: 600; }
 
-        .ledger-row span {
+        .ledger-row .cell-no-wrap {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          display: block;
-          box-sizing: border-box;
         }
-
         .sort-btn {
           background: none; border: none; cursor: pointer; font: inherit; color: var(--text-muted);
-          display: flex; align-items: center; gap: 4px; padding: 0;
+          display: inline-flex; align-items: center; gap: 4px; padding: 0;
           font-weight: 700; text-transform: uppercase; font-size: 12px;
           letter-spacing: 0.04em;
-          height: 100%;
-          box-sizing: border-box;
         }
         .sort-btn:hover { color: var(--primary); }
 
@@ -419,12 +398,12 @@ export default function CustomerLedgerPage() {
         .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
         .btn-outline:hover { background: var(--card-hover); }
-        .customer-select {
+        .supplier-select {
           height: 34px; border: 1.5px solid var(--border); border-radius: 8px;
           padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text);
           outline: none; font-family: inherit; min-width: 200px;
         }
-        .customer-select:focus { border-color: var(--primary); }
+        .supplier-select:focus { border-color: var(--primary); }
 
         @media (max-width: 640px) {
           .ledger-header, .ledger-row {
@@ -439,20 +418,20 @@ export default function CustomerLedgerPage() {
         </button>
         <div style={{ flex: 1, minWidth: 200 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
-            👤 Customer Ledger
+            🚚 Vendor Ledger
           </h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Transaction history for a specific customer</p>
+          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Transaction history for a specific supplier</p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <select
-            className="customer-select"
-            value={selectedCustomerId}
-            onChange={(e) => setSelectedCustomerId(e.target.value)}
+            className="supplier-select"
+            value={selectedSupplierId}
+            onChange={(e) => setSelectedSupplierId(e.target.value)}
           >
-            <option value="">— Select Customer —</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.code} – {c.name}
+            <option value="">— Select Supplier —</option>
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.code} – {s.name}
               </option>
             ))}
           </select>
@@ -472,17 +451,17 @@ export default function CustomerLedgerPage() {
         </div>
       )}
 
-      {selectedCustomerId && customer ? (
+      {selectedSupplierId && supplier ? (
         <>
           <div style={{
             background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12,
             padding: "12px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 16
           }}>
             <div style={{ background: "var(--bg-soft)", borderRadius: 8, padding: "6px 12px", fontWeight: 700, fontSize: 14, color: "var(--primary)" }}>
-              {customer.code}
+              {supplier.code}
             </div>
             <div>
-              <div style={{ fontWeight: 700, color: "var(--text)" }}>{customer.name}</div>
+              <div style={{ fontWeight: 700, color: "var(--text)" }}>{supplier.name}</div>
             </div>
           </div>
 
@@ -514,27 +493,27 @@ export default function CustomerLedgerPage() {
               <div className="ledger-header">
                 <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
                 <button className="sort-btn" onClick={() => handleSort("entry_no")}>Entry # {getSortIcon("entry_no")}</button>
-                <button className="sort-btn" onClick={() => handleSort("description")} style={{ justifyContent: "flex-start" }}>Description {getSortIcon("description")}</button>
-                <button className="sort-btn" onClick={() => handleSort("debit")} style={{ justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
-                <button className="sort-btn" onClick={() => handleSort("credit")} style={{ justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
-                <span className="sort-btn" style={{ justifyContent: "flex-end", cursor: "default" }}>Balance</span>
+                <button className="sort-btn" onClick={() => handleSort("description")} style={{ textAlign: "left", justifyContent: "flex-start" }}>Description {getSortIcon("description")}</button>
+                <button className="sort-btn" onClick={() => handleSort("debit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("credit")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
               </div>
               {sortedLines.map((line, idx) => (
                 <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
-                  <span style={{ fontSize: 12 }}>{line.date}</span>
-                  <span style={{ color: "var(--primary)", fontSize: 12 }} title={line.entry_no || ""}>
+                  <span className="cell-no-wrap" style={{ fontSize: 12 }}>{line.date}</span>
+                  <span className="cell-no-wrap" style={{ color: "var(--primary)", fontSize: 12 }} title={line.entry_no || ""}>
                     {line.entry_no || "—"}
                   </span>
-                  <span title={line.description}>
+                  <span className="cell-no-wrap" title={line.description} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {line.description}
                   </span>
-                  <span style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>
+                  <span className="cell-no-wrap" style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>
                     {line.debit > 0 ? `PKR ${line.debit.toLocaleString()}` : "—"}
                   </span>
-                  <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>
+                  <span className="cell-no-wrap" style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>
                     {line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}
                   </span>
-                  <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
+                  <span className="cell-no-wrap" style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
                     PKR {line.running_balance.toLocaleString()}
                   </span>
                 </div>
@@ -544,7 +523,7 @@ export default function CustomerLedgerPage() {
         </>
       ) : (
         <div style={{ textAlign: "center", padding: 60, color: "var(--text-muted)" }}>
-          <p style={{ fontSize: 16 }}>Select a customer above to view their ledger.</p>
+          <p style={{ fontSize: 16 }}>Select a supplier above to view their ledger.</p>
         </div>
       )}
     </div>

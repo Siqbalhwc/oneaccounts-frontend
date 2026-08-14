@@ -272,7 +272,7 @@ export default function ProductLedgerPage() {
             <button className="sort-btn" onClick={() => handleSort("ref")}>Ref # {getSortIcon("ref")}</button>
             <button className="sort-btn" onClick={() => handleSort("qty_in")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Inflow {getSortIcon("qty_in")}</button>
             <button className="sort-btn" onClick={() => handleSort("qty_out")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Outflow {getSortIcon("qty_out")}</button>
-            <span className="sort-btn" style={{ textAlign: "right", justifyContent: "flex-end", cursor: "default" }}>Balance</span>
+            <button className="sort-btn" onClick={() => handleSort("balance")} style={{ textAlign: "right", justifyContent: "flex-end" }}>Balance {getSortIcon("balance")}</button>
           </div>
           {sortedLines.map((line, idx) => (
             <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
