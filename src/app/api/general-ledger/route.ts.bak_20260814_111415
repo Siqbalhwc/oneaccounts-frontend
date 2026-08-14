@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   try {
     const { data: allLines, error: allErr } = await baseQuery(
       supabase.from('journal_lines')
-        .select('id, debit, credit, journal_entries!inner(entry_no, date, description, id, created_at)')
+        .select('id, debit, credit, journal_entries!inner(entry_no, date, description, id)')
     )
 
     if (allErr) throw new Error(allErr.message)
@@ -69,17 +69,10 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // 3. Sort and compute balances â€” date first, then real creation time as a
-    // same-day tiebreaker so entries reflect true chronological order.
-    const sorted = [...allLines].sort((a: any, b: any) => {
-      const dateA = a.journal_entries?.date || ''
-      const dateB = b.journal_entries?.date || ''
-      const dateCompare = dateA.localeCompare(dateB)
-      if (dateCompare !== 0) return dateCompare
-      const createdA = a.journal_entries?.created_at || ''
-      const createdB = b.journal_entries?.created_at || ''
-      return createdA.localeCompare(createdB)
-    })
+    // 3. Sort and compute balances
+    const sorted = [...allLines].sort((a: any, b: any) =>
+      (a.journal_entries?.date || '').localeCompare(b.journal_entries?.date || '')
+    )
 
     let openingBalance = 0
     const periodLines: any[] = []
@@ -105,7 +98,7 @@ export async function GET(request: NextRequest) {
     }
 
     let running = openingBalance
-    const finalLines: any[] = openingBalance !== 0 ? [
+    const finalLines: any[] = [
       {
         id: 'opening',
         entry_no: '',
@@ -117,7 +110,7 @@ export async function GET(request: NextRequest) {
         running_balance: openingBalance,
         isOpening: true,
       },
-    ] : []
+    ]
 
     for (const line of periodLines) {
       running += (line.debit || 0) - (line.credit || 0)

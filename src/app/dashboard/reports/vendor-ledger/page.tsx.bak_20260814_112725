@@ -262,7 +262,7 @@ export default function VendorLedgerPage() {
         isOpening: true,
       }
 
-      const allLines: any[] = openingNet !== 0 ? [openingLine, ...periodLines] : [...periodLines]
+      const allLines = [openingLine, ...periodLines]
 
       let running = 0
       for (const line of allLines) {

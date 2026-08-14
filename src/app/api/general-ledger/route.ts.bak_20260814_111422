@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
     }
 
     let running = openingBalance
-    const finalLines: any[] = openingBalance !== 0 ? [
+    const finalLines: any[] = [
       {
         id: 'opening',
         entry_no: '',
@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
         running_balance: openingBalance,
         isOpening: true,
       },
-    ] : []
+    ]
 
     for (const line of periodLines) {
       running += (line.debit || 0) - (line.credit || 0)
