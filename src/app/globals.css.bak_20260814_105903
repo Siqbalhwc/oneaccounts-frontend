@@ -214,23 +214,3 @@ body {
 [data-theme="light"] .dl-main-content h3 {
   color: #0F9D58;
 }
-
-/* â”€â”€ Ledger sort-header fix: force flat/transparent buttons inside
-   ledger column headers, overriding any global button chrome that
-   was causing a rounded "pill" appearance on each column heading. â”€â”€ */
-.ledger-header button,
-.ledger-header .sort-btn {
-  background: none !important;
-  background-color: transparent !important;
-  border: none !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-  -webkit-appearance: none !important;
-  appearance: none !important;
-}
-.ledger-header button:hover,
-.ledger-header .sort-btn:hover {
-  background: none !important;
-  box-shadow: none !important;
-}
