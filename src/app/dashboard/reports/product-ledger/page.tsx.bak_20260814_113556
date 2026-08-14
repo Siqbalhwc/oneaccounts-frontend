@@ -66,7 +66,6 @@ export default function ProductLedgerPage() {
         const qty = move.qty || 0
         allLines.push({
           id: `move-${move.id}`,
-          moveId: move.id,
           date: move.date,
           type: move.move_type || "Movement",
           ref: move.ref || move.reason || "",
@@ -76,13 +75,7 @@ export default function ProductLedgerPage() {
       })
     }
 
-    // Sort by date first, then by the move's own id as a same-day tiebreaker
-    // (ids are auto-incrementing, so a higher id was created later).
-    allLines.sort((a, b) => {
-      const dateCompare = a.date.localeCompare(b.date)
-      if (dateCompare !== 0) return dateCompare
-      return (a.moveId || 0) - (b.moveId || 0)
-    })
+    allLines.sort((a, b) => a.date.localeCompare(b.date))
 
     const opening = prod.opening_qty || 0
     let runningQty = opening
