@@ -107,37 +107,13 @@ export default function VendorLedgerPage() {
       const paymentIds = (supplierPayments || []).map(p => p.id)
       const paymentNoById = new Map((supplierPayments || []).map(p => [p.id, p.payment_no]))
 
-      // Real creation timestamps for bill journal lines posted to AP â€”
-      // used purely as a same-day tiebreaker so entries sort in true creation order.
-      const billIds = (allBills || []).map(b => b.id)
-      const { data: billJournalLines } = apAccount && billIds.length
-        ? await supabase
-            .from("journal_lines")
-            .select(`
-              source_id,
-              journal_entries ( created_at )
-            `)
-            .eq("company_id", companyId)
-            .eq("account_id", apAccount.id)
-            .in("source_id", billIds)
-            .not("source_type", "in", "(payment,payment_reversal,supplier_opening)")
-        : { data: [] as any[] }
-
-      const billCreatedAtById = new Map<number, string>()
-      for (const line of billJournalLines || []) {
-        const je = (line as any).journal_entries
-        if (je?.created_at && line.source_id != null) {
-          billCreatedAtById.set(line.source_id, je.created_at)
-        }
-      }
-
       // 4. Fetch ALL journal lines for the AP account that are linked to those payments
       const { data: paymentJournalLines } = apAccount && paymentIds.length
         ? await supabase
             .from("journal_lines")
             .select(`
               id, debit, credit, entry_id, source_type, source_id,
-              journal_entries ( date, description, entry_no, created_at )
+              journal_entries ( date, description, entry_no )
             `)
             .eq("company_id", companyId)
             .eq("account_id", apAccount.id)
@@ -152,7 +128,7 @@ export default function VendorLedgerPage() {
       .from("journal_lines")
       .select(`
       id, debit, credit, entry_id, source_type, source_id,
-      journal_entries ( date, description, entry_no, created_at )
+      journal_entries ( date, description, entry_no )
       `)
       .eq("company_id", companyId)
       .eq("account_id", apAccount.id)
@@ -178,7 +154,6 @@ export default function VendorLedgerPage() {
           id: `bill-${bill.id}`,
           entry_no: `BILL-${bill.invoice_no}`,
           date: bill.date,
-          created_at: billCreatedAtById.get(bill.id) || `${bill.date}T00:00:00`,
           description: `Purchase Bill ${bill.invoice_no}`,
           debit: 0,
           credit,
@@ -209,7 +184,6 @@ export default function VendorLedgerPage() {
           id: `pay-${line.id}`,
           entry_no: isReversal ? `Rev-${paymentNo}` : `PAY-${paymentNo}`,
           date: lineDate,
-          created_at: je?.created_at || `${lineDate}T00:00:00`,
           description: isReversal ? `Payment Reversal - ${paymentNo}` : `Payment ${paymentNo}`,
           debit,
           credit,
@@ -233,7 +207,6 @@ export default function VendorLedgerPage() {
       id: `ob-${line.id}`,
       entry_no: je?.entry_no || "OB",
       date: lineDate,
-      created_at: je?.created_at || `${lineDate}T00:00:00`,
       description: je?.description || "Opening Balance Entry",
       debit,
       credit,
@@ -241,11 +214,7 @@ export default function VendorLedgerPage() {
       })
       }
 
-      periodLines.sort((a, b) => {
-        const dateCompare = a.date.localeCompare(b.date)
-        if (dateCompare !== 0) return dateCompare
-        return (a.created_at || "").localeCompare(b.created_at || "")
-      })
+      periodLines.sort((a, b) => a.date.localeCompare(b.date))
 
       // 6. Opening balance = net of transactions before startDate + supplier's manual opening_balance
       //    (opening_balance is a credit from the supplier's perspective – money owed to them)
