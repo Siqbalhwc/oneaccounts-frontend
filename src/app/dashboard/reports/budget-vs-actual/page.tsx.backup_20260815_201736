@@ -330,8 +330,8 @@ export default function BudgetVsActualReportPage() {
                       const variance = budget - actual
                       return (
                         <tr key={`${actId}_${locId}_${accId}`}>
-                          <td style={{ ...tdStyle, textAlign: "left", color: "var(--text-muted)" }}>{locName}</td>
-                          <td style={{ ...tdStyle, textAlign: "left", fontFamily: "monospace" }}>{acc?.code} - {acc?.name}</td>
+                          <td style={{ ...tdStyle, color: "var(--text-muted)" }}>{locName}</td>
+                          <td style={{ ...tdStyle, fontFamily: "monospace" }}>{acc?.code} - {acc?.name}</td>
                           <td style={tdStyle}>{budget.toLocaleString()}</td>
                           <td style={tdStyle}>{actual.toLocaleString()}</td>
                           <td style={{ ...tdStyle, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "var(--text-muted)" }}>

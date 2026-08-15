@@ -43,8 +43,7 @@ export interface BudgetVsActualPDFData {
   logoUrl?: string | null
   projectName: string
   donorName?: string
-  periodStart?: string
-  periodEnd?: string
+  fiscalYear: number
   rows: BudgetVsActualRow[]
 }
 
@@ -78,11 +77,7 @@ export async function generateBudgetVsActualPDF(data: BudgetVsActualPDFData): Pr
   doc.setTextColor(...MUTED)
   doc.text(`Project: ${data.projectName}`, PW - MR, LOGO_Y + 19, { align: "right" })
   if (data.donorName) doc.text(`Donor: ${data.donorName}`, PW - MR, LOGO_Y + 24, { align: "right" })
-  if (data.periodStart || data.periodEnd) {
-    const s = data.periodStart ? new Date(data.periodStart).toLocaleDateString("en-PK") : "-"
-    const e = data.periodEnd ? new Date(data.periodEnd).toLocaleDateString("en-PK") : "-"
-    doc.text(`Period: ${s} to ${e}`, PW - MR, LOGO_Y + 29, { align: "right" })
-  }
+  doc.text(`Fiscal Year: ${data.fiscalYear}`, PW - MR, LOGO_Y + 29, { align: "right" })
 
   const HEADER_BOTTOM = LOGO_Y + LOGO_SIZE + 5
   doc.setDrawColor(...NAVY)
@@ -95,13 +90,23 @@ export async function generateBudgetVsActualPDF(data: BudgetVsActualPDFData): Pr
     n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   const tableRows = data.rows.map(row => {
-    // Variance = Budget - Actual. Positive = under budget (remaining), negative = overspent.
-    const variance = row.budget - row.actual
     if (row.isGrandTotal) {
-      return { description: "Grand Total", account: "", budget: fmt(row.budget), actual: fmt(row.actual), variance: fmt(variance) }
+      return {
+        description: "Grand Total",
+        account: "",
+        budget: fmt(row.budget),
+        actual: fmt(row.actual),
+        variance: fmt(row.actual - row.budget),
+      }
     }
     if (row.isSubtotal) {
-      return { description: `Sub Total - ${row.activity}`, account: "", budget: fmt(row.budget), actual: fmt(row.actual), variance: fmt(variance) }
+      return {
+        description: `Sub Total - ${row.activity}`,
+        account: "",
+        budget: fmt(row.budget),
+        actual: fmt(row.actual),
+        variance: fmt(row.actual - row.budget),
+      }
     }
     if (row.isHeading) {
       return { description: row.activity, account: "", budget: "", actual: "", variance: "" }
@@ -111,7 +116,7 @@ export async function generateBudgetVsActualPDF(data: BudgetVsActualPDFData): Pr
       account: `${row.accountCode} - ${row.accountName}`,
       budget: fmt(row.budget),
       actual: fmt(row.actual),
-      variance: fmt(variance),
+      variance: fmt(row.actual - row.budget),
     }
   })
 
@@ -123,9 +128,9 @@ export async function generateBudgetVsActualPDF(data: BudgetVsActualPDFData): Pr
     columnStyles: {
       0: { cellWidth: 70, halign: "left" },
       1: { cellWidth: 60, halign: "left" },
-      2: { cellWidth: 40, halign: "center" },
-      3: { cellWidth: 40, halign: "center" },
-      4: { cellWidth: 40, halign: "center", fontStyle: "bold" },
+      2: { cellWidth: 40, halign: "right" },
+      3: { cellWidth: 40, halign: "right" },
+      4: { cellWidth: 40, halign: "right", fontStyle: "bold" },
     },
     styles: {
       fontSize: 8,
@@ -134,7 +139,6 @@ export async function generateBudgetVsActualPDF(data: BudgetVsActualPDFData): Pr
       lineColor: BORDER,
       lineWidth: 0.2,
       overflow: "linebreak",
-      halign: "center",
     },
     headStyles: {
       fillColor: NAVY,
@@ -148,7 +152,6 @@ export async function generateBudgetVsActualPDF(data: BudgetVsActualPDFData): Pr
       if (hookData.section !== "body") return
       const row = data.rows[hookData.row.index]
       if (!row) return
-
       if (row.isHeading) {
         hookData.cell.styles.fontStyle = "bold"
         hookData.cell.styles.textColor = NAVY
@@ -162,9 +165,8 @@ export async function generateBudgetVsActualPDF(data: BudgetVsActualPDFData): Pr
         hookData.cell.styles.fillColor = NAVY
         hookData.cell.styles.textColor = WHITE
       } else if (hookData.column.index === 4) {
-        // Variance = Budget - Actual. Positive (under budget) = green, negative (overspent) = red.
-        const variance = row.budget - row.actual
-        hookData.cell.styles.textColor = variance < 0 ? DANGER : variance > 0 ? SUCCESS : MUTED
+        const variance = row.actual - row.budget
+        hookData.cell.styles.textColor = variance < 0 ? SUCCESS : variance > 0 ? DANGER : MUTED
       }
     },
   })

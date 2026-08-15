@@ -29,6 +29,7 @@ export default function BudgetVsActualReportPage() {
   const [selectedDonorId, setSelectedDonorId] = useState<string>("")
   const [selectedActivityId, setSelectedActivityId] = useState<string>("")
   const [selectedLocationId, setSelectedLocationId] = useState<string>("")
+  const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
 
   const [data, setData] = useState<Record<string, Record<string, Record<string, { budget: number; actual: number }>>>>({})
   const [loading, setLoading] = useState(false)
@@ -39,7 +40,7 @@ export default function BudgetVsActualReportPage() {
       setCompanyId(cid)
       supabase.from("companies").select("business_type").eq("id", cid).single()
         .then(r => r.data && setBusinessType(r.data.business_type || ""))
-      supabase.from("projects").select("id,name,start_date,end_date").eq("company_id", cid).is("deleted_at", null).order("name")
+      supabase.from("projects").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setProjects(r.data))
       supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
         .then(r => r.data && setDonors(r.data))
@@ -52,8 +53,6 @@ export default function BudgetVsActualReportPage() {
     })
   }, [])
 
-  const selectedProject = projects.find(p => p.id == selectedProjectId)
-
   useEffect(() => {
     if (!companyId || !selectedProjectId) { setData({}); setLoading(false); return }
     if (businessType === "ngo" && !selectedDonorId) { setData({}); setLoading(false); return }
@@ -64,13 +63,10 @@ export default function BudgetVsActualReportPage() {
     const activityId = selectedActivityId ? Number(selectedActivityId) : undefined
     const locationId = selectedLocationId ? Number(selectedLocationId) : undefined
 
-    // Budget validation was fixed to match by activity+account+location only
-    // (lump-sum budget for the whole project life, not tied to fiscal_year).
-    // This report matches that same logic - no fiscal_year filter here either,
-    // so the numbers shown always agree with what the kernel actually validates.
     let budgetQuery = supabase.from("budgets")
       .select("*")
       .eq("company_id", companyId)
+      .eq("fiscal_year", fiscalYear)
       .eq("project_id", projectId)
       .is("month", null)
     if (businessType === "ngo") budgetQuery = budgetQuery.eq("donor_id", donorId)
@@ -83,12 +79,14 @@ export default function BudgetVsActualReportPage() {
         setLoading(false)
         return
       }
-      // Actual spending is also unbounded by calendar year - summed across
-      // the project's entire life, matching the validation hook.
+      const startDate = `${fiscalYear}-01-01`
+      const endDate = `${fiscalYear}-12-31`
       let actualQuery = supabase.from("journal_lines")
-        .select("account_id, activity_id, location_id, debit, credit")
+        .select("account_id, activity_id, location_id, debit, credit, journal_entries!inner(date)")
         .eq("company_id", companyId)
         .eq("project_id", projectId)
+        .gte("journal_entries.date", startDate)
+        .lte("journal_entries.date", endDate)
       if (businessType === "ngo") actualQuery = actualQuery.eq("donor_id", donorId)
       if (activityId) actualQuery = actualQuery.eq("activity_id", activityId)
       if (locationId) actualQuery = actualQuery.eq("location_id", locationId)
@@ -121,8 +119,9 @@ export default function BudgetVsActualReportPage() {
         setLoading(false)
       })
     })
-  }, [companyId, selectedProjectId, selectedDonorId, selectedActivityId, selectedLocationId, businessType])
+  }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, selectedActivityId, selectedLocationId, businessType])
 
+  // Build grouped rows: activity heading -> location rows -> subtotal, per activity
   const activityIds = Object.keys(data)
   let grandBudget = 0, grandActual = 0
 
@@ -144,7 +143,7 @@ export default function BudgetVsActualReportPage() {
             "Account Name": acc?.name,
             Budget: budget,
             Actual: actual,
-            Variance: budget - actual,
+            Variance: actual - budget,
           })
         })
       })
@@ -178,7 +177,7 @@ export default function BudgetVsActualReportPage() {
     })
     pdfRows.push({ activity: "", location: "", accountCode: "", accountName: "", budget: pdfGrandBudget, actual: pdfGrandActual, isGrandTotal: true })
 
-    const projectName = selectedProject?.name || ""
+    const projectName = projects.find(p => p.id == selectedProjectId)?.name || ""
     const donorName = donors.find(d => d.id == selectedDonorId)?.name || ""
 
     const doc = await generateBudgetVsActualPDF({
@@ -187,11 +186,10 @@ export default function BudgetVsActualReportPage() {
       logoUrl: logoUrl || null,
       projectName,
       donorName,
-      periodStart: selectedProject?.start_date,
-      periodEnd: selectedProject?.end_date,
+      fiscalYear,
       rows: pdfRows,
     })
-    doc.save(`Budget_vs_Actual_${projectName.replace(/\s+/g, '_')}.pdf`)
+    doc.save(`Budget_vs_Actual_${projectName.replace(/\s+/g, '_')}_${fiscalYear}.pdf`)
   }
 
   if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
@@ -207,17 +205,13 @@ export default function BudgetVsActualReportPage() {
     letterSpacing: "0.04em",
     color: "var(--text-muted)",
     whiteSpace: "nowrap",
-    textAlign: "center",
   }
   const tdStyle: React.CSSProperties = {
     padding: "8px 12px",
     borderBottom: "1px solid var(--border)",
     fontSize: 13,
     color: "var(--text)",
-    textAlign: "center",
   }
-
-  const fmtDate = (d?: string) => d ? new Date(d).toLocaleDateString("en-PK") : "-"
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -255,12 +249,15 @@ export default function BudgetVsActualReportPage() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: "var(--text)" }}>Budget vs Actual Report</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "2px 0 0 0" }}>
-            Total budgeted amount vs actual spending for the full project period, by activity and location
+            Compare budgeted amounts against actual spending by activity and location
           </p>
         </div>
       </div>
 
       <div className="bva-filter-bar">
+        <select className="bva-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
+          {[2025,2026,2027,2028].map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
         <select className="bva-select" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
           <option value="">-- Select Project --</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -279,11 +276,6 @@ export default function BudgetVsActualReportPage() {
           <option value="">All Locations</option>
           {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
-        {selectedProject && (
-          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-            Project period: {fmtDate(selectedProject.start_date)} - {fmtDate(selectedProject.end_date)}
-          </span>
-        )}
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           <button className="bva-btn-outline" onClick={handleExportPDF} disabled={!selectedProjectId}>
             <FileText size={14} /> Export PDF
@@ -307,14 +299,14 @@ export default function BudgetVsActualReportPage() {
               <tr>
                 <th style={{ ...thStyle, textAlign: "left" }}>Activity / Location</th>
                 <th style={{ ...thStyle, textAlign: "left" }}>Account</th>
-                <th style={thStyle}>Budget</th>
-                <th style={thStyle}>Actual</th>
-                <th style={thStyle}>Variance</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Budget</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Actual</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Variance</th>
               </tr>
             </thead>
             <tbody>
               {activityIds.length === 0 ? (
-                <tr><td colSpan={5} style={{ ...tdStyle, padding: 30, color: "var(--text-muted)" }}>No data found for selected filters.</td></tr>
+                <tr><td colSpan={5} style={{ ...tdStyle, textAlign: "center", padding: 30, color: "var(--text-muted)" }}>No data found for selected filters.</td></tr>
               ) : (
                 activityIds.map(actId => {
                   const actName = activities.find(a => a.id == actId)?.name || actId
@@ -327,14 +319,14 @@ export default function BudgetVsActualReportPage() {
                       const acc = accounts.find(a => a.id == accId)
                       const { budget, actual } = locData[locId][accId]
                       actBudget += budget; actActual += actual
-                      const variance = budget - actual
+                      const variance = actual - budget
                       return (
                         <tr key={`${actId}_${locId}_${accId}`}>
-                          <td style={{ ...tdStyle, textAlign: "left", color: "var(--text-muted)" }}>{locName}</td>
+                          <td style={{ ...tdStyle, textAlign: "left", paddingLeft: 28, color: "var(--text-muted)" }}>{locName}</td>
                           <td style={{ ...tdStyle, textAlign: "left", fontFamily: "monospace" }}>{acc?.code} - {acc?.name}</td>
-                          <td style={tdStyle}>{budget.toLocaleString()}</td>
-                          <td style={tdStyle}>{actual.toLocaleString()}</td>
-                          <td style={{ ...tdStyle, fontWeight: 600, color: variance < 0 ? "#EF4444" : variance > 0 ? "#10B981" : "var(--text-muted)" }}>
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{budget.toLocaleString()}</td>
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{actual.toLocaleString()}</td>
+                          <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: variance > 0 ? "#EF4444" : variance < 0 ? "#10B981" : "var(--text-muted)" }}>
                             {variance === 0 ? "-" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
                           </td>
                         </tr>
@@ -343,7 +335,7 @@ export default function BudgetVsActualReportPage() {
                   })
                   grandBudget += actBudget
                   grandActual += actActual
-                  const actVariance = actBudget - actActual
+                  const actVariance = actActual - actBudget
                   return (
                     <>
                       <tr className="bva-heading-row" key={`${actId}_heading`}>
@@ -353,9 +345,9 @@ export default function BudgetVsActualReportPage() {
                       <tr className="bva-subtotal-row" key={`${actId}_subtotal`}>
                         <td style={{ ...tdStyle, textAlign: "left" }}>Sub Total</td>
                         <td style={tdStyle}></td>
-                        <td style={tdStyle}>{actBudget.toLocaleString()}</td>
-                        <td style={tdStyle}>{actActual.toLocaleString()}</td>
-                        <td style={{ ...tdStyle, color: actVariance < 0 ? "#EF4444" : actVariance > 0 ? "#10B981" : "var(--text-muted)" }}>
+                        <td style={{ ...tdStyle, textAlign: "right" }}>{actBudget.toLocaleString()}</td>
+                        <td style={{ ...tdStyle, textAlign: "right" }}>{actActual.toLocaleString()}</td>
+                        <td style={{ ...tdStyle, textAlign: "right", color: actVariance > 0 ? "#EF4444" : actVariance < 0 ? "#10B981" : "var(--text-muted)" }}>
                           {actVariance === 0 ? "-" : (actVariance > 0 ? "+" : "") + actVariance.toLocaleString()}
                         </td>
                       </tr>
@@ -369,9 +361,9 @@ export default function BudgetVsActualReportPage() {
                 <tr style={{ background: "var(--primary)" }}>
                   <td style={{ ...tdStyle, textAlign: "left", color: "var(--primary-text)", fontWeight: 700, border: "none" }}>Grand Total</td>
                   <td style={{ border: "none" }}></td>
-                  <td style={{ ...tdStyle, color: "var(--primary-text)", fontWeight: 700, border: "none" }}>{grandBudget.toLocaleString()}</td>
-                  <td style={{ ...tdStyle, color: "var(--primary-text)", fontWeight: 700, border: "none" }}>{grandActual.toLocaleString()}</td>
-                  <td style={{ ...tdStyle, color: "var(--primary-text)", fontWeight: 700, border: "none" }}>{(grandBudget - grandActual).toLocaleString()}</td>
+                  <td style={{ ...tdStyle, textAlign: "right", color: "var(--primary-text)", fontWeight: 700, border: "none" }}>{grandBudget.toLocaleString()}</td>
+                  <td style={{ ...tdStyle, textAlign: "right", color: "var(--primary-text)", fontWeight: 700, border: "none" }}>{grandActual.toLocaleString()}</td>
+                  <td style={{ ...tdStyle, textAlign: "right", color: "var(--primary-text)", fontWeight: 700, border: "none" }}>{(grandActual - grandBudget).toLocaleString()}</td>
                 </tr>
               </tfoot>
             )}
