@@ -760,12 +760,6 @@ export default function BudgetsPage() {
                 <Edit size={14} /> Edit Budget
               </button>
             )}
-            {/* Locked message - shown when approved and current user is not admin */}
-            {!editMode && !canEditBudget && isApproved && (
-              <span style={{ fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
-                This budget is approved. Only an admin can edit it.
-              </span>
-            )}
           </div>
         )}
 

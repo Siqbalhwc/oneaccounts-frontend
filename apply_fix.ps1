@@ -1,4 +1,4 @@
-$path = "src\app\dashboard\settings\projects\page.tsx"
+$path = "src\app\dashboard\settings\budgets\page.tsx"
 $backup = "$path.backup_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 [System.IO.File]::Copy($path, $backup)
 Write-Host "Backup created: $backup"
@@ -6,13 +6,34 @@ Write-Host "Backup created: $backup"
 $content = [System.IO.File]::ReadAllText($path)
 $originalContent = $content
 
-$old = "    setSaving(false)`n    setShowModal(false)`n    fetchData()`n    setTimeout(() => setFlash(""), 3000)`n  }"
-$new = "    setSaving(false)`n    setShowModal(false)`n    fetchData()`n    // Also refresh the dropdown lookup lists (projects/locations/donors) so a`n    // newly created record shows up immediately in other tabs' Add/Edit pickers`n    // without needing a hard refresh.`n    supabase.from(""projects"").select(""id,name"").eq(""company_id"", companyId).order(""name"")`n      .then(r => r.data && setProjects(r.data))`n    supabase.from(""locations"").select(""id,name"").eq(""company_id"", companyId).order(""name"")`n      .then(r => r.data && setLocations(r.data))`n    supabase.from(""donors"").select(""id,name"").eq(""company_id"", companyId).order(""name"")`n      .then(r => r.data && setDonors(r.data))`n    setTimeout(() => setFlash(""), 3000)`n  }"
+$old = @'
+            {/* Edit Budget button - only when not editing and user can edit */}
+            {!editMode && canEditBudget && (
+              <button className="btn-outline" onClick={() => setEditMode(true)}>
+                <Edit size={14} /> Edit Budget
+              </button>
+            )}
+'@
+
+$new = @'
+            {/* Edit Budget button - only when not editing and user can edit */}
+            {!editMode && canEditBudget && (
+              <button className="btn-outline" onClick={() => setEditMode(true)}>
+                <Edit size={14} /> Edit Budget
+              </button>
+            )}
+            {/* Locked message - shown when approved and current user is not admin */}
+            {!editMode && !canEditBudget && isApproved && (
+              <span style={{ fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
+                This budget is approved. Only an admin can edit it.
+              </span>
+            )}
+'@
 
 if ($content.Contains($old)) {
     $content = $content.Replace($old, $new)
     [System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::UTF8)
-    Write-Host "SUCCESS: Added dropdown lookup refresh after save"
+    Write-Host "SUCCESS: Added locked-budget message for non-admins"
 } else {
     Write-Host "NOT FOUND: The expected code block was not found. No changes made."
 }
