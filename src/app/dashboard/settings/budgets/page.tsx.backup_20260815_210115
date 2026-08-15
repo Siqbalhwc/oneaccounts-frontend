@@ -5,8 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
 import * as XLSX from "xlsx"
-import { Upload, Download, Edit, Send, CheckCircle, History } from "lucide-react"
-import BudgetHistory from "@/components/BudgetHistory"
+import { Upload, Download, Edit, Send, CheckCircle } from "lucide-react"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -56,7 +55,6 @@ export default function BudgetsPage() {
   const [importingBudget, setImportingBudget] = useState(false)
 
   const [editMode, setEditMode] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
   const [budgetStatus, setBudgetStatus] = useState<string>("draft")
 
   // -- 1. Load master data --
@@ -730,11 +728,6 @@ export default function BudgetsPage() {
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn-outline btn-sm" onClick={exportExcel}><Download size={14} /> Excel</button>
             <button className="btn-outline btn-sm" onClick={exportPDF}><Download size={14} /> PDF</button>
-            {selectedProjectId && (
-              <button className="btn-outline btn-sm" onClick={() => setShowHistory(v => !v)}>
-                <History size={14} /> History
-              </button>
-            )}
           </div>
         </div>
 
@@ -773,23 +766,6 @@ export default function BudgetsPage() {
                 This budget is approved. Only an admin can edit it.
               </span>
             )}
-          </div>
-        )}
-
-        {showHistory && selectedProjectId && (
-          <div style={{
-            background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10,
-            padding: "12px 16px", marginBottom: 16,
-          }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>
-              Budget Change History
-            </div>
-            <BudgetHistory
-              recordId={`${selectedProjectId}_${fiscalYear}`}
-              activities={allActivities}
-              locations={locations}
-              accounts={accounts}
-            />
           </div>
         )}
 
