@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
@@ -47,19 +47,16 @@ export async function POST(request: NextRequest) {
     if (error) throw new Error(error.message)
 
     // Audit log (mirrors the original page)
-    const { error: auditError } = await supabaseAdmin.from('data_change_logs').insert({
+    await supabaseAdmin.from('data_change_logs').insert({
       table_name: 'budgets',
       record_id: `${projectId || 'all'}_${fiscalYear}`,
       action: 'UPDATE',
-      old_values: null,
-      new_values: rows,
-      changed_by: user?.id || null,
-      company_id: companyId,
+      old_data: null,
+      new_data: rows,
+      changed_by: user?.email || user?.id || null,
       changed_at: new Date().toISOString(),
     })
-    if (auditError) {
-      console.error('Failed to write budget audit log:', auditError.message)
-    }
+
     return NextResponse.json({ success: true })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })

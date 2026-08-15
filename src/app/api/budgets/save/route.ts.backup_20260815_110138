@@ -54,12 +54,9 @@ export async function POST(request: NextRequest) {
       old_values: null,
       new_values: rows,
       changed_by: user?.id || null,
-      company_id: companyId,
       changed_at: new Date().toISOString(),
     })
-    if (auditError) {
-      console.error('Failed to write budget audit log:', auditError.message)
-    }
+
     return NextResponse.json({ success: true })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })

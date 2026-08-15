@@ -1,23 +1,24 @@
-$path = "src\app\dashboard\settings\budgets\page.tsx"
+$path = "src\app\api\budgets\save\route.ts"
 $backup = "$path.backup_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 [System.IO.File]::Copy($path, $backup)
 Write-Host "Backup created: $backup"
 
 $content = [System.IO.File]::ReadAllText($path)
+$originalContent = $content
 
-$old = @"
-          const budget = data[activityId][locationId][accountId].budget
-          if (budget <= 0) continue
-"@
-
-$new = @"
-          const budget = data[activityId][locationId][accountId].budget
-"@
+$old = "    })`n    return NextResponse.json({ success: true })"
+$new = "    })`n    if (auditError) {`n      console.error('Failed to write budget audit log:', auditError.message)`n    }`n    return NextResponse.json({ success: true })"
 
 if ($content.Contains($old)) {
     $content = $content.Replace($old, $new)
-    [System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::UTF8)
-    Write-Host "SUCCESS: Removed the budget<=0 skip in handleSave"
+    Write-Host "Step 5b: SUCCESS"
 } else {
-    Write-Host "NOT FOUND: The expected code block was not found. No changes made."
+    Write-Host "Step 5b: NOT FOUND"
+}
+
+if ($content -ne $originalContent) {
+    [System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::UTF8)
+    Write-Host "FILE UPDATED"
+} else {
+    Write-Host "NO CHANGES MADE"
 }
