@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, Fragment, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
@@ -415,6 +415,7 @@ export default function BudgetsPage() {
       for (const locationId of Object.keys(data[activityId])) {
         for (const accountId of Object.keys(data[activityId][locationId])) {
           const budget = data[activityId][locationId][accountId].budget
+          if (budget <= 0) continue
           const key = `${accountId}|${activityId}|${locationId}|${selectedDonorId || 'no-donor'}|${fiscalYear}`
           if (uniqueKeys.has(key)) continue
           uniqueKeys.add(key)

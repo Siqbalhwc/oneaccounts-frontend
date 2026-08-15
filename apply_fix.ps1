@@ -1,22 +1,23 @@
-$filePath = "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\app\dashboard\reports\customer-ledger\page.tsx"
-$backupPath = "$filePath.bak_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+$path = "src\app\dashboard\settings\budgets\page.tsx"
+$backup = "$path.backup_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+[System.IO.File]::Copy($path, $backup)
+Write-Host "Backup created: $backup"
 
-$rawContent = [System.IO.File]::ReadAllText($filePath, [System.Text.Encoding]::UTF8)
-[System.IO.File]::WriteAllText($backupPath, $rawContent, [System.Text.Encoding]::UTF8)
-$content = $rawContent -replace "`r`n", "`n"
-function Norm($s) { return ($s -replace "`r`n", "`n").TrimEnd("`n") }
+$content = [System.IO.File]::ReadAllText($path)
 
-$old = Norm @'
-                <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
-'@
-$new = Norm @'
-                <span className="sort-btn" style={{ justifyContent: "flex-end", cursor: "default" }}>Balance</span>
-'@
+$old = @"
+          const budget = data[activityId][locationId][accountId].budget
+          if (budget <= 0) continue
+"@
+
+$new = @"
+          const budget = data[activityId][locationId][accountId].budget
+"@
 
 if ($content.Contains($old)) {
     $content = $content.Replace($old, $new)
-    [System.IO.File]::WriteAllText($filePath, $content, [System.Text.Encoding]::UTF8)
-    Write-Host "SUCCESS: Balance column sorting removed. Backup saved at $backupPath"
+    [System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::UTF8)
+    Write-Host "SUCCESS: Removed the budget<=0 skip in handleSave"
 } else {
-    Write-Host "ERROR: Block not found. No changes made."
+    Write-Host "NOT FOUND: The expected code block was not found. No changes made."
 }
