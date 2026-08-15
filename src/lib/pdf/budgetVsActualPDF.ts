@@ -1,0 +1,186 @@
+﻿import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
+
+const NAVY    = [7, 8, 91]      as [number, number, number]
+const DARK    = [17, 24, 39]    as [number, number, number]
+const MUTED   = [107, 114, 128] as [number, number, number]
+const BORDER  = [229, 231, 235] as [number, number, number]
+const WHITE   = [255, 255, 255] as [number, number, number]
+const ROW_ALT = [248, 249, 252] as [number, number, number]
+const HEADING_BG = [235, 238, 250] as [number, number, number]
+const SUCCESS = [16, 185, 129]  as [number, number, number]
+const DANGER  = [239, 68, 68]   as [number, number, number]
+
+async function loadImage(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const blob = await res.blob()
+    return await new Promise<string>(resolve => {
+      const reader = new FileReader()
+      reader.onload  = () => resolve(reader.result as string)
+      reader.onerror = () => resolve("")
+      reader.readAsDataURL(blob)
+    })
+  } catch { return null }
+}
+
+export interface BudgetVsActualRow {
+  activity: string
+  location: string
+  accountCode: string
+  accountName: string
+  budget: number
+  actual: number
+  isHeading?: boolean
+  isSubtotal?: boolean
+  isGrandTotal?: boolean
+}
+
+export interface BudgetVsActualPDFData {
+  companyName: string
+  companyTagline: string
+  logoUrl?: string | null
+  projectName: string
+  donorName?: string
+  fiscalYear: number
+  rows: BudgetVsActualRow[]
+}
+
+export async function generateBudgetVsActualPDF(data: BudgetVsActualPDFData): Promise<jsPDF> {
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
+  const PW = 297, PH = 210, ML = 14, MR = 14
+
+  const LOGO_SIZE = 20, LOGO_X = ML, LOGO_Y = 7
+  let logoData: string | null = null
+  if (data.logoUrl) logoData = await loadImage(data.logoUrl)
+  if (logoData) doc.addImage(logoData, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
+
+  const textX = logoData ? LOGO_X + LOGO_SIZE + 5 : ML
+  doc.setTextColor(...NAVY)
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(14)
+  doc.text(data.companyName || "Your Company", textX, LOGO_Y + 7)
+
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(8.5)
+  doc.setTextColor(...MUTED)
+  doc.text(data.companyTagline || "", textX, LOGO_Y + 13)
+
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(22)
+  doc.setTextColor(...NAVY)
+  doc.text("BUDGET VS ACTUAL", PW - MR, LOGO_Y + 12, { align: "right" })
+
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(8.5)
+  doc.setTextColor(...MUTED)
+  doc.text(`Project: ${data.projectName}`, PW - MR, LOGO_Y + 19, { align: "right" })
+  if (data.donorName) doc.text(`Donor: ${data.donorName}`, PW - MR, LOGO_Y + 24, { align: "right" })
+  doc.text(`Fiscal Year: ${data.fiscalYear}`, PW - MR, LOGO_Y + 29, { align: "right" })
+
+  const HEADER_BOTTOM = LOGO_Y + LOGO_SIZE + 5
+  doc.setDrawColor(...NAVY)
+  doc.setLineWidth(0.6)
+  doc.line(ML, HEADER_BOTTOM, PW - MR, HEADER_BOTTOM)
+
+  const Y = HEADER_BOTTOM + 7
+
+  const fmt = (n: number) =>
+    n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  const tableRows = data.rows.map(row => {
+    if (row.isGrandTotal) {
+      return {
+        description: "Grand Total",
+        account: "",
+        budget: fmt(row.budget),
+        actual: fmt(row.actual),
+        variance: fmt(row.actual - row.budget),
+      }
+    }
+    if (row.isSubtotal) {
+      return {
+        description: `Sub Total - ${row.activity}`,
+        account: "",
+        budget: fmt(row.budget),
+        actual: fmt(row.actual),
+        variance: fmt(row.actual - row.budget),
+      }
+    }
+    if (row.isHeading) {
+      return { description: row.activity, account: "", budget: "", actual: "", variance: "" }
+    }
+    return {
+      description: `    ${row.location}`,
+      account: `${row.accountCode} - ${row.accountName}`,
+      budget: fmt(row.budget),
+      actual: fmt(row.actual),
+      variance: fmt(row.actual - row.budget),
+    }
+  })
+
+  autoTable(doc, {
+    startY: Y,
+    margin: { left: ML, right: MR },
+    head: [["Activity / Location", "Account", "Budget (PKR)", "Actual (PKR)", "Variance (PKR)"]],
+    body: tableRows.map(r => [r.description, r.account, r.budget, r.actual, r.variance]),
+    columnStyles: {
+      0: { cellWidth: 70, halign: "left" },
+      1: { cellWidth: 60, halign: "left" },
+      2: { cellWidth: 40, halign: "right" },
+      3: { cellWidth: 40, halign: "right" },
+      4: { cellWidth: 40, halign: "right", fontStyle: "bold" },
+    },
+    styles: {
+      fontSize: 8,
+      cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
+      textColor: DARK,
+      lineColor: BORDER,
+      lineWidth: 0.2,
+      overflow: "linebreak",
+    },
+    headStyles: {
+      fillColor: NAVY,
+      textColor: WHITE,
+      fontStyle: "bold",
+      fontSize: 8,
+      halign: "center",
+    },
+    alternateRowStyles: { fillColor: ROW_ALT },
+    didParseCell: hookData => {
+      if (hookData.section !== "body") return
+      const row = data.rows[hookData.row.index]
+      if (!row) return
+      if (row.isHeading) {
+        hookData.cell.styles.fontStyle = "bold"
+        hookData.cell.styles.textColor = NAVY
+        hookData.cell.styles.fillColor = HEADING_BG
+      } else if (row.isSubtotal) {
+        hookData.cell.styles.fontStyle = "bold"
+        hookData.cell.styles.fillColor = HEADING_BG
+        hookData.cell.styles.textColor = NAVY
+      } else if (row.isGrandTotal) {
+        hookData.cell.styles.fontStyle = "bold"
+        hookData.cell.styles.fillColor = NAVY
+        hookData.cell.styles.textColor = WHITE
+      } else if (hookData.column.index === 4) {
+        const variance = row.actual - row.budget
+        hookData.cell.styles.textColor = variance < 0 ? SUCCESS : variance > 0 ? DANGER : MUTED
+      }
+    },
+  })
+
+  doc.setDrawColor(...NAVY)
+  doc.setLineWidth(0.4)
+  doc.line(ML, PH - 14, PW - MR, PH - 14)
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(7.5)
+  doc.setTextColor(...MUTED)
+  doc.text(
+    `Generated by ${data.companyName} - ${data.companyTagline}`,
+    PW / 2, PH - 8, { align: "center" }
+  )
+
+  return doc
+}

@@ -1,9 +1,12 @@
-"use client"
+﻿"use client"
 
-import { useState, useEffect, Fragment } from "react"
+import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
+import { useCompany } from "@/contexts/CompanyContext"
 import * as XLSX from "xlsx"
+import { Download, FileText, ClipboardList } from "lucide-react"
+import { generateBudgetVsActualPDF } from "@/lib/pdf/budgetVsActualPDF"
 
 export default function BudgetVsActualReportPage() {
   const supabase = createBrowserClient(
@@ -12,6 +15,7 @@ export default function BudgetVsActualReportPage() {
   )
   const { role, loading: roleLoading } = useRole()
   const canView = role === "admin" || role === "accountant"
+  const { companyName, companyTagline, logoUrl } = useCompany()
 
   const [companyId, setCompanyId] = useState<string>("")
   const [businessType, setBusinessType] = useState<string>("")
@@ -54,7 +58,6 @@ export default function BudgetVsActualReportPage() {
     if (businessType === "ngo" && !selectedDonorId) { setData({}); setLoading(false); return }
     setLoading(true)
 
-    // Convert string IDs to numbers for bigint columns
     const projectId = Number(selectedProjectId)
     const donorId = Number(selectedDonorId)
     const activityId = selectedActivityId ? Number(selectedActivityId) : undefined
@@ -118,14 +121,16 @@ export default function BudgetVsActualReportPage() {
     })
   }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, selectedActivityId, selectedLocationId, businessType])
 
+  // Build grouped rows: activity heading -> location rows -> subtotal, per activity
+  const activityIds = Object.keys(data)
+  let grandBudget = 0, grandActual = 0
+
   const handleExport = () => {
     const exportRows: any[] = []
-    const usedActivities = Object.keys(data)
-    usedActivities.forEach(actId => {
+    activityIds.forEach(actId => {
       const actName = activities.find(a => a.id == actId)?.name || actId
       const locData = data[actId] || {}
-      const locIds = Object.keys(locData)
-      locIds.forEach(locId => {
+      Object.keys(locData).forEach(locId => {
         const locName = locations.find(l => l.id == locId)?.name || locId
         const accData = locData[locId] || {}
         Object.keys(accData).forEach(accId => {
@@ -149,85 +154,221 @@ export default function BudgetVsActualReportPage() {
     XLSX.writeFile(wb, "budget_vs_actual_report.xlsx")
   }
 
-  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" }}>Loading�</div>
-  if (!canView) return <div style={{ padding: 24 }}><h2>Access Denied</h2></div>
+  const handleExportPDF = async () => {
+    const pdfRows: any[] = []
+    let pdfGrandBudget = 0, pdfGrandActual = 0
+    activityIds.forEach(actId => {
+      const actName = activities.find(a => a.id == actId)?.name || actId
+      const locData = data[actId] || {}
+      pdfRows.push({ activity: actName, location: "", accountCode: "", accountName: "", budget: 0, actual: 0, isHeading: true })
+      let actBudget = 0, actActual = 0
+      Object.keys(locData).forEach(locId => {
+        const locName = locations.find(l => l.id == locId)?.name || locId
+        const accData = locData[locId] || {}
+        Object.keys(accData).forEach(accId => {
+          const acc = accounts.find(a => a.id == accId)
+          const { budget, actual } = accData[accId]
+          pdfRows.push({ activity: actName, location: locName, accountCode: acc?.code || "", accountName: acc?.name || "", budget, actual })
+          actBudget += budget; actActual += actual
+        })
+      })
+      pdfRows.push({ activity: actName, location: "", accountCode: "", accountName: "", budget: actBudget, actual: actActual, isSubtotal: true })
+      pdfGrandBudget += actBudget; pdfGrandActual += actActual
+    })
+    pdfRows.push({ activity: "", location: "", accountCode: "", accountName: "", budget: pdfGrandBudget, actual: pdfGrandActual, isGrandTotal: true })
+
+    const projectName = projects.find(p => p.id == selectedProjectId)?.name || ""
+    const donorName = donors.find(d => d.id == selectedDonorId)?.name || ""
+
+    const doc = await generateBudgetVsActualPDF({
+      companyName: companyName || "OneAccounts",
+      companyTagline: companyTagline || "",
+      logoUrl: logoUrl || null,
+      projectName,
+      donorName,
+      fiscalYear,
+      rows: pdfRows,
+    })
+    doc.save(`Budget_vs_Actual_${projectName.replace(/\s+/g, '_')}_${fiscalYear}.pdf`)
+  }
+
+  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
+  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
+
+  const thStyle: React.CSSProperties = {
+    padding: "10px 12px",
+    background: "var(--card-hover)",
+    borderBottom: "2px solid var(--border)",
+    fontSize: 11,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: "var(--text-muted)",
+    whiteSpace: "nowrap",
+  }
+  const tdStyle: React.CSSProperties = {
+    padding: "8px 12px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+    color: "var(--text)",
+  }
 
   return (
-    <div style={{ padding: 24, fontFamily: "Arial" }}>
-      <h2 style={{ fontSize: 22, fontWeight: 800, color: "#1E293B" }}>?? Budget vs Actual Report</h2>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16, marginTop: 8 }}>
-        <select value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))} style={{ padding: "6px 12px" }}>
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+      <style>{`
+        .bva-filter-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+        .bva-select {
+          padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px;
+          background: var(--card); color: var(--text);
+        }
+        .bva-btn {
+          display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px;
+          font-size: 13px; font-weight: 600; cursor: pointer; border: none;
+          background: var(--primary); color: var(--primary-text);
+        }
+        .bva-btn:hover { background: var(--primary-hover); }
+        .bva-btn-outline {
+          display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px;
+          font-size: 13px; font-weight: 600; cursor: pointer; background: transparent;
+          border: 1.5px solid var(--border); color: var(--text-muted);
+        }
+        .bva-btn-outline:hover { background: var(--card-hover); }
+        .bva-table-wrap {
+          background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+          overflow: hidden; box-shadow: var(--shadow-sm);
+        }
+        .bva-table { width: 100%; border-collapse: collapse; }
+        .bva-table tbody tr:hover td { background: var(--card-hover); }
+        .bva-table tbody tr:last-child td { border-bottom: none; }
+        .bva-heading-row td { background: var(--card-hover); font-weight: 700; color: var(--text); }
+        .bva-subtotal-row td { background: var(--card-hover); font-weight: 700; }
+      `}</style>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+        <ClipboardList size={22} />
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: "var(--text)" }}>Budget vs Actual Report</h1>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "2px 0 0 0" }}>
+            Compare budgeted amounts against actual spending by activity and location
+          </p>
+        </div>
+      </div>
+
+      <div className="bva-filter-bar">
+        <select className="bva-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
           {[2025,2026,2027,2028].map(y => <option key={y} value={y}>{y}</option>)}
         </select>
-        <select value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)} style={{ padding: "6px 12px" }}>
+        <select className="bva-select" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
           <option value="">-- Select Project --</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         {businessType === "ngo" && (
-          <select value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)} style={{ padding: "6px 12px" }}>
+          <select className="bva-select" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
             <option value="">-- Select Donor --</option>
             {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         )}
-        <select value={selectedActivityId} onChange={e => setSelectedActivityId(e.target.value)} style={{ padding: "6px 12px" }}>
+        <select className="bva-select" value={selectedActivityId} onChange={e => setSelectedActivityId(e.target.value)}>
           <option value="">All Activities</option>
           {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
-        <select value={selectedLocationId} onChange={e => setSelectedLocationId(e.target.value)} style={{ padding: "6px 12px" }}>
+        <select className="bva-select" value={selectedLocationId} onChange={e => setSelectedLocationId(e.target.value)}>
           <option value="">All Locations</option>
           {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
-        <button onClick={handleExport} style={{ padding: "8px 16px", background: "#059669", color: "white", border: "none", borderRadius: 6, cursor: "pointer" }}>
-          ?? Export Excel
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button className="bva-btn-outline" onClick={handleExportPDF} disabled={!selectedProjectId}>
+            <FileText size={14} /> Export PDF
+          </button>
+          <button className="bva-btn" onClick={handleExport} disabled={!selectedProjectId}>
+            <Download size={14} /> Export Excel
+          </button>
+        </div>
       </div>
 
       {!selectedProjectId ? (
-        <p style={{ color: "#94A3B8" }}>Please select a project.</p>
-      ) : loading ? <p>Loading...</p> : (
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, background: "white" }}>
-          <thead>
-            <tr style={{ background: "#F1F5F9" }}>
-              <th style={{ border: "1px solid #ddd", padding: 4 }}>Activity</th>
-              <th style={{ border: "1px solid #ddd", padding: 4 }}>Location</th>
-              <th style={{ border: "1px solid #ddd", padding: 4 }}>Account Code</th>
-              <th style={{ border: "1px solid #ddd", padding: 4 }}>Account Name</th>
-              <th style={{ border: "1px solid #ddd", padding: 4 }}>Budget</th>
-              <th style={{ border: "1px solid #ddd", padding: 4 }}>Actual</th>
-              <th style={{ border: "1px solid #ddd", padding: 4 }}>Variance</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.keys(data).length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#94A3B8" }}>No data found for selected filters.</td></tr>
-            ) : (
-              Object.keys(data).flatMap(actId => {
-                const actName = activities.find(a => a.id == actId)?.name || actId
-                return Object.keys(data[actId]).flatMap(locId => {
-                  const locName = locations.find(l => l.id == locId)?.name || locId
-                  return Object.keys(data[actId][locId]).map(accId => {
-                    const acc = accounts.find(a => a.id == accId)
-                    const { budget, actual } = data[actId][locId][accId]
-                    const variance = actual - budget
-                    return (
-                      <tr key={`${actId}_${locId}_${accId}`}>
-                        <td style={{ border: "1px solid #eee", padding: 4 }}>{actName}</td>
-                        <td style={{ border: "1px solid #eee", padding: 4 }}>{locName}</td>
-                        <td style={{ border: "1px solid #eee", padding: 4 }}>{acc?.code}</td>
-                        <td style={{ border: "1px solid #eee", padding: 4 }}>{acc?.name}</td>
-                        <td style={{ border: "1px solid #eee", padding: 4, textAlign: "right" }}>{budget.toLocaleString()}</td>
-                        <td style={{ border: "1px solid #eee", padding: 4, textAlign: "right" }}>{actual.toLocaleString()}</td>
-                        <td style={{ border: "1px solid #eee", padding: 4, textAlign: "right", color: variance < 0 ? "#EF4444" : "#10B981" }}>
-                          {variance === 0 ? "�" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+        <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
+          Please select a project.
+        </div>
+      ) : loading ? (
+        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading...</div>
+      ) : (
+        <div className="bva-table-wrap">
+          <table className="bva-table">
+            <thead>
+              <tr>
+                <th style={{ ...thStyle, textAlign: "left" }}>Activity / Location</th>
+                <th style={{ ...thStyle, textAlign: "left" }}>Account</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Budget</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Actual</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Variance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activityIds.length === 0 ? (
+                <tr><td colSpan={5} style={{ ...tdStyle, textAlign: "center", padding: 30, color: "var(--text-muted)" }}>No data found for selected filters.</td></tr>
+              ) : (
+                activityIds.map(actId => {
+                  const actName = activities.find(a => a.id == actId)?.name || actId
+                  const locData = data[actId] || {}
+                  const locIds = Object.keys(locData)
+                  let actBudget = 0, actActual = 0
+                  const locRows = locIds.flatMap(locId => {
+                    const locName = locations.find(l => l.id == locId)?.name || locId
+                    return Object.keys(locData[locId]).map(accId => {
+                      const acc = accounts.find(a => a.id == accId)
+                      const { budget, actual } = locData[locId][accId]
+                      actBudget += budget; actActual += actual
+                      const variance = actual - budget
+                      return (
+                        <tr key={`${actId}_${locId}_${accId}`}>
+                          <td style={{ ...tdStyle, textAlign: "left", paddingLeft: 28, color: "var(--text-muted)" }}>{locName}</td>
+                          <td style={{ ...tdStyle, textAlign: "left", fontFamily: "monospace" }}>{acc?.code} - {acc?.name}</td>
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{budget.toLocaleString()}</td>
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{actual.toLocaleString()}</td>
+                          <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: variance > 0 ? "#EF4444" : variance < 0 ? "#10B981" : "var(--text-muted)" }}>
+                            {variance === 0 ? "-" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  })
+                  grandBudget += actBudget
+                  grandActual += actActual
+                  const actVariance = actActual - actBudget
+                  return (
+                    <>
+                      <tr className="bva-heading-row" key={`${actId}_heading`}>
+                        <td style={{ ...tdStyle, textAlign: "left" }} colSpan={5}>{actName}</td>
+                      </tr>
+                      {locRows}
+                      <tr className="bva-subtotal-row" key={`${actId}_subtotal`}>
+                        <td style={{ ...tdStyle, textAlign: "left" }}>Sub Total</td>
+                        <td style={tdStyle}></td>
+                        <td style={{ ...tdStyle, textAlign: "right" }}>{actBudget.toLocaleString()}</td>
+                        <td style={{ ...tdStyle, textAlign: "right" }}>{actActual.toLocaleString()}</td>
+                        <td style={{ ...tdStyle, textAlign: "right", color: actVariance > 0 ? "#EF4444" : actVariance < 0 ? "#10B981" : "var(--text-muted)" }}>
+                          {actVariance === 0 ? "-" : (actVariance > 0 ? "+" : "") + actVariance.toLocaleString()}
                         </td>
                       </tr>
-                    )
-                  })
+                    </>
+                  )
                 })
-              })
+              )}
+            </tbody>
+            {activityIds.length > 0 && (
+              <tfoot>
+                <tr style={{ background: "var(--primary)" }}>
+                  <td style={{ ...tdStyle, textAlign: "left", color: "var(--primary-text)", fontWeight: 700, border: "none" }}>Grand Total</td>
+                  <td style={{ border: "none" }}></td>
+                  <td style={{ ...tdStyle, textAlign: "right", color: "var(--primary-text)", fontWeight: 700, border: "none" }}>{grandBudget.toLocaleString()}</td>
+                  <td style={{ ...tdStyle, textAlign: "right", color: "var(--primary-text)", fontWeight: 700, border: "none" }}>{grandActual.toLocaleString()}</td>
+                  <td style={{ ...tdStyle, textAlign: "right", color: "var(--primary-text)", fontWeight: 700, border: "none" }}>{(grandActual - grandBudget).toLocaleString()}</td>
+                </tr>
+              </tfoot>
             )}
-          </tbody>
-        </table>
+          </table>
+        </div>
       )}
     </div>
   )

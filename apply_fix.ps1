@@ -1,39 +1,385 @@
-$path = "src\app\dashboard\settings\budgets\page.tsx"
+$path = "src\app\dashboard\reports\budget-vs-actual\page.tsx"
 $backup = "$path.backup_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 [System.IO.File]::Copy($path, $backup)
 Write-Host "Backup created: $backup"
 
-$content = [System.IO.File]::ReadAllText($path)
-$originalContent = $content
+$newContent = @'
+"use client"
 
-$old = @'
-            {/* Edit Budget button - only when not editing and user can edit */}
-            {!editMode && canEditBudget && (
-              <button className="btn-outline" onClick={() => setEditMode(true)}>
-                <Edit size={14} /> Edit Budget
-              </button>
-            )}
-'@
+import { useState, useEffect } from "react"
+import { createBrowserClient } from "@supabase/ssr"
+import { useRole } from "@/contexts/RoleContext"
+import { useCompany } from "@/contexts/CompanyContext"
+import * as XLSX from "xlsx"
+import { Download, FileText, ClipboardList } from "lucide-react"
+import { generateBudgetVsActualPDF } from "@/lib/pdf/budgetVsActualPDF"
 
-$new = @'
-            {/* Edit Budget button - only when not editing and user can edit */}
-            {!editMode && canEditBudget && (
-              <button className="btn-outline" onClick={() => setEditMode(true)}>
-                <Edit size={14} /> Edit Budget
-              </button>
-            )}
-            {/* Locked message - shown when approved and current user is not admin */}
-            {!editMode && !canEditBudget && isApproved && (
-              <span style={{ fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
-                This budget is approved. Only an admin can edit it.
-              </span>
-            )}
-'@
+export default function BudgetVsActualReportPage() {
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+  const { role, loading: roleLoading } = useRole()
+  const canView = role === "admin" || role === "accountant"
+  const { companyName, companyTagline, logoUrl } = useCompany()
 
-if ($content.Contains($old)) {
-    $content = $content.Replace($old, $new)
-    [System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::UTF8)
-    Write-Host "SUCCESS: Added locked-budget message for non-admins"
-} else {
-    Write-Host "NOT FOUND: The expected code block was not found. No changes made."
+  const [companyId, setCompanyId] = useState<string>("")
+  const [businessType, setBusinessType] = useState<string>("")
+  const [projects, setProjects] = useState<any[]>([])
+  const [donors, setDonors] = useState<any[]>([])
+  const [activities, setActivities] = useState<any[]>([])
+  const [locations, setLocations] = useState<any[]>([])
+  const [accounts, setAccounts] = useState<any[]>([])
+
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("")
+  const [selectedDonorId, setSelectedDonorId] = useState<string>("")
+  const [selectedActivityId, setSelectedActivityId] = useState<string>("")
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("")
+  const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
+
+  const [data, setData] = useState<Record<string, Record<string, Record<string, { budget: number; actual: number }>>>>({})
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const cid = (user?.app_metadata as any)?.company_id || '00000000-0000-0000-0000-000000000001'
+      setCompanyId(cid)
+      supabase.from("companies").select("business_type").eq("id", cid).single()
+        .then(r => r.data && setBusinessType(r.data.business_type || ""))
+      supabase.from("projects").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setProjects(r.data))
+      supabase.from("donors").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setDonors(r.data))
+      supabase.from("activities").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setActivities(r.data))
+      supabase.from("locations").select("id,name").eq("company_id", cid).order("name")
+        .then(r => r.data && setLocations(r.data))
+      supabase.from("accounts").select("id,code,name").eq("company_id", cid).eq("type","Expense").order("code")
+        .then(r => r.data && setAccounts(r.data))
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!companyId || !selectedProjectId) { setData({}); setLoading(false); return }
+    if (businessType === "ngo" && !selectedDonorId) { setData({}); setLoading(false); return }
+    setLoading(true)
+
+    const projectId = Number(selectedProjectId)
+    const donorId = Number(selectedDonorId)
+    const activityId = selectedActivityId ? Number(selectedActivityId) : undefined
+    const locationId = selectedLocationId ? Number(selectedLocationId) : undefined
+
+    let budgetQuery = supabase.from("budgets")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("fiscal_year", fiscalYear)
+      .eq("project_id", projectId)
+      .is("month", null)
+    if (businessType === "ngo") budgetQuery = budgetQuery.eq("donor_id", donorId)
+    if (activityId) budgetQuery = budgetQuery.eq("activity_id", activityId)
+    if (locationId) budgetQuery = budgetQuery.eq("location_id", locationId)
+
+    budgetQuery.then(({ data: budgetRows, error: budgetError }) => {
+      if (budgetError) {
+        console.error("Budget query error:", budgetError)
+        setLoading(false)
+        return
+      }
+      const startDate = `${fiscalYear}-01-01`
+      const endDate = `${fiscalYear}-12-31`
+      let actualQuery = supabase.from("journal_lines")
+        .select("account_id, activity_id, location_id, debit, credit, journal_entries!inner(date)")
+        .eq("company_id", companyId)
+        .eq("project_id", projectId)
+        .gte("journal_entries.date", startDate)
+        .lte("journal_entries.date", endDate)
+      if (businessType === "ngo") actualQuery = actualQuery.eq("donor_id", donorId)
+      if (activityId) actualQuery = actualQuery.eq("activity_id", activityId)
+      if (locationId) actualQuery = actualQuery.eq("location_id", locationId)
+
+      actualQuery.then(({ data: actualRows, error: actualError }) => {
+        if (actualError) {
+          console.error("Actual query error:", actualError)
+          setLoading(false)
+          return
+        }
+        const newData: Record<string, Record<string, Record<string, { budget: number; actual: number }>>> = {}
+        budgetRows?.forEach((b: any) => {
+          const { activity_id, location_id, account_id, budgeted_amount } = b
+          if (!activity_id || !location_id || !account_id) return
+          if (!newData[activity_id]) newData[activity_id] = {}
+          if (!newData[activity_id][location_id]) newData[activity_id][location_id] = {}
+          if (!newData[activity_id][location_id][account_id]) newData[activity_id][location_id][account_id] = { budget: 0, actual: 0 }
+          newData[activity_id][location_id][account_id].budget += budgeted_amount || 0
+        })
+        actualRows?.forEach((line: any) => {
+          const { account_id, activity_id, location_id, debit, credit } = line
+          if (!activity_id || !location_id || !account_id) return
+          const net = (debit || 0) - (credit || 0)
+          if (!newData[activity_id]) newData[activity_id] = {}
+          if (!newData[activity_id][location_id]) newData[activity_id][location_id] = {}
+          if (!newData[activity_id][location_id][account_id]) newData[activity_id][location_id][account_id] = { budget: 0, actual: 0 }
+          newData[activity_id][location_id][account_id].actual += net
+        })
+        setData(newData)
+        setLoading(false)
+      })
+    })
+  }, [companyId, fiscalYear, selectedProjectId, selectedDonorId, selectedActivityId, selectedLocationId, businessType])
+
+  // Build grouped rows: activity heading -> location rows -> subtotal, per activity
+  const activityIds = Object.keys(data)
+  let grandBudget = 0, grandActual = 0
+
+  const handleExport = () => {
+    const exportRows: any[] = []
+    activityIds.forEach(actId => {
+      const actName = activities.find(a => a.id == actId)?.name || actId
+      const locData = data[actId] || {}
+      Object.keys(locData).forEach(locId => {
+        const locName = locations.find(l => l.id == locId)?.name || locId
+        const accData = locData[locId] || {}
+        Object.keys(accData).forEach(accId => {
+          const acc = accounts.find(a => a.id == accId)
+          const { budget, actual } = accData[accId]
+          exportRows.push({
+            Activity: actName,
+            Location: locName,
+            "Account Code": acc?.code,
+            "Account Name": acc?.name,
+            Budget: budget,
+            Actual: actual,
+            Variance: actual - budget,
+          })
+        })
+      })
+    })
+    const ws = XLSX.utils.json_to_sheet(exportRows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Budget vs Actual")
+    XLSX.writeFile(wb, "budget_vs_actual_report.xlsx")
+  }
+
+  const handleExportPDF = async () => {
+    const pdfRows: any[] = []
+    let pdfGrandBudget = 0, pdfGrandActual = 0
+    activityIds.forEach(actId => {
+      const actName = activities.find(a => a.id == actId)?.name || actId
+      const locData = data[actId] || {}
+      pdfRows.push({ activity: actName, location: "", accountCode: "", accountName: "", budget: 0, actual: 0, isHeading: true })
+      let actBudget = 0, actActual = 0
+      Object.keys(locData).forEach(locId => {
+        const locName = locations.find(l => l.id == locId)?.name || locId
+        const accData = locData[locId] || {}
+        Object.keys(accData).forEach(accId => {
+          const acc = accounts.find(a => a.id == accId)
+          const { budget, actual } = accData[accId]
+          pdfRows.push({ activity: actName, location: locName, accountCode: acc?.code || "", accountName: acc?.name || "", budget, actual })
+          actBudget += budget; actActual += actual
+        })
+      })
+      pdfRows.push({ activity: actName, location: "", accountCode: "", accountName: "", budget: actBudget, actual: actActual, isSubtotal: true })
+      pdfGrandBudget += actBudget; pdfGrandActual += actActual
+    })
+    pdfRows.push({ activity: "", location: "", accountCode: "", accountName: "", budget: pdfGrandBudget, actual: pdfGrandActual, isGrandTotal: true })
+
+    const projectName = projects.find(p => p.id == selectedProjectId)?.name || ""
+    const donorName = donors.find(d => d.id == selectedDonorId)?.name || ""
+
+    const doc = await generateBudgetVsActualPDF({
+      companyName: companyName || "OneAccounts",
+      companyTagline: companyTagline || "",
+      logoUrl: logoUrl || null,
+      projectName,
+      donorName,
+      fiscalYear,
+      rows: pdfRows,
+    })
+    doc.save(`Budget_vs_Actual_${projectName.replace(/\s+/g, '_')}_${fiscalYear}.pdf`)
+  }
+
+  if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
+  if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
+
+  const thStyle: React.CSSProperties = {
+    padding: "10px 12px",
+    background: "var(--card-hover)",
+    borderBottom: "2px solid var(--border)",
+    fontSize: 11,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: "var(--text-muted)",
+    whiteSpace: "nowrap",
+  }
+  const tdStyle: React.CSSProperties = {
+    padding: "8px 12px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+    color: "var(--text)",
+  }
+
+  return (
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+      <style>{`
+        .bva-filter-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+        .bva-select {
+          padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px;
+          background: var(--card); color: var(--text);
+        }
+        .bva-btn {
+          display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px;
+          font-size: 13px; font-weight: 600; cursor: pointer; border: none;
+          background: var(--primary); color: var(--primary-text);
+        }
+        .bva-btn:hover { background: var(--primary-hover); }
+        .bva-btn-outline {
+          display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px;
+          font-size: 13px; font-weight: 600; cursor: pointer; background: transparent;
+          border: 1.5px solid var(--border); color: var(--text-muted);
+        }
+        .bva-btn-outline:hover { background: var(--card-hover); }
+        .bva-table-wrap {
+          background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+          overflow: hidden; box-shadow: var(--shadow-sm);
+        }
+        .bva-table { width: 100%; border-collapse: collapse; }
+        .bva-table tbody tr:hover td { background: var(--card-hover); }
+        .bva-table tbody tr:last-child td { border-bottom: none; }
+        .bva-heading-row td { background: var(--card-hover); font-weight: 700; color: var(--text); }
+        .bva-subtotal-row td { background: var(--card-hover); font-weight: 700; }
+      `}</style>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+        <ClipboardList size={22} />
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: "var(--text)" }}>Budget vs Actual Report</h1>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "2px 0 0 0" }}>
+            Compare budgeted amounts against actual spending by activity and location
+          </p>
+        </div>
+      </div>
+
+      <div className="bva-filter-bar">
+        <select className="bva-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
+          {[2025,2026,2027,2028].map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <select className="bva-select" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
+          <option value="">-- Select Project --</option>
+          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        {businessType === "ngo" && (
+          <select className="bva-select" value={selectedDonorId} onChange={e => setSelectedDonorId(e.target.value)}>
+            <option value="">-- Select Donor --</option>
+            {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        )}
+        <select className="bva-select" value={selectedActivityId} onChange={e => setSelectedActivityId(e.target.value)}>
+          <option value="">All Activities</option>
+          {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+        <select className="bva-select" value={selectedLocationId} onChange={e => setSelectedLocationId(e.target.value)}>
+          <option value="">All Locations</option>
+          {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button className="bva-btn-outline" onClick={handleExportPDF} disabled={!selectedProjectId}>
+            <FileText size={14} /> Export PDF
+          </button>
+          <button className="bva-btn" onClick={handleExport} disabled={!selectedProjectId}>
+            <Download size={14} /> Export Excel
+          </button>
+        </div>
+      </div>
+
+      {!selectedProjectId ? (
+        <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 40, textAlign: "center", color: "var(--text-muted)" }}>
+          Please select a project.
+        </div>
+      ) : loading ? (
+        <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading...</div>
+      ) : (
+        <div className="bva-table-wrap">
+          <table className="bva-table">
+            <thead>
+              <tr>
+                <th style={{ ...thStyle, textAlign: "left" }}>Activity / Location</th>
+                <th style={{ ...thStyle, textAlign: "left" }}>Account</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Budget</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Actual</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>Variance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activityIds.length === 0 ? (
+                <tr><td colSpan={5} style={{ ...tdStyle, textAlign: "center", padding: 30, color: "var(--text-muted)" }}>No data found for selected filters.</td></tr>
+              ) : (
+                activityIds.map(actId => {
+                  const actName = activities.find(a => a.id == actId)?.name || actId
+                  const locData = data[actId] || {}
+                  const locIds = Object.keys(locData)
+                  let actBudget = 0, actActual = 0
+                  const locRows = locIds.flatMap(locId => {
+                    const locName = locations.find(l => l.id == locId)?.name || locId
+                    return Object.keys(locData[locId]).map(accId => {
+                      const acc = accounts.find(a => a.id == accId)
+                      const { budget, actual } = locData[locId][accId]
+                      actBudget += budget; actActual += actual
+                      const variance = actual - budget
+                      return (
+                        <tr key={`${actId}_${locId}_${accId}`}>
+                          <td style={{ ...tdStyle, textAlign: "left", paddingLeft: 28, color: "var(--text-muted)" }}>{locName}</td>
+                          <td style={{ ...tdStyle, textAlign: "left", fontFamily: "monospace" }}>{acc?.code} - {acc?.name}</td>
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{budget.toLocaleString()}</td>
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{actual.toLocaleString()}</td>
+                          <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: variance > 0 ? "#EF4444" : variance < 0 ? "#10B981" : "var(--text-muted)" }}>
+                            {variance === 0 ? "-" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  })
+                  grandBudget += actBudget
+                  grandActual += actActual
+                  const actVariance = actActual - actBudget
+                  return (
+                    <>
+                      <tr className="bva-heading-row" key={`${actId}_heading`}>
+                        <td style={{ ...tdStyle, textAlign: "left" }} colSpan={5}>{actName}</td>
+                      </tr>
+                      {locRows}
+                      <tr className="bva-subtotal-row" key={`${actId}_subtotal`}>
+                        <td style={{ ...tdStyle, textAlign: "left" }}>Sub Total</td>
+                        <td style={tdStyle}></td>
+                        <td style={{ ...tdStyle, textAlign: "right" }}>{actBudget.toLocaleString()}</td>
+                        <td style={{ ...tdStyle, textAlign: "right" }}>{actActual.toLocaleString()}</td>
+                        <td style={{ ...tdStyle, textAlign: "right", color: actVariance > 0 ? "#EF4444" : actVariance < 0 ? "#10B981" : "var(--text-muted)" }}>
+                          {actVariance === 0 ? "-" : (actVariance > 0 ? "+" : "") + actVariance.toLocaleString()}
+                        </td>
+                      </tr>
+                    </>
+                  )
+                })
+              )}
+            </tbody>
+            {activityIds.length > 0 && (
+              <tfoot>
+                <tr style={{ background: "var(--primary)" }}>
+                  <td style={{ ...tdStyle, textAlign: "left", color: "var(--primary-text)", fontWeight: 700, border: "none" }}>Grand Total</td>
+                  <td style={{ border: "none" }}></td>
+                  <td style={{ ...tdStyle, textAlign: "right", color: "var(--primary-text)", fontWeight: 700, border: "none" }}>{grandBudget.toLocaleString()}</td>
+                  <td style={{ ...tdStyle, textAlign: "right", color: "var(--primary-text)", fontWeight: 700, border: "none" }}>{grandActual.toLocaleString()}</td>
+                  <td style={{ ...tdStyle, textAlign: "right", color: "var(--primary-text)", fontWeight: 700, border: "none" }}>{(grandActual - grandBudget).toLocaleString()}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      )}
+    </div>
+  )
 }
+'@
+
+[System.IO.File]::WriteAllText($path, $newContent, [System.Text.Encoding]::UTF8)
+Write-Host "SUCCESS: Rebuilt budget-vs-actual report page (nested layout, theme, PDF export)"
