@@ -265,14 +265,6 @@ export default function ProjectsPage() {
     setSaving(false)
     setShowModal(false)
     fetchData()
-    // Also refresh dropdown lookup lists so a newly created donor/project/location
-    // shows up immediately in other tabs' Add/Edit pickers without a hard refresh.
-    supabase.from("projects").select("id,name").eq("company_id", companyId).order("name")
-      .then(r => r.data && setProjects(r.data))
-    supabase.from("locations").select("id,name").eq("company_id", companyId).order("name")
-      .then(r => r.data && setLocations(r.data))
-    supabase.from("donors").select("id,name").eq("company_id", companyId).order("name")
-      .then(r => r.data && setDonors(r.data))
     setTimeout(() => setFlash(""), 3000)
   }
 
