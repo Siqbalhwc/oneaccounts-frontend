@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
@@ -31,17 +31,6 @@ export async function POST(request: NextRequest) {
 
   const companyId = user.app_metadata?.company_id
   if (!companyId) return NextResponse.json({ error: 'No company' }, { status: 400 })
-
-  // Server-side role check - only admins may approve a budget.
-  const { data: roleRow } = await supabaseAdmin
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', user.id)
-    .eq('company_id', companyId)
-    .maybeSingle()
-  if (!roleRow || roleRow.role !== 'admin') {
-    return NextResponse.json({ error: 'Only an admin can approve a budget' }, { status: 403 })
-  }
 
   const body = await request.json()
   const { projectId, fiscalYear } = body

@@ -32,7 +32,6 @@ export async function POST(request: NextRequest) {
   const companyId = user.app_metadata?.company_id
   if (!companyId) return NextResponse.json({ error: 'No company' }, { status: 400 })
 
-  // Server-side role check - only admins may approve a budget.
   const { data: roleRow } = await supabaseAdmin
     .from('user_roles')
     .select('role')
@@ -40,22 +39,27 @@ export async function POST(request: NextRequest) {
     .eq('company_id', companyId)
     .maybeSingle()
   if (!roleRow || roleRow.role !== 'admin') {
-    return NextResponse.json({ error: 'Only an admin can approve a budget' }, { status: 403 })
+    return NextResponse.json({ error: 'Only an admin can reject a budget' }, { status: 403 })
   }
 
   const body = await request.json()
-  const { projectId, fiscalYear } = body
+  const { projectId, fiscalYear, reason } = body
 
   if (!projectId || !fiscalYear) {
     return NextResponse.json({ error: 'projectId and fiscalYear are required' }, { status: 400 })
+  }
+  if (!reason || !reason.trim()) {
+    return NextResponse.json({ error: 'A rejection reason is required' }, { status: 400 })
   }
 
   const { error } = await supabaseAdmin
     .from('project_budget_status')
     .update({
-      status: 'approved',
-      approved_by: user.id,
-      approved_at: new Date().toISOString(),
+      status: 'draft',
+      rejection_reason: reason.trim(),
+      rejected_by: user.id,
+      rejected_at: new Date().toISOString(),
+      monthly_budget_verified: false,
     })
     .eq('company_id', companyId)
     .eq('project_id', parseInt(projectId))
