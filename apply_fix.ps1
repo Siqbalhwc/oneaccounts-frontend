@@ -6,74 +6,57 @@ Write-Host "Backup created: $backup"
 $content = [System.IO.File]::ReadAllText($path)
 $originalContent = $content
 
-$old = @'
-          {/* Approve / Reject / Send for Approval button */}
-          {viewMode === "gl" && selectedProjectId && canEditBudget && budgetStatus !== "approved" && (
-            <div style={{ display: "flex", gap: 8 }}>
-              {budgetStatus === "draft" && (
-                <button
-                  className="btn-outline"
-                  onClick={handleSubmitForApproval}
-                  disabled={!monthlyVerified}
-                  title={!monthlyVerified ? "Please review and confirm the monthly budget split before submitting" : ""}
-                >
-                  <Send size={14} /> Send for Approval
-                </button>
-              )}
-              {isPendingApproval && role === "admin" && (
-                <>
-                  <button className="btn-outline" onClick={() => setShowRejectModal(true)} style={{ color: "#EF4444", borderColor: "#EF4444" }}>
-                    <X size={14} /> Reject
-                  </button>
-                  <button className="btn-primary" onClick={handleApprove}>
-                    <CheckCircle size={14} /> Approve Budget
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-'@
+# Fix state shape: needs account_id as a key too, not summed away
+$s1old = '  const [savedMonthlyBudgets, setSavedMonthlyBudgets] = useState<Record<string, Record<string, Record<number, number>>>>({})'
+$s1new = '  const [savedMonthlyBudgets, setSavedMonthlyBudgets] = useState<Record<string, Record<string, Record<string, Record<number, number>>>>>({})'
+if ($content.Contains($s1old)) { $content = $content.Replace($s1old, $s1new); Write-Host "Step 1: SUCCESS" } else { Write-Host "Step 1: NOT FOUND" }
 
-$new = @'
-          {/* Approve / Reject / Send for Approval button */}
-          {viewMode === "gl" && selectedProjectId && canEditBudget && budgetStatus !== "approved" && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-              <div style={{ display: "flex", gap: 8 }}>
-                {budgetStatus === "draft" && (
-                  <button
-                    className="btn-outline"
-                    onClick={handleSubmitForApproval}
-                    disabled={!monthlyVerified}
-                  >
-                    <Send size={14} /> Send for Approval
-                  </button>
-                )}
-                {isPendingApproval && role === "admin" && (
-                  <>
-                    <button className="btn-outline" onClick={() => setShowRejectModal(true)} style={{ color: "#EF4444", borderColor: "#EF4444" }}>
-                      <X size={14} /> Reject
-                    </button>
-                    <button className="btn-primary" onClick={handleApprove}>
-                      <CheckCircle size={14} /> Approve Budget
-                    </button>
-                  </>
-                )}
-              </div>
-              {budgetStatus === "draft" && !monthlyVerified && (
-                <span style={{ fontSize: 11, color: "#F59E0B", fontWeight: 600, maxWidth: 260, textAlign: "right" }}>
-                  Please review and confirm the monthly budget split (View by: Month) before submitting for approval.
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+# Fix the fetch/build logic: keep account_id as its own key level, don't sum across accounts
+$s2old = @'
+              savedQuery.then(({ data: savedRows }) => {
+                const saved: Record<string, Record<string, Record<number, number>>> = {}
+                if (savedRows) {
+                  savedRows.forEach((row: any) => {
+                    const actId = String(row.activity_id)
+                    const locId = String(row.location_id)
+                    const monthNum = row.month
+                    if (!saved[actId]) saved[actId] = {}
+                    if (!saved[actId][locId]) saved[actId][locId] = {}
+                    // Sum across GL accounts for this activity/location/month
+                    saved[actId][locId][monthNum] = (saved[actId][locId][monthNum] || 0) + (Number(row.budgeted_amount) || 0)
+                  })
+                }
+                setSavedMonthlyBudgets(saved)
+                setLoading(false)
+              })
 '@
+$s2new = @'
+              savedQuery.then(({ data: savedRows }) => {
+                // Kept separate per (activity, location, account) - each GL
+                // line has its own independent monthly split, matching how
+                // the GL view and validate_transaction_budget both work.
+                const saved: Record<string, Record<string, Record<string, Record<number, number>>>> = {}
+                if (savedRows) {
+                  savedRows.forEach((row: any) => {
+                    const actId = String(row.activity_id)
+                    const locId = String(row.location_id)
+                    const accId = String(row.account_id)
+                    const monthNum = row.month
+                    if (!saved[actId]) saved[actId] = {}
+                    if (!saved[actId][locId]) saved[actId][locId] = {}
+                    if (!saved[actId][locId][accId]) saved[actId][locId][accId] = {}
+                    saved[actId][locId][accId][monthNum] = Number(row.budgeted_amount) || 0
+                  })
+                }
+                setSavedMonthlyBudgets(saved)
+                setLoading(false)
+              })
+'@
+if ($content.Contains($s2old)) { $content = $content.Replace($s2old, $s2new); Write-Host "Step 2: SUCCESS" } else { Write-Host "Step 2: NOT FOUND" }
 
-if ($content.Contains($old)) {
-    $content = $content.Replace($old, $new)
+if ($content -ne $originalContent) {
     [System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::UTF8)
-    Write-Host "SUCCESS: Added visible blocking message under Send for Approval"
+    Write-Host "FILE UPDATED"
 } else {
-    Write-Host "NOT FOUND"
+    Write-Host "NO CHANGES MADE"
 }

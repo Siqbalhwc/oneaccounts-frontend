@@ -53,7 +53,7 @@ export default function BudgetsPage() {
 
   const [monthlyActuals, setMonthlyActuals] = useState<Record<string, Record<string, Record<number, number>>>>({})
   const [monthBudgetOverrides, setMonthBudgetOverrides] = useState<Record<string, Record<string, Record<number, number | null>>>>({})
-  const [savedMonthlyBudgets, setSavedMonthlyBudgets] = useState<Record<string, Record<string, Record<string, Record<number, number>>>>>({})
+  const [savedMonthlyBudgets, setSavedMonthlyBudgets] = useState<Record<string, Record<string, Record<number, number>>>>({})
   const [monthlySaving, setMonthlySaving] = useState(false)
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState<string>("")
@@ -330,20 +330,16 @@ export default function BudgetsPage() {
                 .not("month", "is", null)
               if (businessType === "ngo" && selectedDonorId) savedQuery = savedQuery.eq("donor_id", Number(selectedDonorId))
               savedQuery.then(({ data: savedRows }) => {
-                // Kept separate per (activity, location, account) - each GL
-                // line has its own independent monthly split, matching how
-                // the GL view and validate_transaction_budget both work.
-                const saved: Record<string, Record<string, Record<string, Record<number, number>>>> = {}
+                const saved: Record<string, Record<string, Record<number, number>>> = {}
                 if (savedRows) {
                   savedRows.forEach((row: any) => {
                     const actId = String(row.activity_id)
                     const locId = String(row.location_id)
-                    const accId = String(row.account_id)
                     const monthNum = row.month
                     if (!saved[actId]) saved[actId] = {}
                     if (!saved[actId][locId]) saved[actId][locId] = {}
-                    if (!saved[actId][locId][accId]) saved[actId][locId][accId] = {}
-                    saved[actId][locId][accId][monthNum] = Number(row.budgeted_amount) || 0
+                    // Sum across GL accounts for this activity/location/month
+                    saved[actId][locId][monthNum] = (saved[actId][locId][monthNum] || 0) + (Number(row.budgeted_amount) || 0)
                   })
                 }
                 setSavedMonthlyBudgets(saved)
