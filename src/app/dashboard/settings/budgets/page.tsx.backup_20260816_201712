@@ -1161,7 +1161,7 @@ export default function BudgetsPage() {
                     <th style={{ width: 140 }}>Account</th>
                     {projectMonths.map((m, i) => (
                       <th key={i} style={{ fontSize: 9, opacity: isMonthLocked(i) ? 0.5 : 1 }}>
-                        {m}{isMonthLocked(i) ? " (locked)" : ""}
+                        {m}{isMonthLocked(i) ? " ðŸ”’" : ""}
                       </th>
                     ))}
                     <th style={{ fontSize: 10 }}>Annual</th>

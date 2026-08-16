@@ -1161,7 +1161,7 @@ export default function BudgetsPage() {
                     <th style={{ width: 140 }}>Account</th>
                     {projectMonths.map((m, i) => (
                       <th key={i} style={{ fontSize: 9, opacity: isMonthLocked(i) ? 0.5 : 1 }}>
-                        {m}{isMonthLocked(i) ? " (locked)" : ""}
+                        {m}{isMonthLocked(i) ? " ðŸ”’" : ""}
                       </th>
                     ))}
                     <th style={{ fontSize: 10 }}>Annual</th>
@@ -1208,7 +1208,7 @@ export default function BudgetsPage() {
                                   })}
                                   <td style={{ fontWeight: 600 }}>{annual.toLocaleString()}</td>
                                   <td style={{ fontWeight: 600, color: variance === 0 ? "#10B981" : "#EF4444" }}>
-                                    {variance === 0 ? "OK" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
+                                    {variance === 0 ? "âœ“" : (variance > 0 ? "+" : "") + variance.toLocaleString()}
                                   </td>
                                 </tr>
                               )
@@ -1230,7 +1230,7 @@ export default function BudgetsPage() {
                     </span>
                   )}
                   {monthlyVerified && getMonthlyMismatches().length === 0 && (
-                    <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>Monthly budget confirmed</span>
+                    <span style={{ fontSize: 12, color: "#10B981", fontWeight: 600 }}>âœ“ Monthly budget confirmed</span>
                   )}
                 </div>
               )}
