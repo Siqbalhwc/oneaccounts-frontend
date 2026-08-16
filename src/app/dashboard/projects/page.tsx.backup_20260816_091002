@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, FileText, Settings2 } from "lucide-react"
+import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, FileText, Check, X, Settings2 } from "lucide-react"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { generateProjectPDF } from "@/lib/pdf/projectPDF"
@@ -288,15 +288,8 @@ export default function ProjectsPage() {
         }
         .status-active { background: #DCFCE7; color: #166534; }
         .status-inactive { background: #FEF2F2; color: #B91C1C; }
-        .budget-status-badge {
-          display: inline-flex; align-items: center; gap: 4px;
-          padding: 4px 10px; border-radius: 20px;
-          font-size: 11px; font-weight: 600;
-        }
-        .budget-status-approved { background: #DCFCE7; color: #166534; }
-        .budget-status-pending_approval { background: #FEF3C7; color: #92400E; }
-        .budget-status-draft { background: #E2E8F0; color: #475569; }
-        .budget-status-no_budget { background: #F1F5F9; color: #94A3B8; }
+        .approved-icon { color: #10B981; cursor: pointer; }
+        .not-approved-icon { color: #CBD5E1; cursor: pointer; }
 
         .column-picker {
           position: absolute;

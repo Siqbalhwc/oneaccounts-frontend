@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, FileText, Settings2 } from "lucide-react"
+import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, FileText, Check, X, Settings2 } from "lucide-react"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { generateProjectPDF } from "@/lib/pdf/projectPDF"

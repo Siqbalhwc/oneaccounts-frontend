@@ -1,9 +1,9 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, FileText, Settings2 } from "lucide-react"
+import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, FileText, Check, X, Settings2 } from "lucide-react"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useTheme } from "@/contexts/ThemeContext"
 import { generateProjectPDF } from "@/lib/pdf/projectPDF"
@@ -116,20 +116,7 @@ export default function ProjectsPage() {
         actualSpent: actualsMap[p.id] || 0,
       }))
 
-      const { data: statusRows } = await supabase
-        .from("project_budget_status")
-        .select("project_id, status")
-        .eq("company_id", companyId)
-      const statusMap: Record<number, string> = {}
-      if (statusRows) {
-        for (const row of statusRows) statusMap[row.project_id] = row.status
-      }
-      const withStatus = enriched.map((p: any) => ({
-        ...p,
-        budgetStatus: statusMap[p.id] || "no_budget",
-      }))
-
-      const filtered = showInactive ? withStatus : withStatus.filter((p: any) => !p.deleted_at)
+      const filtered = showInactive ? enriched : enriched.filter((p: any) => !p.deleted_at)
       setProjects(filtered)
     } catch (e) {
       console.error(e)
@@ -148,7 +135,7 @@ export default function ProjectsPage() {
       projectName: project.name,
       donorName: project.donors?.name || "—",
       projectStatus: project.deleted_at ? "Inactive" : "Active",
-      budgetStatus: project.budgetStatus,
+      isApproved: project.is_approved,
       totalBudgeted: project.totalBudget || 0,
       startDate: project.start_date,
       endDate: project.end_date,
@@ -162,7 +149,16 @@ export default function ProjectsPage() {
     doc.save(`Project_${project.name.replace(/\s+/g, '_')}.pdf`)
   }
 
-
+  const toggleApproval = async (project: any) => {
+    const newApproved = !project.is_approved
+    await supabase
+      .from("projects")
+      .update({ is_approved: newApproved })
+      .eq("id", project.id)
+    setProjects(prev =>
+      prev.map(p => (p.id === project.id ? { ...p, is_approved: newApproved } : p))
+    )
+  }
 
   const toggleColumn = (col: keyof typeof visibleColumns) => {
     setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }))
@@ -186,7 +182,7 @@ export default function ProjectsPage() {
       case "budget": valA = a.totalBudget || 0; valB = b.totalBudget || 0; break
       case "actual": valA = a.actualSpent || 0; valB = b.actualSpent || 0; break
       case "balance": valA = (a.totalBudget || 0) - (a.actualSpent || 0); valB = (b.totalBudget || 0) - (b.actualSpent || 0); break
-      case "approved": valA = (a.budgetStatus || "").toLowerCase(); valB = (b.budgetStatus || "").toLowerCase(); break
+      case "approved": valA = a.is_approved ? 1 : 0; valB = b.is_approved ? 1 : 0; break
       case "status": valA = a.deleted_at ? "inactive" : "active"; valB = b.deleted_at ? "inactive" : "active"; break
       case "donor": valA = (a.donors?.name || "").toLowerCase(); valB = (b.donors?.name || "").toLowerCase(); break
       default: valA = (a[sortField] || "").toString().toLowerCase(); valB = (b[sortField] || "").toString().toLowerCase()
@@ -243,8 +239,7 @@ export default function ProjectsPage() {
     name: 200,
     donor: 200,
     status: 100,
-    approved: 150,
-    period: 170,
+    approved: 90,
     budget: 160,
     actual: 160,
     balance: 160,
@@ -288,15 +283,8 @@ export default function ProjectsPage() {
         }
         .status-active { background: #DCFCE7; color: #166534; }
         .status-inactive { background: #FEF2F2; color: #B91C1C; }
-        .budget-status-badge {
-          display: inline-flex; align-items: center; gap: 4px;
-          padding: 4px 10px; border-radius: 20px;
-          font-size: 11px; font-weight: 600;
-        }
-        .budget-status-approved { background: #DCFCE7; color: #166534; }
-        .budget-status-pending_approval { background: #FEF3C7; color: #92400E; }
-        .budget-status-draft { background: #E2E8F0; color: #475569; }
-        .budget-status-no_budget { background: #F1F5F9; color: #94A3B8; }
+        .approved-icon { color: #10B981; cursor: pointer; }
+        .not-approved-icon { color: #CBD5E1; cursor: pointer; }
 
         .column-picker {
           position: absolute;
@@ -380,7 +368,6 @@ export default function ProjectsPage() {
                 <col style={{ width: colWidths.name }} />
                 <col style={{ width: colWidths.donor }} />
                 <col style={{ width: colWidths.status }} />
-                <col style={{ width: colWidths.period }} />
                 <col style={{ width: colWidths.approved }} />
                 {visibleColumns.budget && <col style={{ width: colWidths.budget }} />}
                 {visibleColumns.actual && <col style={{ width: colWidths.actual }} />}
@@ -393,8 +380,7 @@ export default function ProjectsPage() {
                   <SortTh field="name">Project Name</SortTh>
                   <SortTh field="donor">Donor</SortTh>
                   <th style={{ ...thStyle, textAlign: "center" }}>Status</th>
-                  <th style={{ ...thStyle, textAlign: "center" }}>Project Period</th>
-                  <SortTh field="approved" style={{ textAlign: "center" }}>Budget Status</SortTh>
+                  <SortTh field="approved" style={{ textAlign: "center" }}>Approved</SortTh>
                   {visibleColumns.budget && (
                     <SortTh field="budget" style={{ textAlign: "right" }}>Budget</SortTh>
                   )}
@@ -420,19 +406,13 @@ export default function ProjectsPage() {
                           {p.deleted_at ? "Inactive" : "Active"}
                         </span>
                       </td>
-                      <td style={{ ...tdStyle, textAlign: "center", fontSize: 12, color: "var(--text-muted)" }}>
-                        {p.start_date ? new Date(p.start_date).toLocaleDateString("en-PK") : "-"} - {p.end_date ? new Date(p.end_date).toLocaleDateString("en-PK") : "-"}
-                      </td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
-                        <span
-                          onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}`)}
-                          className={`budget-status-badge budget-status-${p.budgetStatus}`}
-                          style={{ cursor: "pointer" }}
-                        >
-                          {p.budgetStatus === "approved" ? "Approved"
-                            : p.budgetStatus === "pending_approval" ? "Pending Approval"
-                            : p.budgetStatus === "draft" ? "Draft"
-                            : "No Budget"}
+                        <span onClick={() => toggleApproval(p)} style={{ cursor: "pointer" }}>
+                          {p.is_approved ? (
+                            <Check size={18} className="approved-icon" />
+                          ) : (
+                            <X size={18} className="not-approved-icon" />
+                          )}
                         </span>
                       </td>
                       {visibleColumns.budget && (
