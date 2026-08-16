@@ -439,24 +439,17 @@ export default function BudgetsPage() {
   const setMonthBudget = (actId: string, locId: string, accId: string, monthIdx: number, value: number) => {
     const monthNum = monthIdx + 1
     setMonthBudgetOverrides(prev => {
-      const existingAct = prev[actId] || {}
-      const existingLoc = existingAct[locId] || {}
-      const existingAcc = existingLoc[accId] || {}
-      return {
-        ...prev,
-        [actId]: {
-          ...existingAct,
-          [locId]: {
-            ...existingLoc,
-            [accId]: {
-              ...existingAcc,
-              [monthNum]: value,
-            },
-          },
-        },
-      }
+      const a = { ...prev }
+      if (!a[actId]) a[actId] = { ...a[actId] }
+      if (!a[actId][locId]) a[actId][locId] = { ...a[actId]?.[locId] }
+      if (!a[actId][locId][accId]) a[actId][locId][accId] = { ...a[actId]?.[locId]?.[accId] }
+      a[actId] = { ...a[actId] }
+      a[actId][locId] = { ...a[actId][locId] }
+      a[actId][locId][accId] = { ...a[actId][locId][accId], [monthNum]: value }
+      return a
     })
   }
+
   const monthRowTotal = (actId: string, locId: string, accId: string) => {
     let sum = 0
     for (let i = 0; i < projectDuration; i++) sum += getMonthBudget(actId, locId, accId, i)
