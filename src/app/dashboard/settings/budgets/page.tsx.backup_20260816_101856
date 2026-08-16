@@ -200,16 +200,12 @@ export default function BudgetsPage() {
     if (!companyId || !selectedProjectId) { setBudgetStatus("draft"); return }
     async function fetchStatus() {
       try {
-        // Fixed: selectedProjectId is a string from the dropdown, project_id
-        // is an integer column - must convert or the match silently fails.
-        // Also removed the fiscal_year filter: project_budget_status is one
-        // row per project (matching the lump-sum budget model), not per
-        // year, so filtering by "today's year" could miss the real row.
         const { data } = await supabase
           .from("project_budget_status")
           .select("status")
           .eq("company_id", companyId)
-          .eq("project_id", Number(selectedProjectId))
+          .eq("project_id", selectedProjectId)
+          .eq("fiscal_year", fiscalYear)
           .maybeSingle()
         setBudgetStatus(data?.status || "draft")
       } catch { setBudgetStatus("draft") }
