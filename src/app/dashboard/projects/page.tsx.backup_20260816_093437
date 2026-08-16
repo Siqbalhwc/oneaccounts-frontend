@@ -432,7 +432,7 @@ export default function ProjectsPage() {
                           {p.budgetStatus === "approved" ? "Approved"
                             : p.budgetStatus === "pending_approval" ? "Pending Approval"
                             : p.budgetStatus === "draft" ? "Draft"
-                            : "Not Submitted"}
+                            : "No Budget"}
                         </span>
                       </td>
                       {visibleColumns.budget && (

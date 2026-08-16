@@ -6,13 +6,13 @@ Write-Host "Backup created: $backup"
 $content = [System.IO.File]::ReadAllText($path)
 $originalContent = $content
 
-$old = 'import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, FileText, Check, X, Settings2 } from "lucide-react"'
-$new = 'import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, FileText, Settings2 } from "lucide-react"'
+$old = '                            : "No Budget"}'
+$new = '                            : "Not Submitted"}'
 
 if ($content.Contains($old)) {
     $content = $content.Replace($old, $new)
     [System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::UTF8)
-    Write-Host "SUCCESS: Removed unused Check, X imports"
+    Write-Host "SUCCESS: Renamed badge label to Not Submitted"
 } else {
     Write-Host "NOT FOUND"
 }
