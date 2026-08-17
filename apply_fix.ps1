@@ -1,41 +1,55 @@
-$path = "src\app\dashboard\settings\budgets\page.tsx"
+$path = "src\app\dashboard\settings\projects\page.tsx"
 $backup = "$path.backup_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 [System.IO.File]::Copy($path, $backup)
 Write-Host "Backup created: $backup"
 
-$lines = [System.IO.File]::ReadAllLines($path)
+$content = [System.IO.File]::ReadAllText($path)
+$originalContent = $content
 
-Write-Host "--- BEFORE (lines 439-452) ---"
-for ($i = 438; $i -le 451; $i++) { Write-Host "$($i+1): $($lines[$i])" }
+# Step 1: Projects fetch
+$s1old = @'
+      const { data } = await supabase
+        .from("projects")
+        .select("*, donors(name)")
+        .eq("company_id", companyId)
+        .order("name")
+'@
+$s1new = @'
+      const { data } = await supabase
+        .from("projects")
+        .select("*, donors(name)")
+        .eq("company_id", companyId)
+        .is("deleted_at", null)
+        .order("name")
+'@
+if ($content.Contains($s1old)) { $content = $content.Replace($s1old, $s1new); Write-Host "Step 1: SUCCESS" } else { Write-Host "Step 1: NOT FOUND" }
 
-$newFunc = @(
-'  const setMonthBudget = (actId: string, locId: string, accId: string, monthIdx: number, value: number) => {',
-'    const monthNum = monthIdx + 1',
-'    setMonthBudgetOverrides(prev => {',
-'      const existingAct = prev[actId] || {}',
-'      const existingLoc = existingAct[locId] || {}',
-'      const existingAcc = existingLoc[accId] || {}',
-'      return {',
-'        ...prev,',
-'        [actId]: {',
-'          ...existingAct,',
-'          [locId]: {',
-'            ...existingLoc,',
-'            [accId]: {',
-'              ...existingAcc,',
-'              [monthNum]: value,',
-'            },',
-'          },',
-'        },',
-'      }',
-'    })',
-'  }'
-)
+# Step 2: Locations fetch
+$s2old = @'
+      let query = supabase
+        .from("locations")
+        .select("*, projects(name)")
+        .eq("company_id", companyId)
+      if (locationProjectFilter) {
+'@
+$s2new = @'
+      let query = supabase
+        .from("locations")
+        .select("*, projects(name)")
+        .eq("company_id", companyId)
+        .is("deleted_at", null)
+      if (locationProjectFilter) {
+'@
+if ($content.Contains($s2old)) { $content = $content.Replace($s2old, $s2new); Write-Host "Step 2: SUCCESS" } else { Write-Host "Step 2: NOT FOUND" }
 
-# Lines 439-452 (index 438-451) is the old function
-$before = $lines[0..437]
-$after = $lines[452..($lines.Length - 1)]
-$result = $before + $newFunc + $after
+# Step 3: Donors fetch
+$s3old = '      const { data } = await supabase.from("donors").select("*").eq("company_id", companyId).order("name")'
+$s3new = '      const { data } = await supabase.from("donors").select("*").eq("company_id", companyId).is("deleted_at", null).order("name")'
+if ($content.Contains($s3old)) { $content = $content.Replace($s3old, $s3new); Write-Host "Step 3: SUCCESS" } else { Write-Host "Step 3: NOT FOUND" }
 
-[System.IO.File]::WriteAllLines($path, $result, [System.Text.Encoding]::UTF8)
-Write-Host "--- SUCCESS: Replaced setMonthBudget with valid TypeScript ---"
+if ($content -ne $originalContent) {
+    [System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::UTF8)
+    Write-Host "FILE UPDATED"
+} else {
+    Write-Host "NO CHANGES MADE"
+}
