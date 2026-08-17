@@ -751,7 +751,7 @@ export default function ProjectsPage() {
                     Nothing was imported. Please fix the following and try again:
                   </div>
                   {importErrors.map((err, i) => (
-                    <div key={i} style={{ fontSize: 11, color: "#B91C1C", marginBottom: 2 }}>- {err}</div>
+                    <div key={i} style={{ fontSize: 11, color: "#B91C1C", marginBottom: 2 }}>â€¢ {err}</div>
                   ))}
                 </div>
               )}
