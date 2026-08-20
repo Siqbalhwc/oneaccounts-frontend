@@ -357,8 +357,6 @@ export default function ProjectsPage() {
       await handleImportProjects(rows)
     } else if (importType === "activity") {
       await handleImportActivities(rows)
-    } else if (importType === "location") {
-      await handleImportLocations(rows)
     } else {
       setImportErrors([`Import for ${importType} is not built yet.`])
     }

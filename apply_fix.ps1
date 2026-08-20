@@ -3,110 +3,30 @@ $backup = "$path.backup_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 [System.IO.File]::Copy($path, $backup)
 Write-Host "Backup created: $backup"
 
-$lines = [System.IO.File]::ReadAllLines($path)
+$content = [System.IO.File]::ReadAllText($path)
+$originalContent = $content
 
-Write-Host "--- BEFORE ---"
-for ($i = 532; $i -le 536; $i++) { Write-Host "$($i+1): $($lines[$i])" }
+$old = @'
+    } else if (importType === "activity") {
+      await handleImportActivities(rows)
+    } else {
+      setImportErrors([`Import for ${importType} is not built yet.`])
+    }
+'@
+$new = @'
+    } else if (importType === "activity") {
+      await handleImportActivities(rows)
+    } else if (importType === "location") {
+      await handleImportLocations(rows)
+    } else {
+      setImportErrors([`Import for ${importType} is not built yet.`])
+    }
+'@
 
-$newFunc = @(
-'',
-'  const handleImportActivities = async (rows: any[]) => {',
-'    const errors: string[] = []',
-'    const cleanRows: { name: string; projectName: string }[] = []',
-'    const seenKeys = new Set<string>()',
-'',
-'    rows.forEach((row: any, idx: number) => {',
-'      const rowNum = idx + 2',
-'      const name = String(row.Name || row.name || "").trim()',
-'      const projectName = String(row.ProjectName || row.projectName || row["Project Name"] || "").trim()',
-'      if (!name) {',
-'        errors.push(`Row ${rowNum}: Name is required.`)',
-'        return',
-'      }',
-'      if (!projectName) {',
-'        errors.push(`Row ${rowNum}: ${labels.project} name is required.`)',
-'        return',
-'      }',
-'      const key = `${name.toLowerCase()}|${projectName.toLowerCase()}`',
-'      if (seenKeys.has(key)) {',
-'        errors.push(`Row ${rowNum}: Activity "${name}" under project "${projectName}" appears more than once in this file.`)',
-'        return',
-'      }',
-'      seenKeys.add(key)',
-'      cleanRows.push({ name, projectName })',
-'    })',
-'',
-'    if (errors.length > 0) {',
-'      setImportErrors(errors)',
-'      return',
-'    }',
-'',
-'    const { data: existingProjects } = await supabase',
-'      .from("projects")',
-'      .select("id, name")',
-'      .eq("company_id", companyId)',
-'      .is("deleted_at", null)',
-'    const projectByName = new Map<string, any>()',
-'    ;(existingProjects || []).forEach((p: any) => projectByName.set(p.name.trim().toLowerCase(), p))',
-'',
-'    const missingProjectErrors: string[] = []',
-'    cleanRows.forEach(r => {',
-'      if (!projectByName.has(r.projectName.toLowerCase())) {',
-'        missingProjectErrors.push(`${labels.project} "${r.projectName}" (needed for activity "${r.name}") does not exist. Please import it first.`)',
-'      }',
-'    })',
-'    if (missingProjectErrors.length > 0) {',
-'      setImportErrors([...new Set(missingProjectErrors)])',
-'      return',
-'    }',
-'',
-'    const { data: existingActivities } = await supabase',
-'      .from("activities")',
-'      .select("id, name, project_id")',
-'      .eq("company_id", companyId)',
-'      .is("deleted_at", null)',
-'    const activityKey = new Set<string>()',
-'    ;(existingActivities || []).forEach((a: any) => activityKey.add(`${a.name.trim().toLowerCase()}|${a.project_id}`))',
-'',
-'    const toCreate = cleanRows.filter(r => {',
-'      const projectId = projectByName.get(r.projectName.toLowerCase())?.id',
-'      return !activityKey.has(`${r.name.toLowerCase()}|${projectId}`)',
-'    })',
-'    const alreadyExisting = cleanRows.filter(r => {',
-'      const projectId = projectByName.get(r.projectName.toLowerCase())?.id',
-'      return activityKey.has(`${r.name.toLowerCase()}|${projectId}`)',
-'    })',
-'',
-'    if (toCreate.length > 0) {',
-'      const payload = toCreate.map(r => ({',
-'        company_id: companyId,',
-'        name: r.name,',
-'        project_id: projectByName.get(r.projectName.toLowerCase())?.id,',
-'        is_active: true,',
-'      }))',
-'      const { error } = await supabase.from("activities").insert(payload)',
-'      if (error) {',
-'        setImportErrors([`Import failed: ${error.message}`])',
-'        return',
-'      }',
-'    }',
-'',
-'    const messages: string[] = []',
-'    if (toCreate.length > 0) messages.push(`${toCreate.length} new ${labels.activity.toLowerCase()}(s) created.`)',
-'    if (alreadyExisting.length > 0) {',
-'      messages.push(`${alreadyExisting.length} ${labels.activity.toLowerCase()}(s) already existed and were skipped: ${alreadyExisting.map(r => `${r.name} (${r.projectName})`).join(", ")}.`)',
-'    }',
-'    setFlash(messages.join(" "))',
-'    setShowImportModal(false)',
-'    setImportFile(null)',
-'    fetchData()',
-'    setTimeout(() => setFlash(""), 6000)',
-'  }'
-)
-
-$before = $lines[0..534]
-$after = $lines[535..($lines.Length - 1)]
-$result = $before + $newFunc + $after
-
-[System.IO.File]::WriteAllLines($path, $result, [System.Text.Encoding]::UTF8)
-Write-Host "--- SUCCESS: Inserted handleImportActivities after line 535 ---"
+if ($content.Contains($old)) {
+    $content = $content.Replace($old, $new)
+    [System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::UTF8)
+    Write-Host "SUCCESS: Wired handleImportLocations into dispatcher"
+} else {
+    Write-Host "NOT FOUND"
+}

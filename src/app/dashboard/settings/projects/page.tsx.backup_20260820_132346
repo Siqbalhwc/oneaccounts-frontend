@@ -357,8 +357,6 @@ export default function ProjectsPage() {
       await handleImportProjects(rows)
     } else if (importType === "activity") {
       await handleImportActivities(rows)
-    } else if (importType === "location") {
-      await handleImportLocations(rows)
     } else {
       setImportErrors([`Import for ${importType} is not built yet.`])
     }
@@ -621,97 +619,6 @@ export default function ProjectsPage() {
     if (toCreate.length > 0) messages.push(`${toCreate.length} new ${labels.activity.toLowerCase()}(s) created.`)
     if (alreadyExisting.length > 0) {
       messages.push(`${alreadyExisting.length} ${labels.activity.toLowerCase()}(s) already existed and were skipped: ${alreadyExisting.map(r => `${r.name} (${r.projectName})`).join(", ")}.`)
-    }
-    setFlash(messages.join(" "))
-    setShowImportModal(false)
-    setImportFile(null)
-    fetchData()
-    setTimeout(() => setFlash(""), 6000)
-  }
-
-  const handleImportLocations = async (rows: any[]) => {
-    const errors: string[] = []
-    const cleanRows: { name: string; projectName: string }[] = []
-    const seenKeys = new Set<string>()
-
-    rows.forEach((row: any, idx: number) => {
-      const rowNum = idx + 2
-      const name = String(row.Name || row.name || "").trim()
-      const projectName = String(row.ProjectName || row.projectName || row["Project Name"] || "").trim()
-      if (!name) {
-        errors.push(`Row ${rowNum}: Name is required.`)
-        return
-      }
-      // Global locations (no project) are keyed separately from per-project
-      // ones, so the same location name can exist globally and under a project.
-      const key = `${name.toLowerCase()}|${projectName.toLowerCase()}`
-      if (seenKeys.has(key)) {
-        errors.push(`Row ${rowNum}: Location "${name}"${projectName ? ` under project "${projectName}"` : " (global)"} appears more than once in this file.`)
-        return
-      }
-      seenKeys.add(key)
-      cleanRows.push({ name, projectName })
-    })
-
-    if (errors.length > 0) {
-      setImportErrors(errors)
-      return
-    }
-
-    const { data: existingProjects } = await supabase
-      .from("projects")
-      .select("id, name")
-      .eq("company_id", companyId)
-      .is("deleted_at", null)
-    const projectByName = new Map<string, any>()
-    ;(existingProjects || []).forEach((p: any) => projectByName.set(p.name.trim().toLowerCase(), p))
-
-    const missingProjectErrors: string[] = []
-    cleanRows.forEach(r => {
-      if (r.projectName && !projectByName.has(r.projectName.toLowerCase())) {
-        missingProjectErrors.push(`${labels.project} "${r.projectName}" (needed for location "${r.name}") does not exist. Please import it first.`)
-      }
-    })
-    if (missingProjectErrors.length > 0) {
-      setImportErrors([...new Set(missingProjectErrors)])
-      return
-    }
-
-    const { data: existingLocations } = await supabase
-      .from("locations")
-      .select("id, name, project_id")
-      .eq("company_id", companyId)
-      .is("deleted_at", null)
-    const locationKey = new Set<string>()
-    ;(existingLocations || []).forEach((l: any) => locationKey.add(`${l.name.trim().toLowerCase()}|${l.project_id ?? ""}`))
-
-    const toCreate = cleanRows.filter(r => {
-      const projectId = r.projectName ? projectByName.get(r.projectName.toLowerCase())?.id : null
-      return !locationKey.has(`${r.name.toLowerCase()}|${projectId ?? ""}`)
-    })
-    const alreadyExisting = cleanRows.filter(r => {
-      const projectId = r.projectName ? projectByName.get(r.projectName.toLowerCase())?.id : null
-      return locationKey.has(`${r.name.toLowerCase()}|${projectId ?? ""}`)
-    })
-
-    if (toCreate.length > 0) {
-      const payload = toCreate.map(r => ({
-        company_id: companyId,
-        name: r.name,
-        project_id: r.projectName ? (projectByName.get(r.projectName.toLowerCase())?.id ?? null) : null,
-        is_active: true,
-      }))
-      const { error } = await supabase.from("locations").insert(payload)
-      if (error) {
-        setImportErrors([`Import failed: ${error.message}`])
-        return
-      }
-    }
-
-    const messages: string[] = []
-    if (toCreate.length > 0) messages.push(`${toCreate.length} new ${labels.location.toLowerCase()}(s) created.`)
-    if (alreadyExisting.length > 0) {
-      messages.push(`${alreadyExisting.length} ${labels.location.toLowerCase()}(s) already existed and were skipped: ${alreadyExisting.map(r => r.projectName ? `${r.name} (${r.projectName})` : `${r.name} (global)`).join(", ")}.`)
     }
     setFlash(messages.join(" "))
     setShowImportModal(false)
