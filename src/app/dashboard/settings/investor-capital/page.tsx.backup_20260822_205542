@@ -1,8 +1,8 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, X, CheckCircle } from "lucide-react"
+import { Plus, DollarSign, X, CheckCircle } from "lucide-react"
 
 export default function InvestorCapitalPage() {
   const supabase = createBrowserClient(
@@ -21,9 +21,6 @@ export default function InvestorCapitalPage() {
   const [loadingInvestors, setLoadingInvestors] = useState(false)
 
   const [banks, setBanks] = useState<any[]>([])
-
-  const [siteBudget, setSiteBudget] = useState<number>(0)
-  const [siteBudgetLoading, setSiteBudgetLoading] = useState(false)
 
   const [showAddForm, setShowAddForm] = useState(false)
   const [newDonorId, setNewDonorId] = useState<string>("")
@@ -78,40 +75,14 @@ export default function InvestorCapitalPage() {
       })
   }
 
-  // Site budget = sum of all budget lines for this project, matching the
-  // same "whole project period, no fiscal_year/month filter" convention
-  // already established for NGO budgets.
-  const fetchSiteBudget = () => {
-    if (!selectedProjectId || !companyId) { setSiteBudget(0); return }
-    setSiteBudgetLoading(true)
-    supabase.from("budgets")
-      .select("budgeted_amount")
-      .eq("project_id", selectedProjectId)
-      .eq("company_id", companyId)
-      .is("month", null)
-      .then(r => {
-        const total = (r.data || []).reduce((s: number, row: any) => s + (row.budgeted_amount || 0), 0)
-        setSiteBudget(total)
-        setSiteBudgetLoading(false)
-      })
-  }
-
-  useEffect(() => { fetchProjectInvestors(); fetchSiteBudget() }, [selectedProjectId, companyId])
+  useEffect(() => { fetchProjectInvestors() }, [selectedProjectId, companyId])
 
   const availableDonors = allDonors.filter(d => !projectInvestors.some(pi => pi.donor_id === d.id))
   const totalPercentage = projectInvestors.reduce((s, pi) => s + (pi.profit_share_percentage || 0), 0)
   const totalCapital = projectInvestors.reduce((s, pi) => s + (pi.capital_contributed || 0), 0)
-  const remainingPercentage = Math.max(0, 100 - totalPercentage)
-  const isFullyAllocated = totalPercentage === 100
-
-  const targetContribution = (pct: number) => Math.round(siteBudget * (pct / 100) * 100) / 100
 
   const handleAddInvestor = async () => {
     if (!newDonorId || newPercentage <= 0) { setAddError("Select an investor and a valid %"); return }
-    if (newPercentage > remainingPercentage) {
-      setAddError(`Only ${remainingPercentage}% remains unallocated for this site. Enter ${remainingPercentage}% or less.`)
-      return
-    }
     setAddSaving(true); setAddError("")
     try {
       const res = await fetch("/api/construction/investors/assign", {
@@ -141,7 +112,7 @@ export default function InvestorCapitalPage() {
 
   const openContributeForm = (pi: any) => {
     setContributingFor(pi)
-    setContribAmount(targetContribution(pi.profit_share_percentage || 0))
+    setContribAmount(0)
     setContribDate(new Date().toISOString().split("T")[0])
     setContribBankId(null)
     setContribReference("")
@@ -187,7 +158,7 @@ export default function InvestorCapitalPage() {
   }
 
   if (loading) {
-    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading...</div>
+    return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", background: "var(--bg)", minHeight: "100vh" }}>Loading…</div>
   }
 
   return (
@@ -202,13 +173,11 @@ export default function InvestorCapitalPage() {
         .inv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .inv-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; }
         .inv-btn:hover { background: var(--card-hover); }
-        .inv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .inv-btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); font-weight: 700; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
         td { padding: 10px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
         .pct-warn { color: #F59E0B; }
-        .pct-ok { color: #10B981; }
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 440px; }
         .modal-header { padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
@@ -219,7 +188,7 @@ export default function InvestorCapitalPage() {
 
       <div className="inv-shell">
         <div style={{ marginBottom: 16 }}>
-          <div className="inv-title">Investor Capital</div>
+          <div className="inv-title">💼 Investor Capital</div>
           <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Assign investors to a site with a profit-share %, and track capital contributed</div>
         </div>
 
@@ -232,21 +201,16 @@ export default function InvestorCapitalPage() {
         <div className="inv-card">
           <label className="inv-label">Site</label>
           <select className="inv-select" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
-            <option value="">-- Select Site --</option>
+            <option value="">— Select Site —</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          {selectedProjectId && (
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
-              Site Budget: <strong style={{ color: "var(--text)" }}>{siteBudgetLoading ? "Loading..." : `Rs ${siteBudget.toLocaleString()}`}</strong>
-            </div>
-          )}
         </div>
 
         {selectedProjectId && (
           <div className="inv-card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>Investors</h3>
-              {availableDonors.length > 0 && remainingPercentage > 0 && (
+              {availableDonors.length > 0 && (
                 <button className="inv-btn" onClick={() => setShowAddForm(v => !v)}><Plus size={14} /> Add Investor</button>
               )}
             </div>
@@ -258,24 +222,24 @@ export default function InvestorCapitalPage() {
                   <div>
                     <label className="inv-label">Investor</label>
                     <select className="inv-select" value={newDonorId} onChange={e => setNewDonorId(e.target.value)}>
-                      <option value="">-- Select Investor --</option>
-                      {availableDonors.map(d => <option key={d.id} value={d.id}>{d.code ? `${d.code} - ` : ""}{d.name}</option>)}
+                      <option value="">— Select Investor —</option>
+                      {availableDonors.map(d => <option key={d.id} value={d.id}>{d.code ? `${d.code} — ` : ""}{d.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="inv-label">Profit Share % (max {remainingPercentage}%)</label>
-                    <input className="inv-input" type="number" min="0" max={remainingPercentage} value={newPercentage || ""} onChange={e => setNewPercentage(Number(e.target.value))} placeholder={`up to ${remainingPercentage}`} />
+                    <label className="inv-label">Profit Share %</label>
+                    <input className="inv-input" type="number" min="0" max="100" value={newPercentage || ""} onChange={e => setNewPercentage(Number(e.target.value))} placeholder="e.g. 30" />
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                  <button className="inv-btn inv-btn-primary" onClick={handleAddInvestor} disabled={addSaving}>{addSaving ? "Saving..." : "Save"}</button>
+                  <button className="inv-btn inv-btn-primary" onClick={handleAddInvestor} disabled={addSaving}>{addSaving ? "Saving…" : "Save"}</button>
                   <button className="inv-btn" onClick={() => setShowAddForm(false)}>Cancel</button>
                 </div>
               </div>
             )}
 
             {loadingInvestors ? (
-              <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading...</p>
+              <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading…</p>
             ) : projectInvestors.length === 0 ? (
               <p style={{ fontSize: 12, color: "var(--text-muted)" }}>No investors assigned to this site yet.</p>
             ) : (
@@ -284,7 +248,6 @@ export default function InvestorCapitalPage() {
                   <tr>
                     <th>Investor</th>
                     <th style={{ textAlign: "right" }}>Profit Share</th>
-                    <th style={{ textAlign: "right" }}>Target Contribution</th>
                     <th style={{ textAlign: "right" }}>Capital Contributed</th>
                     <th style={{ textAlign: "center" }}></th>
                   </tr>
@@ -292,40 +255,29 @@ export default function InvestorCapitalPage() {
                 <tbody>
                   {projectInvestors.map(pi => (
                     <tr key={pi.id}>
-                      <td>{pi.donors?.code ? `${pi.donors.code} - ` : ""}{pi.donors?.name}</td>
+                      <td>{pi.donors?.code ? `${pi.donors.code} — ` : ""}{pi.donors?.name}</td>
                       <td style={{ textAlign: "right" }}>{pi.profit_share_percentage}%</td>
-                      <td style={{ textAlign: "right", color: "var(--text-muted)" }}>Rs {targetContribution(pi.profit_share_percentage || 0).toLocaleString()}</td>
-                      <td style={{ textAlign: "right", fontWeight: 600 }}>Rs {(pi.capital_contributed || 0).toLocaleString()}</td>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {(pi.capital_contributed || 0).toLocaleString()}</td>
                       <td style={{ textAlign: "center" }}>
-                        <button
-                          className="inv-btn"
-                          style={{ padding: "6px 10px" }}
-                          onClick={() => openContributeForm(pi)}
-                          disabled={!isFullyAllocated}
-                          title={!isFullyAllocated ? "Site must be 100% allocated across investors before recording contributions" : ""}
-                        >
-                          Rs Contribute
+                        <button className="inv-btn" style={{ padding: "6px 10px" }} onClick={() => openContributeForm(pi)}>
+                          <DollarSign size={13} /> Contribute
                         </button>
                       </td>
                     </tr>
                   ))}
                   <tr>
                     <td style={{ fontWeight: 700 }}>Total</td>
-                    <td style={{ textAlign: "right", fontWeight: 700 }} className={totalPercentage > 100 ? "pct-warn" : totalPercentage === 100 ? "pct-ok" : undefined}>
-                      {totalPercentage}%{totalPercentage > 100 && " (!)"}
+                    <td style={{ textAlign: "right", fontWeight: 700 }} className={totalPercentage > 100 ? "pct-warn" : undefined}>
+                      {totalPercentage}%{totalPercentage > 100 && " ⚠️"}
                     </td>
-                    <td></td>
-                    <td style={{ textAlign: "right", fontWeight: 700 }}>Rs {totalCapital.toLocaleString()}</td>
+                    <td style={{ textAlign: "right", fontWeight: 700 }}>PKR {totalCapital.toLocaleString()}</td>
                     <td></td>
                   </tr>
                 </tbody>
               </table>
             )}
             {totalPercentage > 100 && (
-              <p style={{ fontSize: 11, color: "#F59E0B", marginTop: 8 }}>Total profit share exceeds 100% - double check these percentages.</p>
-            )}
-            {totalPercentage < 100 && projectInvestors.length > 0 && (
-              <p style={{ fontSize: 11, color: "#F59E0B", marginTop: 8 }}>Site is only {totalPercentage}% allocated. {remainingPercentage}% remains before contributions can be recorded.</p>
+              <p style={{ fontSize: 11, color: "#F59E0B", marginTop: 8 }}>⚠️ Total profit share exceeds 100% — double check these percentages.</p>
             )}
           </div>
         )}
@@ -335,13 +287,13 @@ export default function InvestorCapitalPage() {
         <div className="modal-overlay" onClick={() => setContributingFor(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Record Contribution - {contributingFor.donors?.name}</h3>
+              <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Record Contribution — {contributingFor.donors?.name}</h3>
               <button className="inv-btn" style={{ padding: 6, border: "none" }} onClick={() => setContributingFor(null)}><X size={16} /></button>
             </div>
             <div className="modal-body">
               {contribError && <div style={{ color: "#FCA5A5", fontSize: 12 }}>{contribError}</div>}
               <div>
-                <label className="inv-label">Amount (Rs) * - target based on {contributingFor.profit_share_percentage}% share, editable</label>
+                <label className="inv-label">Amount (PKR) *</label>
                 <input className="inv-input" type="number" value={contribAmount || ""} onChange={e => setContribAmount(Number(e.target.value))} placeholder="0" />
               </div>
               <div>
@@ -351,7 +303,7 @@ export default function InvestorCapitalPage() {
               <div>
                 <label className="inv-label">Received Into *</label>
                 <select className="inv-select" value={contribBankId ?? ""} onChange={e => setContribBankId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">-- Select Bank --</option>
+                  <option value="">— Select Bank —</option>
                   {banks.map((b: any) => <option key={b.id} value={b.id}>{b.name}{b.glCode ? ` (${b.glCode})` : ""}</option>)}
                 </select>
               </div>
@@ -367,7 +319,7 @@ export default function InvestorCapitalPage() {
             <div className="modal-footer">
               <button className="inv-btn" onClick={() => setContributingFor(null)}>Cancel</button>
               <button className="inv-btn inv-btn-primary" onClick={handleRecordContribution} disabled={contribSaving}>
-                {contribSaving ? "Recording..." : "Record Contribution"}
+                {contribSaving ? "Recording…" : "Record Contribution"}
               </button>
             </div>
           </div>

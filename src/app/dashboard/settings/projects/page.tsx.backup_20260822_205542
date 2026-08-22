@@ -923,15 +923,13 @@ export default function ProjectsPage() {
                     <label className="pr-field-label">Description (optional)</label>
                     <input className="pr-field-input" value={formDesc} onChange={e => setFormDesc(e.target.value)} placeholder="Brief description" />
                   </div>
-                  {businessType !== 'construction' && (
-                    <div>
-                      <label className="pr-field-label">{labels.donor}</label>
-                      <select className="pr-field-input" value={formDonorId ?? ""} onChange={e => setFormDonorId(e.target.value ? Number(e.target.value) : null)}>
-                        <option value="">— Select {labels.donor} —</option>
-                        {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                      </select>
-                    </div>
-                  )}
+                  <div>
+                    <label className="pr-field-label">{labels.donor}</label>
+                    <select className="pr-field-input" value={formDonorId ?? ""} onChange={e => setFormDonorId(e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">— Select {labels.donor} —</option>
+                      {donors.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
                 </>
               )}
               {activeTab === "donors" && (
