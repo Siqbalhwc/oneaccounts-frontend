@@ -1,4 +1,4 @@
-﻿import { createServerClient } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -45,9 +45,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'project_id, donor_id, and a positive profit_share_percentage are required' }, { status: 400 })
   }
 
-  const { data: roleRow } = await supabase.from('user_roles').select('company_id').eq('user_id', user.id).eq('is_active', true).maybeSingle()
-  const companyId = roleRow?.company_id
-  if (!companyId) return NextResponse.json({ error: 'No active company found for this user' }, { status: 400 })
+  const companyId = user.app_metadata?.company_id
+  if (!companyId) return NextResponse.json({ error: 'No company associated with this user' }, { status: 400 })
 
   // ── 1. Prevent duplicate assignment ──
   const { data: existing } = await supabaseAdmin
