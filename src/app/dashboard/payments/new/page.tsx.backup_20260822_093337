@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -638,79 +638,6 @@ export default function NewPaymentPage() {
               </div>
             </div>
 
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
-            <div className="pay-card">
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
-                <span>Payment Entered</span><span>PKR {totalAmount.toLocaleString()}</span>
-              </div>
-              {!isDonation && (
-                <>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 4 }}>
-                    <span>Bills/Opening Settled (Gross)</span><span>PKR {totalGrossAllocated.toLocaleString()}</span>
-                  </div>
-                  {totalWhtDeducted > 0 && (
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-muted)" }}>
-                      <span>→ WHT to Tax Payable</span><span>PKR {totalWhtDeducted.toLocaleString()}</span>
-                    </div>
-                  )}
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600 }}>
-                    <span>→ Net from Bank</span><span>PKR {totalNetAllocated.toLocaleString()}</span>
-                  </div>
-                  {totalAmount > 0 && Math.abs(difference) > 0.5 && (
-                    <div style={{ fontSize: 12, color: "#EF4444", marginTop: 4 }}>
-                      ⚠️ {difference > 0 ? `Overpaid by PKR ${difference.toLocaleString()}` : `Underpaid by PKR ${Math.abs(difference).toLocaleString()}`}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-            <div className="pay-card">
-              <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
-                {loading ? "Posting..." : editId ? "💾 Update Payment" : "💾 Save Payment"}
-              </button>
-            </div>
-            <div className="pay-card" style={{ padding: 0, overflow: "hidden" }}>
-              <button
-                onClick={() => setAttachPanelOpen(!attachPanelOpen)}
-                style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", color: "var(--text)" }}
-              >
-                <Paperclip size={16} style={{ color: "var(--text-muted)" }} />
-                <span style={{ fontSize: 13, flex: 1 }}>Attachments</span>
-                {attachments.length > 0 && (
-                  <span style={{ fontSize: 11, color: "var(--text-muted)", background: "var(--bg)", borderRadius: 10, padding: "1px 7px" }}>{attachments.length}</span>
-                )}
-                <ChevronDown size={16} style={{ color: "var(--text-muted)", transform: attachPanelOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
-              </button>
-              {attachPanelOpen && (
-                <div style={{ borderTop: "1px solid var(--border)", padding: "12px 14px" }}>
-                  {attachments.length > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
-                      {attachments.map((att: any) => (
-                        <div key={att.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: 8, border: "1px solid var(--border)", borderRadius: 6 }}>
-                          <FileText size={16} style={{ color: "var(--primary)", flexShrink: 0 }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <a href={att.file_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "var(--text)", textDecoration: "none", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{att.file_name}</a>
-                          </div>
-                          <button onClick={() => removeAttachment(att)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", flexShrink: 0 }}>
-                            <X size={14} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: "1px dashed var(--border)", borderRadius: 6, padding: 10, cursor: "pointer" }}>
-                    <Upload size={14} style={{ color: "var(--text-muted)" }} />
-                    <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{uploadingAttachment ? "Uploading..." : "Add file"}</span>
-                    <input type="file" multiple style={{ display: "none" }} onChange={e => { handleAttachmentFiles(e.target.files); e.target.value = "" }} disabled={uploadingAttachment} />
-                  </label>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
             {supplierId && !isDonation && (
               <div className="pay-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 4px 0" }}>Allocate to Bills & Opening</h3>
@@ -821,6 +748,79 @@ export default function NewPaymentPage() {
                 )}
               </div>
             )}
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
+            <div className="pay-card">
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
+                <span>Payment Entered</span><span>PKR {totalAmount.toLocaleString()}</span>
+              </div>
+              {!isDonation && (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 4 }}>
+                    <span>Bills/Opening Settled (Gross)</span><span>PKR {totalGrossAllocated.toLocaleString()}</span>
+                  </div>
+                  {totalWhtDeducted > 0 && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-muted)" }}>
+                      <span>→ WHT to Tax Payable</span><span>PKR {totalWhtDeducted.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600 }}>
+                    <span>→ Net from Bank</span><span>PKR {totalNetAllocated.toLocaleString()}</span>
+                  </div>
+                  {totalAmount > 0 && Math.abs(difference) > 0.5 && (
+                    <div style={{ fontSize: 12, color: "#EF4444", marginTop: 4 }}>
+                      ⚠️ {difference > 0 ? `Overpaid by PKR ${difference.toLocaleString()}` : `Underpaid by PKR ${Math.abs(difference).toLocaleString()}`}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="pay-card">
+              <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
+                {loading ? "Posting..." : editId ? "💾 Update Payment" : "💾 Save Payment"}
+              </button>
+            </div>
+            <div className="pay-card" style={{ padding: 0, overflow: "hidden" }}>
+              <button
+                onClick={() => setAttachPanelOpen(!attachPanelOpen)}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "none", border: "none", cursor: "pointer", textAlign: "left", color: "var(--text)" }}
+              >
+                <Paperclip size={16} style={{ color: "var(--text-muted)" }} />
+                <span style={{ fontSize: 13, flex: 1 }}>Attachments</span>
+                {attachments.length > 0 && (
+                  <span style={{ fontSize: 11, color: "var(--text-muted)", background: "var(--bg)", borderRadius: 10, padding: "1px 7px" }}>{attachments.length}</span>
+                )}
+                <ChevronDown size={16} style={{ color: "var(--text-muted)", transform: attachPanelOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+              </button>
+              {attachPanelOpen && (
+                <div style={{ borderTop: "1px solid var(--border)", padding: "12px 14px" }}>
+                  {attachments.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                      {attachments.map((att: any) => (
+                        <div key={att.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: 8, border: "1px solid var(--border)", borderRadius: 6 }}>
+                          <FileText size={16} style={{ color: "var(--primary)", flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <a href={att.file_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "var(--text)", textDecoration: "none", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{att.file_name}</a>
+                          </div>
+                          <button onClick={() => removeAttachment(att)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", flexShrink: 0 }}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, border: "1px dashed var(--border)", borderRadius: 6, padding: 10, cursor: "pointer" }}>
+                    <Upload size={14} style={{ color: "var(--text-muted)" }} />
+                    <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{uploadingAttachment ? "Uploading..." : "Add file"}</span>
+                    <input type="file" multiple style={{ display: "none" }} onChange={e => { handleAttachmentFiles(e.target.files); e.target.value = "" }} disabled={uploadingAttachment} />
+                  </label>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
