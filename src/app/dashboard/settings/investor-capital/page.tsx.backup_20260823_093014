@@ -276,7 +276,7 @@ export default function InvestorCapitalPage() {
   return (
     <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .inv-shell { max-width: 100%; margin: 0; }
+        .inv-shell { max-width: 900px; margin: 0 auto; }
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
         .inv-card { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 12px; }
         .inv-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; display: block; }
