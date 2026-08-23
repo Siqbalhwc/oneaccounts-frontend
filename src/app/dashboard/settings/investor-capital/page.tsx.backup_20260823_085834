@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, X, CheckCircle, Pencil } from "lucide-react"
+import { Plus, X, CheckCircle } from "lucide-react"
 
 export default function InvestorCapitalPage() {
   const supabase = createBrowserClient(
@@ -30,11 +30,6 @@ export default function InvestorCapitalPage() {
   const [newPercentage, setNewPercentage] = useState<number>(0)
   const [addSaving, setAddSaving] = useState(false)
   const [addError, setAddError] = useState("")
-
-  const [editingPctFor, setEditingPctFor] = useState<any | null>(null)
-  const [editPctValue, setEditPctValue] = useState<number>(0)
-  const [editPctSaving, setEditPctSaving] = useState(false)
-  const [editPctError, setEditPctError] = useState("")
 
   const [contributingFor, setContributingFor] = useState<any | null>(null)
   const [contribAmount, setContribAmount] = useState<number>(0)
@@ -83,6 +78,9 @@ export default function InvestorCapitalPage() {
       })
   }
 
+  // Site budget = sum of all budget lines for this project, matching the
+  // same "whole project period, no fiscal_year/month filter" convention
+  // already established for NGO budgets.
   const fetchSiteBudget = () => {
     if (!selectedProjectId || !companyId) { setSiteBudget(0); return }
     setSiteBudgetLoading(true)
@@ -138,53 +136,6 @@ export default function InvestorCapitalPage() {
     } catch (err: any) {
       setAddError(err.message || "Network error")
       setAddSaving(false)
-    }
-  }
-
-  const openEditPct = (pi: any) => {
-    setEditingPctFor(pi)
-    setEditPctValue(pi.profit_share_percentage || 0)
-    setEditPctError("")
-  }
-
-  const remainingPercentageForEdit = (pi: any) => {
-    const othersTotal = projectInvestors
-      .filter(other => other.id !== pi.id)
-      .reduce((s, other) => s + (other.profit_share_percentage || 0), 0)
-    return Math.max(0, 100 - othersTotal)
-  }
-
-  const handleSavePercentage = async () => {
-    if (!editingPctFor || editPctValue <= 0) { setEditPctError("Enter a valid %"); return }
-    const maxAllowed = remainingPercentageForEdit(editingPctFor)
-    if (editPctValue > maxAllowed) {
-      setEditPctError(`This would put the site over 100%. Maximum allowed for this investor is ${maxAllowed}%.`)
-      return
-    }
-    setEditPctSaving(true); setEditPctError("")
-    try {
-      const res = await fetch("/api/construction/investors/assign", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          assignment_id: editingPctFor.id,
-          new_percentage: editPctValue,
-        }),
-      })
-      const data = await res.json()
-      if (!data.success) {
-        setEditPctError(data.error || "Failed to update percentage")
-        setEditPctSaving(false)
-        return
-      }
-      setFlash("Profit share % updated.")
-      setEditingPctFor(null)
-      setEditPctSaving(false)
-      fetchProjectInvestors()
-      setTimeout(() => setFlash(""), 3000)
-    } catch (err: any) {
-      setEditPctError(err.message || "Network error")
-      setEditPctSaving(false)
     }
   }
 
@@ -263,7 +214,6 @@ export default function InvestorCapitalPage() {
         .modal-header { padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
         .modal-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
         .modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
-        .action-group { display: flex; gap: 6px; justify-content: center; }
         @media (max-width: 640px) { .inv-row { grid-template-columns: 1fr; } }
       `}</style>
 
@@ -324,32 +274,6 @@ export default function InvestorCapitalPage() {
               </div>
             )}
 
-            {editingPctFor && (
-              <div style={{ background: "var(--bg)", border: "1px dashed var(--border)", borderRadius: 10, padding: 14, marginBottom: 14 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-                  Edit Profit Share % - {editingPctFor.donors?.name}
-                </div>
-                {editPctError && <div style={{ color: "#FCA5A5", fontSize: 12, marginBottom: 8 }}>{editPctError}</div>}
-                <label className="inv-label">New % (max {remainingPercentageForEdit(editingPctFor)}%)</label>
-                <input
-                  className="inv-input"
-                  type="number"
-                  min="0"
-                  max={remainingPercentageForEdit(editingPctFor)}
-                  value={editPctValue || ""}
-                  onChange={e => setEditPctValue(Number(e.target.value))}
-                />
-                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>
-                  Target Contribution at this %: <strong style={{ color: "var(--text)" }}>Rs {targetContribution(editPctValue).toLocaleString()}</strong>
-                  <span style={{ display: "block", marginTop: 2 }}>Note: editing % does not change any contribution already recorded - it only affects future profit-share calculations.</span>
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                  <button className="inv-btn inv-btn-primary" onClick={handleSavePercentage} disabled={editPctSaving}>{editPctSaving ? "Saving..." : "Save %"}</button>
-                  <button className="inv-btn" onClick={() => setEditingPctFor(null)}>Cancel</button>
-                </div>
-              </div>
-            )}
-
             {loadingInvestors ? (
               <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading...</p>
             ) : projectInvestors.length === 0 ? (
@@ -373,25 +297,15 @@ export default function InvestorCapitalPage() {
                       <td style={{ textAlign: "right", color: "var(--text-muted)" }}>Rs {targetContribution(pi.profit_share_percentage || 0).toLocaleString()}</td>
                       <td style={{ textAlign: "right", fontWeight: 600 }}>Rs {(pi.capital_contributed || 0).toLocaleString()}</td>
                       <td style={{ textAlign: "center" }}>
-                        <div className="action-group">
-                          <button
-                            className="inv-btn"
-                            style={{ padding: "6px 10px" }}
-                            onClick={() => openEditPct(pi)}
-                            title="Edit profit share %"
-                          >
-                            <Pencil size={13} />
-                          </button>
-                          <button
-                            className="inv-btn"
-                            style={{ padding: "6px 10px" }}
-                            onClick={() => openContributeForm(pi)}
-                            disabled={!isFullyAllocated}
-                            title={!isFullyAllocated ? "Site must be 100% allocated across investors before recording contributions" : ""}
-                          >
-                            Rs Contribute
-                          </button>
-                        </div>
+                        <button
+                          className="inv-btn"
+                          style={{ padding: "6px 10px" }}
+                          onClick={() => openContributeForm(pi)}
+                          disabled={!isFullyAllocated}
+                          title={!isFullyAllocated ? "Site must be 100% allocated across investors before recording contributions" : ""}
+                        >
+                          Rs Contribute
+                        </button>
                       </td>
                     </tr>
                   ))}

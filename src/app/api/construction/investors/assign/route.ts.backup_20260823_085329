@@ -3,20 +3,14 @@ import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
-// ===================== POST - Assign an Investor to a Site =====================
+// ═══════════════════ POST – Assign an Investor to a Site ════════════════
 //
 // Creates the project_investors row (project + investor + profit-share %).
 // The FIRST time a given investor is assigned to ANY site, this also
 // creates their dedicated capital account (one per investor, shared
-// across every site they invest in - not one per site) and links it
+// across every site they invest in — not one per site) and links it
 // on donors.capital_account_id. Every later assignment for that same
 // investor reuses the existing account.
-//
-// ===================== PUT - Edit an existing assignment's % =====================
-//
-// Updates profit_share_percentage only. No GL impact, no journal entries,
-// no change to capital_contributed - purely a profit-share % correction.
-// Validated against the same 100%-across-all-investors rule used on create.
 //
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
@@ -55,7 +49,7 @@ export async function POST(request: NextRequest) {
   const companyId = roleRow?.company_id
   if (!companyId) return NextResponse.json({ error: 'No active company found for this user' }, { status: 400 })
 
-  // -- 1. Prevent duplicate assignment --
+  // ── 1. Prevent duplicate assignment ──
   const { data: existing } = await supabaseAdmin
     .from('project_investors')
     .select('id')
@@ -68,7 +62,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'This investor is already assigned to this site' }, { status: 400 })
   }
 
-  // -- 2. Fetch the investor, check if they already have a capital account --
+  // ── 2. Fetch the investor, check if they already have a capital account ──
   const { data: donor, error: donorError } = await supabaseAdmin
     .from('donors')
     .select('id, name, capital_account_id')
@@ -82,8 +76,11 @@ export async function POST(request: NextRequest) {
 
   let capitalAccountId = donor.capital_account_id
 
-  // -- 3. First-time-ever assignment for this investor: create their account --
+  // ── 3. First-time-ever assignment for this investor: create their account ──
   if (!capitalAccountId) {
+    // Find the next free 31xx code for this company (3100 itself is the
+    // old shared account, left alone — new per-investor accounts start
+    // at 3101 and count up).
     const { data: existingCodes } = await supabaseAdmin
       .from('accounts')
       .select('code')
@@ -129,7 +126,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // -- 4. Create the assignment --
+  // ── 4. Create the assignment ──
   const { data: assignment, error: assignError } = await supabaseAdmin
     .from('project_investors')
     .insert({
@@ -151,85 +148,4 @@ export async function POST(request: NextRequest) {
     assignment_id: assignment.id,
     capital_account_id: capitalAccountId,
   })
-}
-
-export async function PUT(request: NextRequest) {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
-
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } }
-  )
-
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const body = await request.json()
-  const { assignment_id, new_percentage } = body
-
-  if (!assignment_id || new_percentage === undefined || new_percentage <= 0) {
-    return NextResponse.json({ error: 'assignment_id and a positive new_percentage are required' }, { status: 400 })
-  }
-
-  const { data: roleRow } = await supabase.from('user_roles').select('company_id').eq('user_id', user.id).eq('is_active', true).maybeSingle()
-  const companyId = roleRow?.company_id
-  if (!companyId) return NextResponse.json({ error: 'No active company found for this user' }, { status: 400 })
-
-  // -- 1. Fetch the assignment being edited --
-  const { data: assignment, error: fetchError } = await supabaseAdmin
-    .from('project_investors')
-    .select('id, project_id, donor_id, profit_share_percentage')
-    .eq('id', assignment_id)
-    .eq('company_id', companyId)
-    .single()
-
-  if (fetchError || !assignment) {
-    return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
-  }
-
-  // -- 2. Validate against the 100%-across-all-investors rule, excluding this row's own current % --
-  const { data: siblings } = await supabaseAdmin
-    .from('project_investors')
-    .select('id, profit_share_percentage')
-    .eq('project_id', assignment.project_id)
-    .eq('company_id', companyId)
-
-  const othersTotal = (siblings || [])
-    .filter((s: any) => s.id !== assignment.id)
-    .reduce((sum: number, s: any) => sum + (s.profit_share_percentage || 0), 0)
-
-  if (new_percentage + othersTotal > 100) {
-    const remaining = Math.max(0, 100 - othersTotal)
-    return NextResponse.json({
-      error: `This would put the site over 100%. Maximum allowed for this investor is ${remaining}%.`,
-    }, { status: 400 })
-  }
-
-  // -- 3. Update the percentage only - no GL impact, no capital_contributed change --
-  const { error: updateError } = await supabaseAdmin
-    .from('project_investors')
-    .update({ profit_share_percentage: new_percentage, updated_at: new Date().toISOString() })
-    .eq('id', assignment_id)
-    .eq('company_id', companyId)
-
-  if (updateError) {
-    return NextResponse.json({ error: 'Failed to update percentage: ' + updateError.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ success: true, assignment_id: assignment.id, new_percentage })
 }
