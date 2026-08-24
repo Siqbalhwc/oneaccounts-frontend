@@ -214,25 +214,7 @@ export default function DashboardSidebar({
     checkSuper()
   }, [])
 
-  let navSections = [...baseNavSections]
-
-  // Construction has its own dedicated Investor Capital page under the
-  // tag-management section below - the legacy standalone Investors page
-  // (built originally for Trading, never used there either) should not
-  // also appear under Accounting for Construction companies. Trading
-  // and any other business type keep seeing it unchanged.
-  if (businessType === 'construction') {
-    navSections = navSections.map(section => {
-      if (section.section !== 'ACCOUNTING') return section
-      return {
-        ...section,
-        groups: section.groups?.map((g: any) => ({
-          ...g,
-          items: g.items.filter((item: NavItem) => item.href !== '/dashboard/investors'),
-        })),
-      }
-    })
-  }
+  const navSections = [...baseNavSections]
 
   // ── NGO and Construction both get a tag-management section
   // (Projects/Sites, Activities/Cost Codes & Locations/Zones, Budgets),
