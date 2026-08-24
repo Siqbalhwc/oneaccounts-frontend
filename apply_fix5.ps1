@@ -1,4 +1,14 @@
-﻿import { createServerClient } from '@supabase/ssr'
+$ErrorActionPreference = "Stop"
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+
+# ============ FIX 1: contribute/route.ts (add PUT handler) ============
+$path1 = "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\app\api\construction\investors\contribute\route.ts"
+$backup1 = "$path1.backup_$timestamp"
+Copy-Item $path1 $backup1
+Write-Host "Backup saved: $backup1"
+
+$newContent1 = @'
+import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -236,3 +246,10 @@ export async function PUT(request: NextRequest) {
 
   return NextResponse.json(data)
 }
+'@
+
+[System.IO.File]::WriteAllText($path1, $newContent1, [System.Text.Encoding]::UTF8)
+Write-Host "SUCCESS: contribute/route.ts updated with PUT handler." -ForegroundColor Green
+
+Write-Host ""
+Write-Host "=== Done with route. UI edit button will be a separate script next. ===" -ForegroundColor Cyan

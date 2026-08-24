@@ -49,16 +49,6 @@ export default function InvestorCapitalPage() {
   const [contributionsByInvestor, setContributionsByInvestor] = useState<Record<number, any[]>>({})
   const [loadingHistoryFor, setLoadingHistoryFor] = useState<number | null>(null)
 
-  const [editingContribution, setEditingContribution] = useState<any | null>(null)
-  const [editContribInvestorId, setEditContribInvestorId] = useState<number | null>(null)
-  const [editContribAmount, setEditContribAmount] = useState<number>(0)
-  const [editContribDate, setEditContribDate] = useState("")
-  const [editContribBankId, setEditContribBankId] = useState<number | null>(null)
-  const [editContribReference, setEditContribReference] = useState("")
-  const [editContribNotes, setEditContribNotes] = useState("")
-  const [editContribSaving, setEditContribSaving] = useState(false)
-  const [editContribError, setEditContribError] = useState("")
-
   const [flash, setFlash] = useState("")
 
   useEffect(() => {
@@ -247,6 +237,7 @@ export default function InvestorCapitalPage() {
       setContributingFor(null)
       setContribSaving(false)
       fetchProjectInvestors()
+      // Invalidate cached history for this investor so it refetches next expand
       setContributionsByInvestor(prev => {
         const copy = { ...prev }
         delete copy[contributingFor.id]
@@ -269,68 +260,13 @@ export default function InvestorCapitalPage() {
     setLoadingHistoryFor(pi.id)
     const { data } = await supabase
       .from("investor_contributions")
-      .select("id, amount, contribution_date, reference, notes, bank_account_id, status")
+      .select("id, amount, contribution_date, reference, status, notes")
       .eq("project_id", selectedProjectId)
       .eq("donor_id", pi.donor_id)
       .eq("company_id", companyId)
       .order("contribution_date", { ascending: false })
     setContributionsByInvestor(prev => ({ ...prev, [pi.id]: data || [] }))
     setLoadingHistoryFor(null)
-  }
-
-  const openEditContribution = (c: any, investorAssignmentId: number) => {
-    setEditingContribution(c)
-    setEditContribInvestorId(investorAssignmentId)
-    setEditContribAmount(c.amount)
-    setEditContribDate(c.contribution_date)
-    setEditContribBankId(c.bank_account_id)
-    setEditContribReference(c.reference || "")
-    setEditContribNotes(c.notes || "")
-    setEditContribError("")
-  }
-
-  const handleSaveEditedContribution = async () => {
-    if (!editingContribution || editContribAmount <= 0 || !editContribBankId || !editContribDate) {
-      setEditContribError("Enter a valid amount, date, and bank account")
-      return
-    }
-    setEditContribSaving(true); setEditContribError("")
-    try {
-      const res = await fetch("/api/construction/investors/contribute", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contribution_id: editingContribution.id,
-          amount: editContribAmount,
-          contribution_date: editContribDate,
-          bank_account_id: editContribBankId,
-          reference: editContribReference,
-          notes: editContribNotes,
-        }),
-      })
-      const data = await res.json()
-      if (!data.success) {
-        setEditContribError(data.error || "Failed to update contribution")
-        setEditContribSaving(false)
-        return
-      }
-      setFlash("Contribution updated. Original entry reversed, new entry posted.")
-      const investorId = editContribInvestorId
-      setEditingContribution(null)
-      setEditContribSaving(false)
-      fetchProjectInvestors()
-      if (investorId) {
-        setContributionsByInvestor(prev => {
-          const copy = { ...prev }
-          delete copy[investorId]
-          return copy
-        })
-      }
-      setTimeout(() => setFlash(""), 5000)
-    } catch (err: any) {
-      setEditContribError(err.message || "Network error")
-      setEditContribSaving(false)
-    }
   }
 
   if (loading) {
@@ -529,7 +465,6 @@ export default function InvestorCapitalPage() {
                                         <th style={{ textAlign: "right" }}>Amount</th>
                                         <th>Reference</th>
                                         <th>Status</th>
-                                        <th></th>
                                       </tr>
                                     </thead>
                                     <tbody>
@@ -542,16 +477,6 @@ export default function InvestorCapitalPage() {
                                             <span className={`status-badge ${c.status === "edited" ? "status-edited" : "status-posted"}`}>
                                               {c.status || "posted"}
                                             </span>
-                                          </td>
-                                          <td>
-                                            <button
-                                              className="inv-btn"
-                                              style={{ padding: "4px 8px" }}
-                                              onClick={() => openEditContribution(c, pi.id)}
-                                              title="Edit this contribution"
-                                            >
-                                              <Pencil size={12} />
-                                            </button>
                                           </td>
                                         </tr>
                                       ))}
@@ -625,52 +550,6 @@ export default function InvestorCapitalPage() {
               <button className="inv-btn" onClick={() => setContributingFor(null)}>Cancel</button>
               <button className="inv-btn inv-btn-primary" onClick={handleRecordContribution} disabled={contribSaving}>
                 {contribSaving ? "Recording..." : "Record Contribution"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editingContribution && (
-        <div className="modal-overlay" onClick={() => setEditingContribution(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Edit Contribution</h3>
-              <button className="inv-btn" style={{ padding: 6, border: "none" }} onClick={() => setEditingContribution(null)}><X size={16} /></button>
-            </div>
-            <div className="modal-body">
-              {editContribError && <div style={{ color: "#FCA5A5", fontSize: 12 }}>{editContribError}</div>}
-              <div style={{ fontSize: 11, color: "var(--text-muted)", background: "var(--bg)", border: "1px dashed var(--border)", borderRadius: 8, padding: 10 }}>
-                Saving this will reverse the original journal entry and post a new one for the corrected details. The original entry is never deleted - full history stays visible in the ledger.
-              </div>
-              <div>
-                <label className="inv-label">Amount (Rs) *</label>
-                <input className="inv-input" type="number" value={editContribAmount || ""} onChange={e => setEditContribAmount(Number(e.target.value))} placeholder="0" />
-              </div>
-              <div>
-                <label className="inv-label">Date *</label>
-                <input className="inv-input" type="date" value={editContribDate} onChange={e => setEditContribDate(e.target.value)} />
-              </div>
-              <div>
-                <label className="inv-label">Received Into *</label>
-                <select className="inv-select" value={editContribBankId ?? ""} onChange={e => setEditContribBankId(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">-- Select Bank --</option>
-                  {banks.map((b: any) => <option key={b.id} value={b.id}>{b.name}{b.glCode ? ` (${b.glCode})` : ""}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="inv-label">Reference</label>
-                <input className="inv-input" value={editContribReference} onChange={e => setEditContribReference(e.target.value)} placeholder="Optional" />
-              </div>
-              <div>
-                <label className="inv-label">Notes</label>
-                <input className="inv-input" value={editContribNotes} onChange={e => setEditContribNotes(e.target.value)} placeholder="Optional" />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="inv-btn" onClick={() => setEditingContribution(null)}>Cancel</button>
-              <button className="inv-btn inv-btn-primary" onClick={handleSaveEditedContribution} disabled={editContribSaving}>
-                {editContribSaving ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>

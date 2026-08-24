@@ -3,22 +3,14 @@ import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
-// ===================== POST - Record an Investor Capital Contribution =====================
+// ═══════════════════ POST – Record an Investor Capital Contribution ═════
 //
 // Dr  Bank/Cash account (from the selected bank_accounts row)
 // Cr  Investor Capital (3100, Equity)
 // Both lines tagged with project_id AND donor_id (the investor), so the
 // GL can be filtered/reported per-site and per-investor without needing
-// separate sub-accounts - same control-account-plus-dimension pattern
+// separate sub-accounts — same control-account-plus-dimension pattern
 // already used for AR/AP.
-//
-// ===================== PUT - Edit an existing contribution =====================
-//
-// Calls update_investor_contribution RPC, which reverses the old journal
-// entry, posts a new one for the corrected amount, updates the
-// investor_contributions row (status='edited'), and recomputes
-// capital_contributed fresh from source rows. Original entry is never
-// deleted - full audit trail preserved, matching update_receipt_transaction.
 //
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
@@ -62,7 +54,7 @@ export async function POST(request: NextRequest) {
   const userEmail = user.email || 'system'
   const contributionDate = contribution_date || new Date().toISOString().split('T')[0]
 
-  // -- 1. Confirm this investor is actually assigned to this project --
+  // ── 1. Confirm this investor is actually assigned to this project ──
   const { data: assignment, error: assignmentError } = await supabaseAdmin
     .from('project_investors')
     .select('id, capital_contributed')
@@ -78,7 +70,7 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // -- 2. Resolve the bank account's linked GL account --
+  // ── 2. Resolve the bank account's linked GL account ──
   const { data: bankAccount } = await supabaseAdmin
     .from('bank_accounts')
     .select('id, account_id, bank_name')
@@ -90,7 +82,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Selected bank account has no linked GL account' }, { status: 400 })
   }
 
-  // -- 3. Resolve the investor's dedicated capital account --
+  // ── 3. Resolve the investor's dedicated capital account ──
+  // (One per investor, shared across every site they invest in — not
+  // the old shared 3100 account, which is no longer posted to.)
   const { data: donor } = await supabaseAdmin
     .from('donors')
     .select('id, name, capital_account_id')
@@ -100,20 +94,20 @@ export async function POST(request: NextRequest) {
 
   if (!donor?.capital_account_id) {
     return NextResponse.json(
-      { error: 'This investor has no capital account yet - this should be created automatically when assigned to a site. Please contact support.' },
+      { error: 'This investor has no capital account yet — this should be created automatically when assigned to a site. Please contact support.' },
       { status: 500 }
     )
   }
   const capitalAccountId = donor.capital_account_id
 
-  // -- 4. Post the journal entry --
+  // ── 4. Post the journal entry ──
   const { data: entry, error: entryError } = await supabaseAdmin
     .from('journal_entries')
     .insert({
       company_id: companyId,
       entry_no: `JE-INV-CAP-${Date.now()}`,
       date: contributionDate,
-      description: `Investor capital contribution - ${reference || 'Site investment'}`,
+      description: `Investor capital contribution — ${reference || 'Site investment'}`,
     })
     .select('id')
     .single()
@@ -129,10 +123,12 @@ export async function POST(request: NextRequest) {
 
   const { error: linesError } = await supabaseAdmin.from('journal_lines').insert(lines)
   if (linesError) {
+    // Clean up the orphaned entry so we don't leave a half-posted transaction
     await supabaseAdmin.from('journal_entries').delete().eq('id', entry.id)
     return NextResponse.json({ error: 'Failed to post journal lines: ' + linesError.message }, { status: 500 })
   }
 
+  // Update account balances (same debit-credit delta convention used everywhere else)
   for (const acc of [
     { id: bankAccount.account_id, delta: amount },
     { id: capitalAccountId, delta: -amount },
@@ -143,7 +139,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // -- 5. Insert the ledger row --
+  // ── 5. Insert the ledger row ──
   const { error: contribError } = await supabaseAdmin.from('investor_contributions').insert({
     company_id: companyId,
     project_id,
@@ -155,17 +151,16 @@ export async function POST(request: NextRequest) {
     notes: notes || null,
     journal_entry_id: entry.id,
     created_by: userEmail,
-    status: 'posted',
   })
 
   if (contribError) {
     return NextResponse.json({
       error: 'Journal entry posted, but recording the contribution ledger row failed: ' + contribError.message +
-        `. Journal Entry #${entry.id} exists - please contact support to reconcile.`,
+        `. Journal Entry #${entry.id} exists — please contact support to reconcile.`,
     }, { status: 500 })
   }
 
-  // -- 6. Update the running capital_contributed total --
+  // ── 6. Update the running capital_contributed total ──
   const newTotal = Math.round(((assignment.capital_contributed || 0) + amount) * 100) / 100
   const { error: updateError } = await supabaseAdmin
     .from('project_investors')
@@ -174,6 +169,8 @@ export async function POST(request: NextRequest) {
 
   if (updateError) {
     console.error('Failed to update capital_contributed running total:', updateError)
+    // Not a hard failure — investor_contributions is the source of truth;
+    // this total is a convenience cache that can be recalculated.
   }
 
   return NextResponse.json({
@@ -181,58 +178,4 @@ export async function POST(request: NextRequest) {
     journal_entry_id: entry.id,
     new_capital_total: newTotal,
   })
-}
-
-export async function PUT(request: NextRequest) {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
-
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const body = await request.json()
-  const { contribution_id, amount, contribution_date, bank_account_id, reference, notes } = body
-
-  if (!contribution_id || !amount || amount <= 0) {
-    return NextResponse.json({ error: 'contribution_id and a positive amount are required' }, { status: 400 })
-  }
-  if (!bank_account_id) {
-    return NextResponse.json({ error: 'bank_account_id is required' }, { status: 400 })
-  }
-  if (!contribution_date) {
-    return NextResponse.json({ error: 'contribution_date is required' }, { status: 400 })
-  }
-
-  const { data: roleRow } = await supabase.from('user_roles').select('company_id').eq('user_id', user.id).eq('is_active', true).maybeSingle()
-  const companyId = roleRow?.company_id
-  if (!companyId) return NextResponse.json({ error: 'No active company found for this user' }, { status: 400 })
-
-  const { data, error: rpcError } = await supabase.rpc('update_investor_contribution', {
-    p_contribution_id: contribution_id,
-    p_company_id: companyId,
-    p_amount: amount,
-    p_contribution_date: contribution_date,
-    p_bank_account_id: bank_account_id,
-    p_reference: reference || null,
-    p_notes: notes || null,
-  })
-
-  if (rpcError || !data?.success) {
-    return NextResponse.json({ error: rpcError?.message || data?.error || 'Failed to update contribution' }, { status: 500 })
-  }
-
-  return NextResponse.json(data)
 }

@@ -1,4 +1,12 @@
-﻿"use client"
+$ErrorActionPreference = "Stop"
+$path = "C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend\src\app\dashboard\settings\investor-capital\page.tsx"
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$backup = "$path.backup_$timestamp"
+Copy-Item $path $backup
+Write-Host "Backup saved: $backup"
+
+$newContent = @'
+"use client"
 
 import { useState, useEffect, Fragment } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -679,3 +687,7 @@ export default function InvestorCapitalPage() {
     </div>
   )
 }
+'@
+
+[System.IO.File]::WriteAllText($path, $newContent, [System.Text.Encoding]::UTF8)
+Write-Host "SUCCESS: investor-capital/page.tsx replaced with Edit Contribution feature (Stage 3)." -ForegroundColor Green
