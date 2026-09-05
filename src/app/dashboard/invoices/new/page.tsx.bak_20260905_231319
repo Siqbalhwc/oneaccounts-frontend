@@ -36,6 +36,7 @@ function NewInvoicePageContent() {
   )
 
   const { hasFeature } = usePlan()
+  const showProducts = hasFeature("inventory") && businessType !== "construction"
   const taxEnabled = hasFeature("tax_management")
   const automationFeatureEnabled = hasFeature("invoice_automation")
   const { theme: themeMode } = useTheme()
@@ -43,7 +44,6 @@ function NewInvoicePageContent() {
 
   const [companyId, setCompanyId] = useState("")
   const [businessType, setBusinessType] = useState("")
-  const showProducts = hasFeature("inventory") && businessType !== "construction"
   const [loading, setLoading] = useState(true)
   const [company, setCompany] = useState<any>(null)
 
