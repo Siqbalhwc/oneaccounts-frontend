@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -25,7 +25,7 @@ export default function NewBillPage() {
   const supabase = supabaseRef.current
 
   const { hasFeature } = usePlan()
-  const showProducts = hasFeature("inventory") && businessType !== "construction"
+  const showProducts = hasFeature("inventory")
   const showPO = hasFeature("purchase_orders")
   const taxEnabled = hasFeature("tax_management")
 

@@ -1,4 +1,4 @@
-﻿import { createServerClient } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
@@ -269,8 +269,11 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Supplier Payment – call the new database function ──
-  // Pure advance payments (no bill allocation, no opening allocation) are allowed,
-  // matching create_vendor_payment's supported behavior and the Receipts side.
+  const hasBillAllocations = allocations && Array.isArray(allocations) && allocations.length > 0
+  const hasOpeningAllocation = (opening_allocation || 0) > 0
+  if (!hasBillAllocations && !hasOpeningAllocation) {
+    return NextResponse.json({ error: 'Please allocate the payment to at least one bill or the opening balance' }, { status: 400 })
+  }
 
   const mappedAllocations = allocations.map((a: any) => ({
     invoice_id: a.bill_id,
