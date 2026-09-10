@@ -1,64 +1,58 @@
-$fileA = "src\app\api\products\route.ts"
-$contentA = [System.IO.File]::ReadAllText($fileA)
+$file = "src\app\dashboard\products\page.tsx"
+$content = [System.IO.File]::ReadAllText($file)
 
-$oldA2 = @"
-  const newOpeningQty = Number(opening_qty || 0)
-  const newCostPrice = Number(cost_price || 0)
-  const newSalePrice = Number(sale_price || 0)
+$old = @"
+                              <tbody>
+                                {(costBreakdown[prod.id] || []).map((row: any, idx: number) => (
+                                  <tr key={idx}>
+                                    <td style={{ padding: "4px 8px" }}>{row.step_label}</td>
+                                    <td style={{ padding: "4px 8px" }}>{row.step_date ? new Date(row.step_date).toLocaleDateString() : "-"}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{row.qty}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{row.unit_price}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{row.running_qty}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{row.running_avg_cost}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
 "@
 
-$newA2 = @"
-  const newOpeningQty = Number(opening_qty || 0)
-  const newCostPrice = Number(cost_price || 0)
-  const newSalePrice = Number(sale_price || 0)
-
-  const { data: purchaseCheck } = await supabase
-    .from('stock_moves')
-    .select('id')
-    .eq('product_id', id)
-    .eq('company_id', companyId)
-    .in('move_type', ['purchase', 'sale_return'])
-    .limit(1)
-  const hasPurchaseHistory = !!(purchaseCheck && purchaseCheck.length > 0)
+$new = @"
+                              <tbody>
+                                {(costBreakdown[prod.id] || []).map((row: any, idx: number) => (
+                                  <tr key={idx}>
+                                    <td style={{ padding: "4px 8px" }}>{row.step_label}</td>
+                                    <td style={{ padding: "4px 8px" }}>{row.step_date ? new Date(row.step_date).toLocaleDateString() : "-"}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{row.qty}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{row.unit_price}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{row.running_qty}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{row.running_avg_cost}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                          {(costBreakdown[prod.id] || []).length > 0 && (() => {
+                            const rows = costBreakdown[prod.id] || []
+                            const totalQty = rows.reduce((s: number, r: any) => s + Number(r.qty || 0), 0)
+                            const totalValue = rows.reduce((s: number, r: any) => s + Number(r.qty || 0) * Number(r.unit_price || 0), 0)
+                            const finalAvg = totalQty > 0 ? totalValue / totalQty : 0
+                            const formula = rows.map((r: any) => `(`+Number(r.qty)+` x `+Number(r.unit_price).toFixed(2)+`)`).join(' + ')
+                            return (
+                              <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border)", fontSize: 12 }}>
+                                <div>{formula} = {totalValue.toFixed(2)}</div>
+                                <div>{totalValue.toFixed(2)} / {totalQty} = <b>{finalAvg.toFixed(2)}</b></div>
+                              </div>
+                            )
+                          })()}
 "@
 
-if ($contentA.Contains($oldA2)) {
-    $contentA = $contentA.Replace($oldA2, $newA2)
-    Write-Host "Fix 2a (purchase check) applied."
+if ($content.Contains($old)) {
+    $content = $content.Replace($old, $new)
+    Write-Host "Formula summary added."
 } else {
-    Write-Host "Fix 2a anchor NOT found - stopping."
+    Write-Host "Anchor NOT found - no change made."
 }
 
-$oldA3 = @"
-    .update({
-      code, name,
-      sale_price: newSalePrice,
-      cost_price: newCostPrice,
-      qty_on_hand: newOpeningQty,
-      image_url: image_url || null,
-    })
-    .eq('id', id)
-    .eq('company_id', companyId)
-"@
-
-$newA3 = @"
-    .update({
-      code, name,
-      sale_price: newSalePrice,
-      qty_on_hand: newOpeningQty,
-      image_url: image_url || null,
-      ...(hasPurchaseHistory ? {} : { cost_price: newCostPrice, opening_cost_price: newCostPrice }),
-    })
-    .eq('id', id)
-    .eq('company_id', companyId)
-"@
-
-if ($contentA.Contains($oldA3)) {
-    $contentA = $contentA.Replace($oldA3, $newA3)
-    Write-Host "Fix 2b (update payload) applied."
-} else {
-    Write-Host "Fix 2b anchor NOT found - stopping."
-}
-
-[System.IO.File]::WriteAllText($fileA, $contentA, [System.Text.Encoding]::UTF8)
-Write-Host "Done."
+[System.IO.File]::WriteAllText($file, $content, [System.Text.Encoding]::UTF8)
