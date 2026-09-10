@@ -596,7 +596,7 @@ export default function StockRegisterPage() {
                             const totalQty = rows.reduce((s: number, r: any) => s + Number(r.qty || 0), 0)
                             const totalValue = rows.reduce((s: number, r: any) => s + Number(r.qty || 0) * Number(r.unit_price || 0), 0)
                             const finalAvg = totalQty > 0 ? totalValue / totalQty : 0
-                            const formula = rows.map((r: any) => (+Number(r.qty)+ x +Number(r.unit_price).toFixed(2)+)).join(' + ')
+                            const formula = rows.map((r: any) => "(" + Number(r.qty) + " x " + Number(r.unit_price).toFixed(2) + ")").join(" + ")
                             return (
                               <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border)", fontSize: 12 }}>
                                 <div>{formula} = {totalValue.toFixed(2)}</div>
