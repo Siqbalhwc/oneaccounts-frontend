@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/ssr'
+﻿import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { logDataChange } from '@/lib/audit'
@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
       name,
       sale_price: salePrice,
       cost_price: costPrice,
+      opening_cost_price: costPrice,
       qty_on_hand: openingQty,
       image_url: image_url || null,
     })
@@ -138,15 +139,24 @@ export async function PUT(request: NextRequest) {
   const newCostPrice = Number(cost_price || 0)
   const newSalePrice = Number(sale_price || 0)
 
+  const { data: purchaseCheck } = await supabase
+    .from('stock_moves')
+    .select('id')
+    .eq('product_id', id)
+    .eq('company_id', companyId)
+    .in('move_type', ['purchase', 'sale_return'])
+    .limit(1)
+  const hasPurchaseHistory = !!(purchaseCheck && purchaseCheck.length > 0)
+
   // ✅ Update scoped to company
   const { error: updateErr } = await supabase
     .from('products')
     .update({
       code, name,
       sale_price: newSalePrice,
-      cost_price: newCostPrice,
       qty_on_hand: newOpeningQty,
       image_url: image_url || null,
+      ...(hasPurchaseHistory ? {} : { cost_price: newCostPrice, opening_cost_price: newCostPrice }),
     })
     .eq('id', id)
     .eq('company_id', companyId)

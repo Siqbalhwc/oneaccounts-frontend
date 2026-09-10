@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -56,6 +56,26 @@ export default function StockRegisterPage() {
   const canView = role === "admin" || role === "accountant"
 
   const [companyId, setCompanyId] = useState<string>("")
+  const [expandedCostId, setExpandedCostId] = useState<number | null>(null)
+  const [costBreakdown, setCostBreakdown] = useState<Record<number, any[]>>({})
+  const [breakdownLoading, setBreakdownLoading] = useState<Record<number, boolean>>({})
+
+  const toggleCostBreakdown = async (productId: number) => {
+    if (expandedCostId === productId) {
+      setExpandedCostId(null)
+      return
+    }
+    setExpandedCostId(productId)
+    if (!costBreakdown[productId]) {
+      setBreakdownLoading(prev => ({ ...prev, [productId]: true }))
+      const { data } = await supabase.rpc('get_product_cost_breakdown', {
+        p_product_id: productId,
+        p_company_id: companyId,
+      })
+      setCostBreakdown(prev => ({ ...prev, [productId]: data || [] }))
+      setBreakdownLoading(prev => ({ ...prev, [productId]: false }))
+    }
+  }
   // ✅ Defaults to "" (falsy / non-construction) until fetched, so every
   // existing business type behaves exactly as before with zero delay —
   // only once we positively confirm businessType === 'construction' does
@@ -498,10 +518,19 @@ export default function StockRegisterPage() {
                   const closing = prod.qty_on_hand
   const productUnit = prod.unit || "PCS"
                   return (
+                    <>
                     <tr key={prod.id}>
                       <td style={tdStyle}><span style={{ fontWeight: 600, color: "var(--primary)" }}>{prod.code}</span></td>
                       <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prod.name}</td>
-                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>PKR {prod.cost_price?.toLocaleString()}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
+                        <span
+                          onClick={() => toggleCostBreakdown(prod.id)}
+                          style={{ cursor: "pointer", borderBottom: "1px dashed var(--text-muted)" }}
+                          title="Click to see average cost working"
+                        >
+                          PKR {prod.cost_price?.toLocaleString()}
+                        </span>
+                      </td>
                       <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>PKR {prod.sale_price?.toLocaleString()}</td>
                       <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>{prod.opening_qty}</td>
                       {!isConstruction && <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#10B981" }}>{inflow}</td>}
@@ -526,6 +555,46 @@ export default function StockRegisterPage() {
                         </div>
                       </td>
                     </tr>
+                    {expandedCostId === prod.id && (
+                      <tr key={"breakdown-" + prod.id}>
+                        <td colSpan={colCount} style={{ padding: "12px 20px", background: "var(--card)", borderTop: "1px solid var(--border)" }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+                            Average Cost Working - {prod.name}
+                          </div>
+                          {breakdownLoading[prod.id] ? (
+                            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading...</div>
+                          ) : (costBreakdown[prod.id] || []).length === 0 ? (
+                            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>No opening balance or purchases recorded yet.</div>
+                          ) : (
+                            <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                              <thead>
+                                <tr>
+                                  <th style={{ textAlign: "left", padding: "4px 8px", color: "var(--text-muted)" }}>Step</th>
+                                  <th style={{ textAlign: "left", padding: "4px 8px", color: "var(--text-muted)" }}>Date</th>
+                                  <th style={{ textAlign: "right", padding: "4px 8px", color: "var(--text-muted)" }}>Qty</th>
+                                  <th style={{ textAlign: "right", padding: "4px 8px", color: "var(--text-muted)" }}>Price</th>
+                                  <th style={{ textAlign: "right", padding: "4px 8px", color: "var(--text-muted)" }}>Running Qty</th>
+                                  <th style={{ textAlign: "right", padding: "4px 8px", color: "var(--text-muted)" }}>Running Avg Cost</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(costBreakdown[prod.id] || []).map((row: any, idx: number) => (
+                                  <tr key={idx}>
+                                    <td style={{ padding: "4px 8px" }}>{row.step_label}</td>
+                                    <td style={{ padding: "4px 8px" }}>{row.step_date ? new Date(row.step_date).toLocaleDateString() : "-"}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{row.qty}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{row.unit_price}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{row.running_qty}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{row.running_avg_cost}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </>
                   )
                 })
               )}

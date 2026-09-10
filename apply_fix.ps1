@@ -1,37 +1,64 @@
-$file = "src\app\dashboard\invoices\new\page.tsx"
-$backup = "src\app\dashboard\invoices\new\page.tsx.bak_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+$fileA = "src\app\api\products\route.ts"
+$contentA = [System.IO.File]::ReadAllText($fileA)
 
-Copy-Item $file $backup
-Write-Host "Backup created: $backup"
+$oldA2 = @"
+  const newOpeningQty = Number(opening_qty || 0)
+  const newCostPrice = Number(cost_price || 0)
+  const newSalePrice = Number(sale_price || 0)
+"@
 
-$lines = Get-Content $file
+$newA2 = @"
+  const newOpeningQty = Number(opening_qty || 0)
+  const newCostPrice = Number(cost_price || 0)
+  const newSalePrice = Number(sale_price || 0)
 
-$showProductsIdx = -1
-$businessTypeIdx = -1
+  const { data: purchaseCheck } = await supabase
+    .from('stock_moves')
+    .select('id')
+    .eq('product_id', id)
+    .eq('company_id', companyId)
+    .in('move_type', ['purchase', 'sale_return'])
+    .limit(1)
+  const hasPurchaseHistory = !!(purchaseCheck && purchaseCheck.length > 0)
+"@
 
-for ($i = 0; $i -lt $lines.Count; $i++) {
-    if ($lines[$i].Trim() -eq 'const showProducts = hasFeature("inventory") && businessType !== "construction"') {
-        $showProductsIdx = $i
-    }
-    if ($lines[$i].Trim() -eq 'const [businessType, setBusinessType] = useState("")') {
-        $businessTypeIdx = $i
-    }
-}
-
-if ($showProductsIdx -eq -1 -or $businessTypeIdx -eq -1) {
-    Write-Host "ERROR: Could not find one or both target lines. showProductsIdx=$showProductsIdx businessTypeIdx=$businessTypeIdx. No changes made."
-} elseif ($showProductsIdx -gt $businessTypeIdx) {
-    Write-Host "INFO: Order is already correct. No changes made."
+if ($contentA.Contains($oldA2)) {
+    $contentA = $contentA.Replace($oldA2, $newA2)
+    Write-Host "Fix 2a (purchase check) applied."
 } else {
-    $showProductsLine = $lines[$showProductsIdx]
-    $newLines = New-Object System.Collections.Generic.List[string]
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($i -eq $showProductsIdx) { continue }
-        $newLines.Add($lines[$i])
-        if ($i -eq $businessTypeIdx) {
-            $newLines.Add($showProductsLine)
-        }
-    }
-    [System.IO.File]::WriteAllLines($file, $newLines, [System.Text.Encoding]::UTF8)
-    Write-Host "SUCCESS: showProducts line moved after businessType declaration."
+    Write-Host "Fix 2a anchor NOT found - stopping."
 }
+
+$oldA3 = @"
+    .update({
+      code, name,
+      sale_price: newSalePrice,
+      cost_price: newCostPrice,
+      qty_on_hand: newOpeningQty,
+      image_url: image_url || null,
+    })
+    .eq('id', id)
+    .eq('company_id', companyId)
+"@
+
+$newA3 = @"
+    .update({
+      code, name,
+      sale_price: newSalePrice,
+      qty_on_hand: newOpeningQty,
+      image_url: image_url || null,
+      ...(hasPurchaseHistory ? {} : { cost_price: newCostPrice, opening_cost_price: newCostPrice }),
+    })
+    .eq('id', id)
+    .eq('company_id', companyId)
+"@
+
+if ($contentA.Contains($oldA3)) {
+    $contentA = $contentA.Replace($oldA3, $newA3)
+    Write-Host "Fix 2b (update payload) applied."
+} else {
+    Write-Host "Fix 2b anchor NOT found - stopping."
+}
+
+[System.IO.File]::WriteAllText($fileA, $contentA, [System.Text.Encoding]::UTF8)
+Write-Host "Done."
