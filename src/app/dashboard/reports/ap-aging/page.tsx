@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect, useRef, useMemo } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -188,7 +188,7 @@ export default function APAgingPage() {
 
         filteredInvoices.forEach((inv: APInvoice) => {
           const bal = (inv.total || 0) - (inv.paid || 0)
-          if (bal <= 0) return
+          if (bal === 0) return
 
           const due = new Date(inv.due_date)
           const days = Math.floor((refDate.getTime() - due.getTime()) / 86400000)
