@@ -253,6 +253,7 @@ export default function ProductFormPage() {
                 <option value="Liter">Liter</option>
                 <option value="Meter">Meter</option>
                 <option value="Yard">Yard</option>
+                <option value="Feet">Feet</option>
                 <option value="Dozen">Dozen</option>
                 <option value="Box">Box</option>
                 <option value="Carton">Carton</option>
