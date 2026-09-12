@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -593,12 +593,15 @@ export default function StockRegisterPage() {
                           )}
                           {(costBreakdown[prod.id] || []).length > 0 && (() => {
                             const rows = costBreakdown[prod.id] || []
-                            const lastRow = rows[rows.length - 1]
-                            const finalAvg = Number(lastRow?.running_avg_cost || 0)
-                            const finalQty = Number(lastRow?.running_qty || 0)
+                            const totalQty = rows.reduce((s: number, r: any) => s + Number(r.qty || 0), 0)
+                            const totalValue = rows.reduce((s: number, r: any) => s + Number(r.qty || 0) * Number(r.unit_price || 0), 0)
+                            const finalAvg = totalQty > 0 ? totalValue / totalQty : 0
+                            const formula = rows.map((r: any) => "(" + Number(r.qty) + " x " + Number(r.unit_price).toFixed(2) + ")").join(" + ")
                             return (
                               <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border)", fontSize: 12 }}>
-                                <div>Current Average Cost (as of last recorded event, {finalQty} units): <b>{finalAvg.toFixed(2)}</b></div>
+                                <div>{formula} = {totalValue.toFixed(2)}</div>
+                                <div>{totalValue.toFixed(2)} / {totalQty} = <b>{finalAvg.toFixed(2)}</b></div>
+                                <div style={{ marginTop: 4, color: "var(--text-muted)" }}>Current Average Cost (as of last recorded event, {totalQty} units): <b>{finalAvg.toFixed(2)}</b></div>
                               </div>
                             )
                           })()}

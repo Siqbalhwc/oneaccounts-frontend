@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -21,7 +21,7 @@ export default function ProductFormPage() {
   const [category, setCategory] = useState("")
   const [unit, setUnit] = useState("PCS")
   const [salePrice, setSalePrice] = useState("")
-  const [costPrice, setCostPrice] = useState("")
+  const [openingCostPrice, setOpeningCostPrice] = useState("")
   const [openingQty, setOpeningQty] = useState("")
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -31,7 +31,7 @@ export default function ProductFormPage() {
   const [flash, setFlash] = useState<string | null>(null)
 
   const qty = parseFloat(openingQty) || 0
-  const cost = parseFloat(costPrice) || 0
+  const cost = parseFloat(openingCostPrice) || 0
   const totalCost = qty * cost
 
   useEffect(() => {
@@ -53,7 +53,7 @@ export default function ProductFormPage() {
           setCategory(product.category || "")
           setUnit(product.unit || "PCS")
           setSalePrice(String(product.sale_price || ""))
-          setCostPrice(String(product.cost_price || ""))
+          setOpeningCostPrice(String(product.opening_cost_price ?? product.cost_price ?? ""))
           setOpeningQty(String(product.opening_qty || ""))
           setExistingImageUrl(product.image_path || null)
           if (product.image_path) setImagePreview(product.image_path)
@@ -115,15 +115,17 @@ export default function ProductFormPage() {
       }
     }
 
-    const payload = {
+    const openingCostVal = parseFloat(openingCostPrice) || 0
+
+    const payload: Record<string, any> = {
       company_id: companyId,
       code: productCode,
       name: name.trim(),
       category: category.trim() || null,
       unit: unit,
       sale_price: parseFloat(salePrice) || 0,
-      cost_price: parseFloat(costPrice) || 0,
       opening_qty: parseFloat(openingQty) || 0,
+      opening_cost_price: openingCostVal,
       image_path: imageUrl || null,
     }
 
@@ -134,20 +136,33 @@ export default function ProductFormPage() {
         .eq("id", editId)
         .eq("company_id", companyId)
       if (updateErr) { setError(updateErr.message); setLoading(false); return }
-      setFlash("✅ Product updated successfully!")
+
+      // Opening qty/cost may have just changed - recompute the running average
+      // from scratch (opening + full purchase history) rather than leaving the
+      // old average in place.
+      const { error: recalcErr } = await supabase.rpc("recalculate_product_avg_cost", {
+        p_product_id: Number(editId),
+        p_company_id: companyId,
+      })
+      if (recalcErr) { setError("Product saved, but average cost recalculation failed: " + recalcErr.message); setLoading(false); return }
+
+      setFlash("Product updated successfully!")
     } else {
+      // Brand new product - no purchases yet, so cost_price starts equal to the opening cost.
+      payload.cost_price = openingCostVal
+
       const { error: insertErr } = await supabase
         .from("products")
         .insert(payload)
       if (insertErr) { setError(insertErr.message); setLoading(false); return }
-      setFlash(`✅ Product ${productCode} created successfully!`)
+      setFlash(`Product ${productCode} created successfully!`)
     }
 
     if (!editId) {
       setName("")
       setCategory("")
       setSalePrice("")
-      setCostPrice("")
+      setOpeningCostPrice("")
       setOpeningQty("")
       setImageFile(null)
       setImagePreview(null)
@@ -171,7 +186,7 @@ export default function ProductFormPage() {
     setTimeout(() => setFlash(null), 4000)
   }
 
-  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
+  if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data...</div>
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -214,7 +229,7 @@ export default function ProductFormPage() {
         <button className="btn btn-back" onClick={() => router.push("/dashboard/products")}><ArrowLeft size={16} /></button>
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
-            {editId ? "✏️ Edit Product" : "📦 Add New Product"}
+            {editId ? "Edit Product" : "Add New Product"}
           </h1>
           <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
             {editId ? "Modify product details" : "Add a product to your inventory"}
@@ -271,14 +286,18 @@ export default function ProductFormPage() {
                 <input className="input" type="number" value={salePrice} onChange={e => setSalePrice(e.target.value)} placeholder="0" />
               </div>
               <div>
-                <label className="label">Cost Price (PKR)</label>
-                <input className="input" type="number" value={costPrice} onChange={e => setCostPrice(e.target.value)} placeholder="0" />
+                <label className="label">Opening Cost Price (PKR)</label>
+                <input className="input" type="number" value={openingCostPrice} onChange={e => setOpeningCostPrice(e.target.value)} placeholder="0" />
               </div>
             </div>
 
             <div style={{ marginBottom: 16 }}>
               <label className="label">Opening Quantity</label>
               <input className="input" type="number" value={openingQty} onChange={e => setOpeningQty(e.target.value)} placeholder="0" />
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+                Opening quantity and cost can be corrected later even after purchases exist -
+                the average cost will be recalculated automatically when you save.
+              </div>
             </div>
 
             <div style={{ marginBottom: 8 }}>
