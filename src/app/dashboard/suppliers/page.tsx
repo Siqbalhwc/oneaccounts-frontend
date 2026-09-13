@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { Plus, Search, Edit, Trash2, Eye, ArrowUpDown, ArrowUp, ArrowDown, FileText, Download, Upload } from "lucide-react"
+import CustomerVendorLink from "@/components/CustomerVendorLink"
 
 interface Supplier {
   id: number
@@ -67,6 +68,28 @@ export default function SuppliersPage() {
 
   const [importMessage, setImportMessage] = useState("")
   const [importing, setImporting] = useState(false)
+  const [customersForLink, setCustomersForLink] = useState<any[]>([])
+
+  const refreshLinkData = () => {
+    fetchSuppliers()
+    if (!companyId) return
+    supabase
+      .from("customers")
+      .select("id, name, phone, balance, linked_supplier_id")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .then(({ data }) => setCustomersForLink(data || []))
+  }
+
+  useEffect(() => {
+    if (!companyId) return
+    supabase
+      .from("customers")
+      .select("id, name, phone, balance, linked_supplier_id")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .then(({ data }) => setCustomersForLink(data || []))
+  }, [companyId])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -418,6 +441,15 @@ export default function SuppliersPage() {
                     <td style={{ ...tdStyle, textAlign: "center" }}>
                       <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
                         <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/vendor-ledger?supplierId=${s.id}`)} title="View Ledger"><Eye size={13} /></button>
+                        {canEdit && companyId && (
+                          <CustomerVendorLink
+                            partyType="supplier"
+                            party={s}
+                            companyId={companyId}
+                            counterparts={customersForLink}
+                            onUpdated={refreshLinkData}
+                          />
+                        )}
                         {canEdit && (
                           <button className="btn-icon" onClick={() => openEdit(s)} title="Edit"><Edit size={13} /></button>
                         )}

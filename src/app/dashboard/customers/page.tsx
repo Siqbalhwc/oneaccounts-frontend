@@ -8,6 +8,7 @@ import RoleGuard from "@/components/RoleGuard"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
+import CustomerVendorLink from "@/components/CustomerVendorLink"
 
 type SortField = "code" | "name" | "phone" | "balance"
 type SortDir = "asc" | "desc"
@@ -81,6 +82,17 @@ export default function CustomersPage() {
         setLoading(false)
       })
   }, [role, canView, companyId, sortField, sortDir])
+
+  // -- Fetch suppliers list too, for the vendor-link / net-position feature --
+  useEffect(() => {
+    if (!companyId) return
+    supabase
+      .from("suppliers")
+      .select("id, name, phone, balance, linked_customer_id")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .then(({ data }) => setSuppliersForLink(data || []))
+  }, [companyId])
 
   const visibleCustomers = showArchived ? customers : customers.filter(c => !c.archived_at)
 
