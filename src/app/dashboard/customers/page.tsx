@@ -55,6 +55,23 @@ export default function CustomersPage() {
   const [importMessage, setImportMessage] = useState("")
   const [showArchived, setShowArchived] = useState(false)
   const [confirmTarget, setConfirmTarget] = useState<any>(null)
+  const [suppliersForLink, setSuppliersForLink] = useState<any[]>([])
+
+  const refreshLinkData = () => {
+    if (!companyId) return
+    supabase
+      .from("customers")
+      .select("*")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .then(({ data }) => setCustomers(data || []))
+    supabase
+      .from("suppliers")
+      .select("id, name, phone, balance, linked_customer_id")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .then(({ data }) => setSuppliersForLink(data || []))
+  }
 
   // -- Fetch company ID from JWT --
   useEffect(() => {
@@ -64,7 +81,7 @@ export default function CustomersPage() {
     })
   }, [])
 
-  // -- Fetch customers � waits for companyId --
+  // -- Fetch customers  waits for companyId --
   useEffect(() => {
     if (!role) return
     if (!canView) { setLoading(false); return }
@@ -220,7 +237,7 @@ export default function CustomersPage() {
       const res = await fetch("/api/import", { method: "POST", body: formData })
       const result = await res.json()
       if (result.success) {
-        setImportMessage(`? Imported ${result.count} customers successfully`)
+        setImportMessage(`Imported ${result.count} customers successfully`)
         const { data } = await supabase
           .from("customers")
           .select("*")
@@ -229,10 +246,10 @@ export default function CustomersPage() {
           .order("name")
         setCustomers(data || [])
       } else {
-        setImportMessage(`? Error: ${result.error}`)
+        setImportMessage(`Error: ${result.error}`)
       }
     } catch (err: any) {
-      setImportMessage(`? Network error: ${err.message}`)
+      setImportMessage(`Network error: ${err.message}`)
     } finally {
       setImporting(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
@@ -403,7 +420,7 @@ export default function CustomersPage() {
         {/* -- HEADER ROW: title left, all buttons right -- */}
         <div className="header-row">
           <div className="title-area">
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>👥 Customers</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Customers</h1>
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Manage your customer accounts</p>
           </div>
           <div className="actions">
@@ -505,6 +522,15 @@ export default function CustomersPage() {
                             <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/customer-ledger?customerId=${cust.id}`)} title="View Ledger">
                               <Eye size={13} />
                             </button>
+                            {canEdit && companyId && (
+                              <CustomerVendorLink
+                                partyType="customer"
+                                party={cust}
+                                companyId={companyId}
+                                counterparts={suppliersForLink}
+                                onUpdated={refreshLinkData}
+                              />
+                            )}
                             {canEdit && (
                               <button className="btn-icon" onClick={() => router.push(`/dashboard/customers/new?id=${cust.id}`)} title="Edit">
                                 <Edit size={13} />

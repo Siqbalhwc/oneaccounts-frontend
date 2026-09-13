@@ -193,13 +193,13 @@ export default function SuppliersPage() {
       const res = await fetch("/api/import", { method: "POST", body: formData })
       const result = await res.json()
       if (result.success) {
-        setImportMessage(`✅ Imported ${result.count} suppliers successfully`)
+        setImportMessage(`Imported ${result.count} suppliers successfully`)
         fetchSuppliers()
       } else {
-        setImportMessage(`❌ Error: ${result.error}`)
+        setImportMessage(`Error: ${result.error}`)
       }
     } catch (err: any) {
-      setImportMessage(`❌ Network error: ${err.message}`)
+      setImportMessage(`Network error: ${err.message}`)
     } finally {
       setImporting(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
@@ -358,7 +358,7 @@ export default function SuppliersPage() {
 
       <div className="header-row">
         <div className="title-area">
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🚚 Suppliers</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Suppliers</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage your supplier accounts</p>
         </div>
         <div className="actions">
@@ -385,7 +385,7 @@ export default function SuppliersPage() {
       </div>
 
       {importMessage && (
-        <div className="message" style={{ background: importMessage.startsWith("✅") ? "#065F46" : "#7C2D12", color: "white" }}>
+        <div className="message" style={{ background: importMessage.startsWith("OK") ? "#065F46" : "#7C2D12", color: "white" }}>
           {importMessage}
         </div>
       )}
