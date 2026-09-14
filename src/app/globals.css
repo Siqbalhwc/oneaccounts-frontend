@@ -40,27 +40,27 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0B1120;
-  --bg-soft: #0F172A;
-  --card: #111827;
-  --card-hover: #1E293B;
-  --text: #E2E8F0;
-  --text-muted: #94A3B8;
-  --text-soft: #64748B;
-  --border: #1E293B;
-  --border-strong: #334155;
-  --primary: #3B82F6;
-  --primary-hover: #60A5FA;
+  --bg: #0B0D12;
+  --bg-soft: #0E1015;
+  --card: #161A22;
+  --card-hover: #1D222C;
+  --text: #F3F5F7;
+  --text-muted: #98A2B3;
+  --text-soft: #6B7386;
+  --border: #262B36;
+  --border-strong: #343B49;
+  --primary: #5B93FF;
+  --primary-hover: #7BA8FF;
   --primary-text: #FFFFFF;
-  --success: #34D399;
-  --warning: #FBBF24;
-  --danger: #F87171;
-  --shell-bg: #0B1120;
-  --sidebar-bg: #0B1120;
-  --sidebar-border: #1E293B;
-  --topbar-bg: #0F172A;
-  --topbar-border: #1E293B;
-  --main-bg: #0B1120;
+  --success: #3DDC84;
+  --warning: #F6A93B;
+  --danger: #FF6B6B;
+  --shell-bg: #0B0D12;
+  --sidebar-bg: #08090D;
+  --sidebar-border: #1E232E;
+  --topbar-bg: #101319;
+  --topbar-border: #1E232E;
+  --main-bg: #0B0D12;
   --shadow: 0 1px 3px rgba(0,0,0,0.4);
   --kpi-info: #A78BFA;
   --kpi-warn: #F97316;
@@ -233,4 +233,13 @@ body {
 .ledger-header .sort-btn:hover {
   background: none !important;
   box-shadow: none !important;
+}
+
+/* -- Dark theme: dashboard filter-pill visibility fix --
+   Pills previously used var(--card) which reads as invisible against
+   the dashboard card grid at the same tone. Dark-mode only; light and
+   oneaccounts themes untouched. -- */
+[data-theme="dark"] .mgmt .filter-pill {
+  background: var(--bg-soft);
+  border: 1px solid var(--border-strong);
 }

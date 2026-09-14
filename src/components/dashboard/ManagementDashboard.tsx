@@ -526,7 +526,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         .clickable { color: var(--kpi-link); text-decoration: underline; cursor: pointer; }
 
         .overdue-banner {
-          background: var(--card); border: 1px solid var(--border); border-left: 4px solid #EF4444;
+          background: ${isDark ? "rgba(255,107,107,0.08)" : "var(--card)"}; border: 1px solid var(--border); border-left: 4px solid #EF4444;
           border-radius: 8px; padding: 0.5rem 1rem; margin-bottom: 1rem;
           display: flex; align-items: center; justify-content: space-between;
           gap: 10px; font-size: 0.85rem; color: var(--text); font-weight: 500;
@@ -613,11 +613,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
         {/* KPI cards */}
         <div className="dashboard-grid">
           {[
-            { label: "Total Budget",   value: fmtM(animBudget),   meta: `${projectRows.length} projects`, color: "var(--kpi-info)", link: "/dashboard/reports/budget-summary" },
-            { label: "Total Spent",     value: fmtM(animSpent),    meta: `${spentPct}% of budget`, color: "var(--kpi-warn)", link: "/dashboard/reports/spending-detail" },
-            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: fmtM(animRemaining), meta: `${Math.abs(Math.round((remainingFunds / Math.max(totalBudget, 1)) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "var(--kpi-positive)" : "var(--kpi-negative)", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
+            { label: "Total Budget",   value: fmtM(animBudget),   meta: `${projectRows.length} projects`, color: "var(--text)", link: "/dashboard/reports/budget-summary" },
+            { label: "Total Spent",     value: fmtM(animSpent),    meta: `${spentPct}% of budget`, color: "var(--text)", link: "/dashboard/reports/spending-detail" },
+            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: fmtM(animRemaining), meta: `${Math.abs(Math.round((remainingFunds / Math.max(totalBudget, 1)) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "var(--text)" : "var(--kpi-negative)", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
             { label: "Portfolio Health", value: overspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", meta: `${Math.round((1 - overspentCount / Math.max(projectRows.length, 1)) * 100)}% health score`, color: overspentCount > 0 ? "var(--kpi-warn)" : "var(--kpi-positive)", link: "/dashboard/reports/overspent" },
-            { label: "📆 Monthly Spending", value: monthlySpending > 0 ? fmtM(animMonthly) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: monthlySpending > 0 ? "var(--kpi-warn)" : "#94A3B8", link: "/dashboard/reports/spending-detail" },
+            { label: "📆 Monthly Spending", value: monthlySpending > 0 ? fmtM(animMonthly) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: "var(--text)", link: "/dashboard/reports/spending-detail" },
           ].map((kpi: any, i: number) => (
             <motion.div key={kpi.label} className="card" custom={i} initial="hidden" animate="visible" variants={cardVariant} {...hoverScale} onClick={() => kpi.link && router.push(kpi.link + detailQuery())}>
               <div className="kpi-label">{kpi.label}</div>
@@ -627,7 +627,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
                 {kpi.label === "📆 Monthly Spending" && monthlySpending > 0 && <Trend value={spendingTrend} positive={spendingTrend < 0} negative={spendingTrend > 0} />}
               </div>
               {kpi.label === "Total Spent" && highestProject && lowestProject && highestProject.id !== lowestProject.id && (
-                <div style={{ fontSize: "0.65rem", color: "var(--kpi-link)", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <div style={{ fontSize: "0.65rem", color: "var(--kpi-link)", marginTop: 4, whiteSpace: "normal", lineHeight: 1.4 }}>
                   🔺 {highestProject.name} {highestProject.pct}% · 🔻 {lowestProject.name} {lowestProject.pct}%
                 </div>
               )}
