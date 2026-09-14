@@ -1,18 +1,23 @@
 "use client"
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Plus, Trash2, CheckCircle } from "lucide-react"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
 
-export default function NewCashSalePage() {
+function NewCashSalePageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const editId = searchParams.get("id")
+  const isEditMode = !!editId
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
   const [companyId, setCompanyId] = useState("")
+  const [loadingEdit, setLoadingEdit] = useState(isEditMode)
+  const [editSaleNo, setEditSaleNo] = useState("")
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split("T")[0])
   const [reference, setReference] = useState("")
   const [notes, setNotes] = useState("")
@@ -44,6 +49,67 @@ export default function NewCashSalePage() {
       if (banks) setBankAccounts(banks)
     })
   }, [])
+
+  useEffect(() => {
+    if (!companyId || !editId) return
+    setLoadingEdit(true)
+    supabase
+      .from("cash_sales")
+      .select("*")
+      .eq("id", editId)
+      .eq("company_id", companyId)
+      .single()
+      .then(async ({ data: cs }) => {
+        if (!cs) { setError("Cash sale not found"); setLoadingEdit(false); return }
+
+        setEditSaleNo(cs.sale_no)
+        setSaleDate(cs.date)
+        setReference(cs.reference || "")
+        setNotes(cs.notes || "")
+        setBankAccountId(cs.bank_account_id)
+
+        if (cs.party_id) {
+          const { data: cust } = await supabase
+            .from("customers")
+            .select("id, name")
+            .eq("id", cs.party_id)
+            .single()
+          if (cust) { setCustomerId(cust.id); setSelectedCustomer(cust) }
+        }
+
+        const { data: saleItems } = await supabase
+          .from("cash_sale_items")
+          .select("*")
+          .eq("cash_sale_id", cs.id)
+
+        if (saleItems && saleItems.length > 0) {
+          const productIds = saleItems.map((i: any) => i.product_id).filter((id: any) => id != null)
+          let productMap: Record<number, any> = {}
+          if (productIds.length > 0) {
+            const { data: products } = await supabase
+              .from("products")
+              .select("id, code, name, qty_on_hand, unit")
+              .in("id", productIds)
+            if (products) products.forEach((p: any) => { productMap[p.id] = p })
+          }
+          setItems(saleItems.map((item: any) => {
+            const prod = item.product_id ? productMap[item.product_id] : null
+            return {
+              product_id: item.product_id,
+              description: item.description,
+              qty: item.qty,
+              unit_price: item.unit_price,
+              total: item.total,
+              // this sale's own qty is still deducted from qty_on_hand right now,
+              // so add it back to show what will actually be available once this edit reverses it
+              available: prod ? Number(prod.qty_on_hand || 0) + Number(item.qty || 0) : undefined,
+              unit: prod?.unit || "PCS",
+            }
+          }))
+        }
+        setLoadingEdit(false)
+      })
+  }, [companyId, editId])
 
   useEffect(() => {
     const errors: Record<number, string> = {}
@@ -108,18 +174,42 @@ export default function NewCashSalePage() {
         qty: i.qty,
         unit_price: i.unit_price,
       }))
-      const { data, error: rpcError } = await supabase.rpc("create_cash_sale_transaction", {
-        p_company_id: companyId,
-        p_sale_date: saleDate,
-        p_items: payloadItems,
-        p_party_id: customerId,
-        p_bank_account_id: bankAccountId,
-        p_reference: reference || "",
-        p_notes: notes || "",
-        p_user_email: "system",
-      })
+      let rpcResult
+      if (isEditMode) {
+        const { data: { user } } = await supabase.auth.getUser()
+        rpcResult = await supabase.rpc("update_cash_sale_transaction", {
+          p_sale_id: Number(editId),
+          p_company_id: companyId,
+          p_sale_date: saleDate,
+          p_items: payloadItems,
+          p_party_id: customerId,
+          p_bank_account_id: bankAccountId,
+          p_reference: reference || "",
+          p_notes: notes || "",
+          p_user_email: user?.email || "system",
+        })
+      } else {
+        rpcResult = await supabase.rpc("create_cash_sale_transaction", {
+          p_company_id: companyId,
+          p_sale_date: saleDate,
+          p_items: payloadItems,
+          p_party_id: customerId,
+          p_bank_account_id: bankAccountId,
+          p_reference: reference || "",
+          p_notes: notes || "",
+          p_user_email: "system",
+        })
+      }
+      const { data, error: rpcError } = rpcResult
       if (rpcError) { setError(rpcError.message || "Failed to save cash sale"); setSaving(false); return }
       if (!data || !data.success) { setError(data?.error || "Failed to save cash sale"); setSaving(false); return }
+
+      if (isEditMode) {
+        setSaving(false)
+        router.push("/dashboard/cash-sales/" + editId)
+        return
+      }
+
       setSavedSaleNo(data.sale_no)
       setFlash("Cash sale " + data.sale_no + " posted successfully.")
       setItems([])
@@ -174,10 +264,16 @@ export default function NewCashSalePage() {
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <button className="cs-btn" onClick={() => router.push("/dashboard")}><ArrowLeft size={16} /></button>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: "var(--text)", margin: 0 }}>New Cash Sale</h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Receive cash immediately against a product sale</p>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: "var(--text)", margin: 0 }}>
+            {isEditMode ? "Edit Cash Sale" + (editSaleNo ? " " + editSaleNo : "") : "New Cash Sale"}
+          </h1>
+          <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>
+            {isEditMode ? "Saving will reverse the original entry and post a corrected one." : "Receive cash immediately against a product sale"}
+          </p>
         </div>
       </div>
+
+      {loadingEdit && <div style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 12 }}>Loading cash sale...</div>}
 
       {error && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>{error}</div>}
       {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
@@ -281,8 +377,8 @@ export default function NewCashSalePage() {
             )}
           </div>
           <div className="cs-card">
-            <button className="cs-btn cs-btn-primary" onClick={handleSubmit} disabled={saving || hasStockErrors || items.length === 0}>
-              {saving ? "Posting..." : "Post Cash Sale"}
+            <button className="cs-btn cs-btn-primary" onClick={handleSubmit} disabled={saving || loadingEdit || hasStockErrors || items.length === 0}>
+              {saving ? (isEditMode ? "Updating..." : "Posting...") : (isEditMode ? "Update Cash Sale" : "Post Cash Sale")}
             </button>
           </div>
         </div>
@@ -293,8 +389,8 @@ export default function NewCashSalePage() {
           <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Total</div>
           <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>PKR {totalAmount.toLocaleString()}</div>
         </div>
-        <button className="cs-btn cs-btn-primary" style={{ width: "auto", padding: "0 20px" }} onClick={handleSubmit} disabled={saving || hasStockErrors || items.length === 0}>
-          {saving ? "Posting..." : "Post"}
+        <button className="cs-btn cs-btn-primary" style={{ width: "auto", padding: "0 20px" }} onClick={handleSubmit} disabled={saving || loadingEdit || hasStockErrors || items.length === 0}>
+          {saving ? "..." : (isEditMode ? "Update" : "Post")}
         </button>
       </div>
 
@@ -304,5 +400,13 @@ export default function NewCashSalePage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function NewCashSalePage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading cash sale form...</div>}>
+      <NewCashSalePageContent />
+    </Suspense>
   )
 }
