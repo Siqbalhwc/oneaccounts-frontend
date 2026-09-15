@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react"
 import { createPortal } from "react-dom"
@@ -159,14 +159,13 @@ export default function EntityPicker({
   useEffect(() => {
     if (!allRecords) { setFilteredResults([]); return }
     if (!searchQuery.trim()) {
-      setFilteredResults(allRecords.slice(0, 8))
+      setFilteredResults(allRecords)
       return
     }
     const q = searchQuery.toLowerCase()
     const fields = config?.searchFields || ["name"]
     const filtered = allRecords
       .filter((r) => fields.some((f) => (r[f]?.toString() || "").toLowerCase().includes(q)))
-      .slice(0, 8)
     setFilteredResults(filtered)
   }, [searchQuery, allRecords, config])
 

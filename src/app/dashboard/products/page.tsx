@@ -92,6 +92,11 @@ export default function StockRegisterPage() {
   const [total, setTotal] = useState(0)
   const pageSize = 25
 
+  // âœ… New: true stock value across ALL products (all pages), separate
+  // from the existing per-page "Closing Stock Value" card. null = not
+  // yet loaded (card shows "â€¦" briefly instead of a misleading 0).
+  const [allProductsValue, setAllProductsValue] = useState<number | null>(null)
+
   const [sortField, setSortField] = useState<SortField>("name")
   const [sortDir, setSortDir] = useState<SortDir>("asc")
   const [flash, setFlash] = useState("")
@@ -194,6 +199,47 @@ export default function StockRegisterPage() {
 
   useEffect(() => { fetchProducts() }, [companyId, search, categoryFilter, page, sortField, sortDir])
 
+  // âœ… New: fetch every (non-deleted) product's opening_qty/cost_price plus
+  // every stock_move for the company, compute qty_on_hand per product using
+  // the exact same formula fetchProducts() already uses per-page, and sum
+  // the value across ALL of them. Read-only, no pagination, independent of
+  // search/category/page filters so it always reflects the true company total.
+  const fetchAllProductsValue = () => {
+    if (!companyId) return
+    supabase
+      .from("products")
+      .select("id, opening_qty, cost_price")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .then(async ({ data: allProducts }) => {
+        if (!allProducts || allProducts.length === 0) {
+          setAllProductsValue(0)
+          return
+        }
+        const allIds = allProducts.map((p: any) => p.id)
+        const { data: allMoves } = await supabase
+          .from("stock_moves")
+          .select("product_id, qty")
+          .in("product_id", allIds)
+          .eq("company_id", companyId)
+
+        const moveSums: Record<number, number> = {}
+        if (allMoves) {
+          allMoves.forEach((m: any) => {
+            moveSums[m.product_id] = (moveSums[m.product_id] || 0) + Number(m.qty || 0)
+          })
+        }
+
+        const value = allProducts.reduce((sum: number, p: any) => {
+          const qtyOnHand = Number(p.opening_qty || 0) + (moveSums[p.id] || 0)
+          return sum + qtyOnHand * Number(p.cost_price || 0)
+        }, 0)
+        setAllProductsValue(value)
+      })
+  }
+
+  useEffect(() => { fetchAllProductsValue() }, [companyId])
+
   const handleSort = (col: SortField) => {
     if (sortField === col) {
       setSortDir(prev => prev === "asc" ? "desc" : "asc")
@@ -214,6 +260,7 @@ export default function StockRegisterPage() {
     await supabase.from("products").update({ deleted_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)
     setFlash(`${isConstruction ? "Unit/plot" : "Product"} deleted.`)
     fetchProducts()
+    fetchAllProductsValue()
     setTimeout(() => setFlash(""), 3000)
   }
 
@@ -442,6 +489,16 @@ export default function StockRegisterPage() {
           <div className="summary-label">{isConstruction ? "Unsold Units Value" : "Closing Stock Value"}</div>
           <div className="summary-value" style={{ color: "#10B981" }}>
             <sup>PKR</sup> {totalStockValue.toLocaleString()}
+          </div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">{isConstruction ? "Unsold Units Value (All Pages)" : "Total Stock Value (All Products, All Pages)"}</div>
+          <div className="summary-value" style={{ color: "#10B981" }}>
+            {allProductsValue === null ? (
+              <span style={{ fontSize: 14, color: "var(--text-muted)" }}>Loading...</span>
+            ) : (
+              <><sup>PKR</sup> {allProductsValue.toLocaleString()}</>
+            )}
           </div>
         </div>
       </div>

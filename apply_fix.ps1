@@ -1,140 +1,104 @@
-# ============================================================
-# OneAccounts - Dark theme visibility fix (v2 - CRLF-safe)
-# Scope: [data-theme="dark"] tokens in globals.css, + NGO
-# Management Dashboard KPI coloring in ManagementDashboard.tsx.
-# Does NOT touch the "light" or "oneaccounts" themes, and does
-# NOT touch --kpi-info/--kpi-warn/--kpi-positive/--kpi-negative
-# /--kpi-link (those also drive the Trading & Accountant
-# dashboards, out of scope for this fix).
+# apply_fix2.ps1
+# Run from: C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend
 #
-# v2 fix: every anchor below is now a single line with no
-# embedded line-break, so it can never be broken by CRLF vs LF
-# differences (v1 failed because a 21-line block anchor didn't
-# match this file's line endings on Windows).
-# ============================================================
+# Recovery script. What happened last time: EntityPicker.tsx was fixed
+# correctly and fully - nothing to redo there. products\page.tsx got
+# partially patched (state + fetch function added) then correctly stopped
+# itself before touching anything else, because my first script used the
+# wrong kind of PowerShell here-string and mangled a backtick in your file's
+# own template-literal text while trying to match it - not a bug in your
+# code, a bug in my script's quoting. This one uses the literal kind
+# (@'...'@) so backticks pass through untouched.
+#
+# This script only applies the two pieces that did NOT get applied last time:
+#   2c. call fetchAllProductsValue() after a product delete
+#   2d. add the new "Total Stock Value (All Products, All Pages)" KPI card
 
 $ErrorActionPreference = "Stop"
-$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
-function Replace-OnceOrThrow {
-  param($content, $old, $new, $label)
-  $count = ([regex]::Matches($content, [regex]::Escape($old))).Count
-  if ($count -eq 0) {
-    throw "ANCHOR NOT FOUND ($label) - aborting before any write. Nothing has been changed."
-  }
-  if ($count -gt 1) {
-    throw "ANCHOR MATCHED $count TIMES ($label) - expected exactly 1, aborting to avoid an ambiguous edit."
-  }
-  return $content.Replace($old, $new)
+function Backup-File($path) {
+    $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $backupPath = "$path.bak_$stamp"
+    Copy-Item -LiteralPath $path -Destination $backupPath
+    Write-Host "Backed up: $backupPath"
 }
 
-# ---------- FILE 1: src/app/globals.css ----------
-$file1 = "src\app\globals.css"
-$backup1 = "$file1.backup_$timestamp"
-Copy-Item -LiteralPath $file1 -Destination $backup1
-Write-Host "Backed up $file1 -> $backup1"
+function Replace-Unique($path, $old, $new, $label) {
+    $content = [System.IO.File]::ReadAllText($path)
+    $oldCount = ([regex]::Matches($content, [regex]::Escape($old))).Count
+    $newCount = ([regex]::Matches($content, [regex]::Escape($new))).Count
 
-$c1 = Get-Content -LiteralPath $file1 -Raw -Encoding UTF8
-
-$darkTokenPairs = @(
-  @{ old = "  --bg: #0B1120;";              new = "  --bg: #0B0D12;" },
-  @{ old = "  --bg-soft: #0F172A;";         new = "  --bg-soft: #0E1015;" },
-  @{ old = "  --card: #111827;";            new = "  --card: #161A22;" },
-  @{ old = "  --card-hover: #1E293B;";      new = "  --card-hover: #1D222C;" },
-  @{ old = "  --text: #E2E8F0;";            new = "  --text: #F3F5F7;" },
-  @{ old = "  --text-muted: #94A3B8;";      new = "  --text-muted: #98A2B3;" },
-  @{ old = "  --text-soft: #64748B;";       new = "  --text-soft: #6B7386;" },
-  @{ old = "  --border: #1E293B;";          new = "  --border: #262B36;" },
-  @{ old = "  --border-strong: #334155;";   new = "  --border-strong: #343B49;" },
-  @{ old = "  --primary: #3B82F6;";         new = "  --primary: #5B93FF;" },
-  @{ old = "  --primary-hover: #60A5FA;";   new = "  --primary-hover: #7BA8FF;" },
-  @{ old = "  --success: #34D399;";         new = "  --success: #3DDC84;" },
-  @{ old = "  --warning: #FBBF24;";         new = "  --warning: #F6A93B;" },
-  @{ old = "  --danger: #F87171;";          new = "  --danger: #FF6B6B;" },
-  @{ old = "  --shell-bg: #0B1120;";        new = "  --shell-bg: #0B0D12;" },
-  @{ old = "  --sidebar-bg: #0B1120;";      new = "  --sidebar-bg: #08090D;" },
-  @{ old = "  --sidebar-border: #1E293B;";  new = "  --sidebar-border: #1E232E;" },
-  @{ old = "  --topbar-bg: #0F172A;";       new = "  --topbar-bg: #101319;" },
-  @{ old = "  --topbar-border: #1E293B;";   new = "  --topbar-border: #1E232E;" },
-  @{ old = "  --main-bg: #0B1120;";         new = "  --main-bg: #0B0D12;" }
-)
-
-foreach ($pair in $darkTokenPairs) {
-  $c1 = Replace-OnceOrThrow -content $c1 -old $pair.old -new $pair.new -label $pair.old
-}
-Set-Content -LiteralPath $file1 -Value $c1 -NoNewline -Encoding UTF8
-Write-Host "Patched 20 dark-theme tokens in $file1"
-
-# Append the dark-only filter-pill visibility fix (new rule, additive, idempotent)
-$appendMarker = '[data-theme="dark"] .mgmt .filter-pill'
-if ($c1 -notmatch [regex]::Escape($appendMarker)) {
-  $pillFix = @"
-
-/* -- Dark theme: dashboard filter-pill visibility fix --
-   Pills previously used var(--card) which reads as invisible against
-   the dashboard card grid at the same tone. Dark-mode only; light and
-   oneaccounts themes untouched. -- */
-[data-theme="dark"] .mgmt .filter-pill {
-  background: var(--bg-soft);
-  border: 1px solid var(--border-strong);
-}
-"@
-  Add-Content -LiteralPath $file1 -Value $pillFix -Encoding UTF8
-  Write-Host "Appended dark-mode filter-pill fix to $file1"
-} else {
-  Write-Host "Filter-pill fix already present in $file1 - skipped"
+    if ($oldCount -eq 1) {
+        $updated = $content.Replace($old, $new)
+        [System.IO.File]::WriteAllText($path, $updated, [System.Text.Encoding]::UTF8)
+        Write-Host "Applied: $label"
+        return
+    }
+    if ($oldCount -eq 0 -and $newCount -ge 1) {
+        Write-Host "Skipped (already applied): $label"
+        return
+    }
+    throw "ABORT [$label]: old-text matches=$oldCount, new-text matches=$newCount in $path. Expected old=1 (apply) or old=0/new>=1 (already done). No changes written. Please paste this message back to Claude."
 }
 
-# ---------- FILE 2: src/components/dashboard/ManagementDashboard.tsx ----------
-$file2 = "src\components\dashboard\ManagementDashboard.tsx"
-$backup2 = "$file2.backup_$timestamp"
-Copy-Item -LiteralPath $file2 -Destination $backup2
-Write-Host "Backed up $file2 -> $backup2"
+$prodPath = "src\app\dashboard\products\page.tsx"
+Backup-File $prodPath
 
-$c2 = Get-Content -LiteralPath $file2 -Raw -Encoding UTF8
+# 2c. Refresh the all-products total after a delete
+$old5 = @'
+    await supabase.from("products").update({ deleted_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)
+    setFlash(`${isConstruction ? "Unit/plot" : "Product"} deleted.`)
+    fetchProducts()
+    setTimeout(() => setFlash(""), 3000)
+'@
+$new5 = @'
+    await supabase.from("products").update({ deleted_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)
+    setFlash(`${isConstruction ? "Unit/plot" : "Product"} deleted.`)
+    fetchProducts()
+    fetchAllProductsValue()
+    setTimeout(() => setFlash(""), 3000)
+'@
+Replace-Unique $prodPath $old5 $new5 "products page: refresh total after delete"
 
-# 2a. Overdue banner - faint red tint in dark mode (single-line anchor now)
-$c2 = Replace-OnceOrThrow -content $c2 `
-  -old 'background: var(--card); border: 1px solid var(--border); border-left: 4px solid #EF4444;' `
-  -new 'background: ${isDark ? "rgba(255,107,107,0.08)" : "var(--card)"}; border: 1px solid var(--border); border-left: 4px solid #EF4444;' `
-  -label "overdue-banner background"
-
-# 2b. Total Budget KPI - neutral value color
-$c2 = Replace-OnceOrThrow -content $c2 `
-  -old '{ label: "Total Budget",   value: fmtM(animBudget),   meta: `${projectRows.length} projects`, color: "var(--kpi-info)", link: "/dashboard/reports/budget-summary" },' `
-  -new '{ label: "Total Budget",   value: fmtM(animBudget),   meta: `${projectRows.length} projects`, color: "var(--text)", link: "/dashboard/reports/budget-summary" },' `
-  -label "Total Budget KPI color"
-
-# 2c. Total Spent KPI - neutral value color
-$c2 = Replace-OnceOrThrow -content $c2 `
-  -old '{ label: "Total Spent",     value: fmtM(animSpent),    meta: `${spentPct}% of budget`, color: "var(--kpi-warn)", link: "/dashboard/reports/spending-detail" },' `
-  -new '{ label: "Total Spent",     value: fmtM(animSpent),    meta: `${spentPct}% of budget`, color: "var(--text)", link: "/dashboard/reports/spending-detail" },' `
-  -label "Total Spent KPI color"
-
-# 2d. Remaining/Overspent KPI - neutral when healthy, still red when over
-$c2 = Replace-OnceOrThrow -content $c2 `
-  -old 'color: remainingFunds >= 0 ? "var(--kpi-positive)" : "var(--kpi-negative)", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },' `
-  -new 'color: remainingFunds >= 0 ? "var(--text)" : "var(--kpi-negative)", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },' `
-  -label "Remaining KPI color"
-
-# 2e. Monthly Spending KPI - neutral value color
-$c2 = Replace-OnceOrThrow -content $c2 `
-  -old 'color: monthlySpending > 0 ? "var(--kpi-warn)" : "#94A3B8", link: "/dashboard/reports/spending-detail" },' `
-  -new 'color: "var(--text)", link: "/dashboard/reports/spending-detail" },' `
-  -label "Monthly Spending KPI color"
-
-# 2f. Fix clipped highest/lowest-project meta line (let it wrap instead of ellipsis-cutting)
-$c2 = Replace-OnceOrThrow -content $c2 `
-  -old 'fontSize: "0.65rem", color: "var(--kpi-link)", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }' `
-  -new 'fontSize: "0.65rem", color: "var(--kpi-link)", marginTop: 4, whiteSpace: "normal", lineHeight: 1.4 }' `
-  -label "highest/lowest project line wrap"
-
-Set-Content -LiteralPath $file2 -Value $c2 -NoNewline -Encoding UTF8
-Write-Host "Patched KPI colors + overdue banner + truncation fix in $file2"
+# 2d. Add the new, clearly-labeled third KPI card (existing two cards untouched)
+$old6 = @'
+        <div className="summary-item">
+          <div className="summary-label">{isConstruction ? "Unsold Units Value" : "Closing Stock Value"}</div>
+          <div className="summary-value" style={{ color: "#10B981" }}>
+            <sup>PKR</sup> {totalStockValue.toLocaleString()}
+          </div>
+        </div>
+      </div>
+'@
+$new6 = @'
+        <div className="summary-item">
+          <div className="summary-label">{isConstruction ? "Unsold Units Value" : "Closing Stock Value"}</div>
+          <div className="summary-value" style={{ color: "#10B981" }}>
+            <sup>PKR</sup> {totalStockValue.toLocaleString()}
+          </div>
+        </div>
+        <div className="summary-item">
+          <div className="summary-label">{isConstruction ? "Unsold Units Value (All Pages)" : "Total Stock Value (All Products, All Pages)"}</div>
+          <div className="summary-value" style={{ color: "#10B981" }}>
+            {allProductsValue === null ? (
+              <span style={{ fontSize: 14, color: "var(--text-muted)" }}>Loading...</span>
+            ) : (
+              <><sup>PKR</sup> {allProductsValue.toLocaleString()}</>
+            )}
+          </div>
+        </div>
+      </div>
+'@
+Replace-Unique $prodPath $old6 $new6 "products page: add all-products-value KPI card"
 
 Write-Host ""
-Write-Host "Done. Backups saved as:"
-Write-Host "  $backup1"
-Write-Host "  $backup2"
+Write-Host "Done. products/page.tsx should now be fully patched."
+Write-Host "EntityPicker.tsx needed no further changes."
 Write-Host ""
-Write-Host "Next: rmdir /s /q .next, then npm run dev to preview locally, or commit + push to deploy."
+Write-Host "Next steps:"
+Write-Host "  1. rmdir /s /q `".next`""
+Write-Host "  2. npm run dev   (check Invoice/Bill Add Item search scroll, and Products page 3rd KPI card)"
+Write-Host "  3. git add -A"
+Write-Host "  4. git commit -m `"Fix: EntityPicker scroll cap removed; add all-products stock value KPI`""
+Write-Host "  5. git push"
+Write-Host "  6. Paste the full Vercel build log back before this is marked closed."
