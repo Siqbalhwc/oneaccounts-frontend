@@ -99,7 +99,7 @@ export default function RowActionsMenu({ actions, align = "right" }: RowActionsM
         }}
         title="Actions"
       >
-        <MoreVertical size={14} />
+        <MoreVertical size={18} strokeWidth={2.5} />
       </button>
 
       {open && coords && typeof document !== "undefined" &&
