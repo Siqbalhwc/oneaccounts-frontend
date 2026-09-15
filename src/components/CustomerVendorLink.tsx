@@ -21,9 +21,11 @@ interface Props {
   companyId: string
   counterparts: PartyRecord[]
   onUpdated: () => void
+  /** Render the trigger as a full-width labeled row (for use inside RowActionsMenu) instead of a bare icon button. Defaults to false — existing usages are unaffected. */
+  asMenuItem?: boolean
 }
 
-export default function CustomerVendorLink({ partyType, party, companyId, counterparts, onUpdated }: Props) {
+export default function CustomerVendorLink({ partyType, party, companyId, counterparts, onUpdated, asMenuItem = false }: Props) {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -187,17 +189,34 @@ export default function CustomerVendorLink({ partyType, party, companyId, counte
 
   return (
     <>
-      <button
-        className="btn-icon"
-        onClick={() => setModal(linkedId ? "net" : "link")}
-        title={iconTitle}
-        style={{ color: iconColor, position: "relative" }}
-      >
-        <Link2 size={13} />
-        {suggestedMatch && !linkedId && (
-          <span style={{ position: "absolute", top: -2, right: -2, width: 6, height: 6, borderRadius: "50%", background: "#F59E0B" }} />
-        )}
-      </button>
+      {asMenuItem ? (
+        <button
+          type="button"
+          className="row-actions-menu-item"
+          onClick={() => setModal(linkedId ? "net" : "link")}
+          style={{ color: iconColor }}
+        >
+          <span className="row-actions-menu-item-icon" style={{ position: "relative" }}>
+            <Link2 size={14} />
+            {suggestedMatch && !linkedId && (
+              <span style={{ position: "absolute", top: -2, right: -2, width: 6, height: 6, borderRadius: "50%", background: "#F59E0B" }} />
+            )}
+          </span>
+          <span>{linkedId ? (partyType === "customer" ? "Vendor Link" : "Customer Link") : iconTitle}</span>
+        </button>
+      ) : (
+        <button
+          className="btn-icon"
+          onClick={() => setModal(linkedId ? "net" : "link")}
+          title={iconTitle}
+          style={{ color: iconColor, position: "relative" }}
+        >
+          <Link2 size={13} />
+          {suggestedMatch && !linkedId && (
+            <span style={{ position: "absolute", top: -2, right: -2, width: 6, height: 6, borderRadius: "50%", background: "#F59E0B" }} />
+          )}
+        </button>
+      )}
 
       {modal === "link" && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setModal("none")}>
