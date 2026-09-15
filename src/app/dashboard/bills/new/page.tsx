@@ -1210,8 +1210,8 @@ export default function NewBillPage() {
                           onChange={(record) => { if (record) addProductItem(record); }}
                           placeholder="Search product…"
                           label="Add Item"
-                          allowCreate={false}
                           clearCacheOnOpen
+                          onRecordsRefreshed={(records) => setProducts(records)}
                         />
                       </div>
                       <button className="inv-btn" style={{ height: 38, flexShrink: 0 }} onClick={addManualItem}><Plus size={14} /> Manual</button>

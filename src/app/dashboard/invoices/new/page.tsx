@@ -931,7 +931,6 @@ function NewInvoicePageContent() {
                           onChange={(record) => { if (record) addProductItem(record); }}
                           placeholder="Search product…"
                           label="Add Item"
-                          allowCreate={false}
                           clearCacheOnOpen
                           onRecordsRefreshed={handleProductsRefreshed}
                         />

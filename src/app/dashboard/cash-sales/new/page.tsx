@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { Suspense, useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
@@ -332,7 +332,6 @@ function NewCashSalePageContent() {
                   onChange={(record: any) => { if (record) addProductItem(record) }}
                   placeholder="Search product..."
                   label=""
-                  allowCreate={false}
                   clearCacheOnOpen
                 />
               </div>

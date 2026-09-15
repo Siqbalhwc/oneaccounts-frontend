@@ -439,14 +439,22 @@ export default function EntityPicker({
             nextCode = `PROD-${String(num).padStart(3, "0")}`
           }
         }
+        // Opening qty/cost flow through exactly like the real Add Product
+        // page: opening_cost_price is the column the opening-inventory
+        // journal-entry trigger watches, and cost_price starts equal to it
+        // for a brand-new product. qty_on_hand is intentionally NOT set
+        // here - the same INSERT trigger the Add Product page relies on
+        // sets it from opening_qty automatically.
+        const openingQtyVal = parseFloat(payload.opening_qty || 0)
+        const openingCostVal = parseFloat(payload.opening_cost_price || 0)
         const productPayload = {
           company_id: companyId,
           code: nextCode,
           name: payload.name || "",
           sale_price: parseFloat(payload.sale_price || 0),
-          cost_price: parseFloat(payload.cost_price || 0),
-          opening_qty: 0,
-          qty_on_hand: 0,
+          opening_qty: openingQtyVal,
+          opening_cost_price: openingCostVal,
+          cost_price: openingCostVal,
           image_path: null,
         }
         const { data: inserted, error: insertErr } = await supabase
@@ -497,7 +505,9 @@ export default function EntityPicker({
       }
 
       // Update all records cache and select
-      setAllRecords((prev) => (prev ? [newRecord, ...prev] : [newRecord]))
+      const updatedRecords = allRecords ? [newRecord, ...allRecords] : [newRecord]
+      setAllRecords(updatedRecords)
+      if (onRecordsRefreshed) onRecordsRefreshed(updatedRecords)
       onChange(newRecord)
       setIsModalOpen(false)
     } catch (err: any) {
