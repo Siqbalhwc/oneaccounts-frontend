@@ -117,7 +117,7 @@ export default function RowActionsMenu({ actions, align = "right" }: RowActionsM
           >
             {visibleActions.map((a) =>
               a.render ? (
-                <div key={a.key} className="row-actions-menu-custom" onClick={() => setOpen(false)}>
+                <div key={a.key} className="row-actions-menu-custom">
                   {a.render()}
                 </div>
               ) : (
