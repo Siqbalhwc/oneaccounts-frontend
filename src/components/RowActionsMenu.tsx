@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { MoreVertical } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 
 export interface RowAction {
   /** Unique key within this row's action list */
@@ -99,7 +99,7 @@ export default function RowActionsMenu({ actions, align = "right" }: RowActionsM
         }}
         title="Actions"
       >
-        <MoreVertical size={18} strokeWidth={2.5} />
+        <ChevronDown size={18} strokeWidth={2.5} />
       </button>
 
       {open && coords && typeof document !== "undefined" &&
@@ -146,21 +146,23 @@ export default function RowActionsMenu({ actions, align = "right" }: RowActionsM
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 26px;
-          height: 26px;
+          width: 28px;
+          height: 28px;
           padding: 0;
-          border: 1px solid var(--border-strong);
+          border: none;
           border-radius: 6px;
-          background: var(--card-hover);
-          color: var(--text);
-          box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+          background: var(--primary);
+          color: var(--primary-text);
+          box-shadow: 0 1px 3px rgba(0,0,0,0.25);
           cursor: pointer;
-          transition: background 0.15s, border-color 0.15s, color 0.15s;
+          transition: background 0.15s, transform 0.1s;
         }
         .row-actions-trigger:hover {
-          background: var(--primary);
-          border-color: var(--primary);
-          color: var(--primary-text);
+          background: var(--primary-hover);
+          transform: translateY(-1px);
+        }
+        .row-actions-trigger:active {
+          transform: translateY(0);
         }
         .row-actions-menu {
           z-index: 1000;
