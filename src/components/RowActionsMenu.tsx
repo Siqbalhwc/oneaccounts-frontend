@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
@@ -149,16 +149,18 @@ export default function RowActionsMenu({ actions, align = "right" }: RowActionsM
           width: 26px;
           height: 26px;
           padding: 0;
-          border: 1px solid var(--border);
+          border: 1px solid var(--border-strong);
           border-radius: 6px;
-          background: var(--card);
+          background: var(--card-hover);
           color: var(--text);
+          box-shadow: 0 1px 2px rgba(0,0,0,0.08);
           cursor: pointer;
-          transition: background 0.15s, border-color 0.15s;
+          transition: background 0.15s, border-color 0.15s, color 0.15s;
         }
         .row-actions-trigger:hover {
-          background: var(--card-hover);
+          background: var(--primary);
           border-color: var(--primary);
+          color: var(--primary-text);
         }
         .row-actions-menu {
           z-index: 1000;
