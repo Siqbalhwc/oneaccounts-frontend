@@ -56,6 +56,7 @@ export default function CustomersPage() {
   const [importMessage, setImportMessage] = useState("")
   const [showArchived, setShowArchived] = useState(false)
   const [confirmTarget, setConfirmTarget] = useState<any>(null)
+  const [checkingUsage, setCheckingUsage] = useState<number | null>(null)
   const [suppliersForLink, setSuppliersForLink] = useState<any[]>([])
 
   const refreshLinkData = () => {
@@ -151,16 +152,26 @@ export default function CustomersPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  const handleArchiveOrDelete = (cust: any) => {
-    setConfirmTarget(cust)
+  const handleArchiveOrDelete = async (cust: any) => {
+    setCheckingUsage(cust.id)
+    const hasBalance = Math.abs(cust.balance || 0) > 0 || Math.abs(cust.opening_balance || 0) > 0
+    let hasHistory = hasBalance
+    if (!hasHistory) {
+      const [{ count: invCount }, { count: recCount }] = await Promise.all([
+        supabase.from("invoices").select("id", { count: "exact", head: true }).eq("customer_id", cust.id).eq("company_id", companyId),
+        supabase.from("receipts").select("id", { count: "exact", head: true }).eq("party_id", cust.id).eq("company_id", companyId),
+      ])
+      hasHistory = (invCount || 0) > 0 || (recCount || 0) > 0
+    }
+    setCheckingUsage(null)
+    setConfirmTarget({ ...cust, _willArchive: hasHistory })
   }
 
   const confirmArchiveOrDelete = async () => {
     if (!confirmTarget) return
     const cust = confirmTarget
-    const hasTransactions = Math.abs(cust.balance || 0) > 0 || Math.abs(cust.opening_balance || 0) > 0
 
-    if (hasTransactions) {
+    if (cust._willArchive) {
       await supabase.from("customers").update({ archived_at: new Date().toISOString() }).eq("id", cust.id)
       setCustomers(prev => prev.map(c => c.id === cust.id ? { ...c, archived_at: new Date().toISOString() } : c))
     } else {
@@ -561,11 +572,11 @@ export default function CustomersPage() {
                                 },
                                 {
                                   key: "archive",
-                                  label: "Archive / Delete",
+                                  label: checkingUsage === cust.id ? "Checking..." : "Archive / Delete",
                                   icon: <Trash2 size={14} />,
                                   color: "#EF4444",
                                   hidden: !(canEdit && !isArchived),
-                                  onClick: () => handleArchiveOrDelete(cust),
+                                  onClick: () => { if (checkingUsage === null) handleArchiveOrDelete(cust) },
                                 },
                                 {
                                   key: "whatsapp",
@@ -597,12 +608,12 @@ export default function CustomersPage() {
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setConfirmTarget(null)}>
             <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, maxWidth: 380, width: "90%", boxShadow: "0 12px 32px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>
               <h3 style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
-                {(Math.abs(confirmTarget.balance || 0) > 0 || Math.abs(confirmTarget.opening_balance || 0) > 0) ? "Archive Customer?" : "Delete Customer?"}
+                {confirmTarget._willArchive ? "Archive Customer?" : "Delete Customer?"}
               </h3>
               <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px 0", lineHeight: 1.5 }}>
-                {(Math.abs(confirmTarget.balance || 0) > 0 || Math.abs(confirmTarget.opening_balance || 0) > 0)
-                  ? ` has existing balance or transactions, so it will be archived (hidden from the list, fully recoverable) instead of deleted.`
-                  : ` has no transactions and can be safely deleted. This cannot be undone.`}
+                {confirmTarget._willArchive
+                  ? `${confirmTarget.name} has existing balance, invoices, or receipts, so it will be archived (hidden from the list, fully recoverable) instead of deleted.`
+                  : `${confirmTarget.name} has no transaction history and can be safely deleted. This cannot be undone.`}
               </p>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <button className="btn btn-outline" onClick={() => setConfirmTarget(null)}>Cancel</button>

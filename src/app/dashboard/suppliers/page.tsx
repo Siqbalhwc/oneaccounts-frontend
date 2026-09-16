@@ -5,7 +5,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
-import { Plus, Search, Edit, Trash2, Eye, ArrowUpDown, ArrowUp, ArrowDown, FileText, Download, Upload } from "lucide-react"
+import { Plus, Search, Edit, Trash2, Eye, RotateCcw, ArrowUpDown, ArrowUp, ArrowDown, FileText, Download, Upload } from "lucide-react"
 import CustomerVendorLink from "@/components/CustomerVendorLink"
 
 interface Supplier {
@@ -18,6 +18,7 @@ interface Supplier {
   opening_balance: number
   balance: number
   payment_terms?: string | null
+  archived_at?: string | null
 }
 
 type SortField = "code" | "name" | "phone" | "balance"
@@ -69,6 +70,9 @@ export default function SuppliersPage() {
   const [importMessage, setImportMessage] = useState("")
   const [importing, setImporting] = useState(false)
   const [customersForLink, setCustomersForLink] = useState<any[]>([])
+  const [showArchived, setShowArchived] = useState(false)
+  const [confirmTarget, setConfirmTarget] = useState<any>(null)
+  const [checkingUsage, setCheckingUsage] = useState<number | null>(null)
 
   const refreshLinkData = () => {
     fetchSuppliers()
@@ -112,6 +116,10 @@ export default function SuppliersPage() {
       .is("deleted_at", null)
       .order(sortField, { ascending: sortDir === "asc" })
 
+    if (!showArchived) {
+      query = query.is("archived_at", null)
+    }
+
     if (search.trim()) {
       query = query.or(`name.ilike.%${search}%,code.ilike.%${search}%,phone.ilike.%${search}%`)
     }
@@ -123,7 +131,7 @@ export default function SuppliersPage() {
     })
   }
 
-  useEffect(() => { fetchSuppliers() }, [companyId, search, page, sortField, sortDir])
+  useEffect(() => { fetchSuppliers() }, [companyId, search, page, sortField, sortDir, showArchived])
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -142,9 +150,36 @@ export default function SuppliersPage() {
   const openNew = () => router.push("/dashboard/suppliers/new")
   const openEdit = (s: Supplier) => router.push(`/dashboard/suppliers/new?id=${s.id}`)
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Delete this supplier?")) return
-    await supabase.from("suppliers").update({ deleted_at: new Date().toISOString() }).eq("id", id).eq("company_id", companyId)
+  const handleArchiveOrDelete = async (s: Supplier) => {
+    setCheckingUsage(s.id)
+    const hasBalance = Math.abs(s.balance || 0) > 0 || Math.abs(s.opening_balance || 0) > 0
+    let hasHistory = hasBalance
+    if (!hasHistory) {
+      const [{ count: billCount }, { count: payCount }] = await Promise.all([
+        supabase.from("bills").select("id", { count: "exact", head: true }).eq("supplier_id", s.id).eq("company_id", companyId),
+        supabase.from("payments").select("id", { count: "exact", head: true }).eq("party_id", s.id).eq("company_id", companyId),
+      ])
+      hasHistory = (billCount || 0) > 0 || (payCount || 0) > 0
+    }
+    setCheckingUsage(null)
+    setConfirmTarget({ ...s, _willArchive: hasHistory })
+  }
+
+  const confirmArchiveOrDelete = async () => {
+    if (!confirmTarget) return
+    const s = confirmTarget
+
+    if (s._willArchive) {
+      await supabase.from("suppliers").update({ archived_at: new Date().toISOString() }).eq("id", s.id).eq("company_id", companyId)
+    } else {
+      await supabase.from("suppliers").update({ deleted_at: new Date().toISOString() }).eq("id", s.id).eq("company_id", companyId)
+    }
+    setConfirmTarget(null)
+    fetchSuppliers()
+  }
+
+  const restoreSupplier = async (s: Supplier) => {
+    await supabase.from("suppliers").update({ archived_at: null }).eq("id", s.id).eq("company_id", companyId)
     fetchSuppliers()
   }
 
@@ -395,9 +430,15 @@ export default function SuppliersPage() {
         <div className="summary-item"><div className="summary-label">Total Payables</div><div className="summary-value" style={{ color: totalPayables >= 0 ? "#10B981" : "#EF4444" }}>PKR {totalPayables.toLocaleString()}</div></div>
       </div>
 
-      <div className="search-section">
-        <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-        <input className="search-input" placeholder="Search by code, name, or phone..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+      <div className="search-section" style={{ display: "flex", alignItems: "center", gap: 16, maxWidth: "none" }}>
+        <div style={{ position: "relative", maxWidth: 320, flex: 1 }}>
+          <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+          <input className="search-input" placeholder="Search by code, name, or phone..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--text-muted)", cursor: "pointer", whiteSpace: "nowrap" }}>
+          <input type="checkbox" checked={showArchived} onChange={(e) => { setShowArchived(e.target.checked); setPage(1) }} />
+          Show Archived
+        </label>
       </div>
 
       <div className="card">
@@ -431,10 +472,15 @@ export default function SuppliersPage() {
                   </td>
                 </tr>
               ) : (
-                suppliers.map((s) => (
-                  <tr key={s.id}>
+                suppliers.map((s) => {
+                  const isArchived = !!s.archived_at
+                  return (
+                  <tr key={s.id} style={isArchived ? { opacity: 0.5 } : {}}>
                     <td style={tdStyle}><span style={{ fontWeight: 600, color: "var(--primary)" }}>{s.code}</span></td>
-                    <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</td>
+                    <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {s.name}
+                      {isArchived && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", border: "1px solid var(--border)", borderRadius: 4, padding: "1px 6px" }}>ARCHIVED</span>}
+                    </td>
                     <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{s.phone || "-"}</td>
                     <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>PKR {s.opening_balance?.toLocaleString() ?? "0"}</td>
                     <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444", whiteSpace: "nowrap" }}>PKR {s.balance?.toLocaleString()}</td>
@@ -453,13 +499,25 @@ export default function SuppliersPage() {
                         {canEdit && (
                           <button className="btn-icon" onClick={() => openEdit(s)} title="Edit"><Edit size={13} /></button>
                         )}
-                        {canEdit && (
-                          <button className="btn-icon" onClick={() => handleDelete(s.id)} style={{ color: "#EF4444" }} title="Delete"><Trash2 size={13} /></button>
+                        {canEdit && isArchived && (
+                          <button className="btn-icon" onClick={() => restoreSupplier(s)} style={{ color: "#10B981" }} title="Restore"><RotateCcw size={13} /></button>
+                        )}
+                        {canEdit && !isArchived && (
+                          <button
+                            className="btn-icon"
+                            onClick={() => { if (checkingUsage === null) handleArchiveOrDelete(s) }}
+                            style={{ color: "#EF4444" }}
+                            title={checkingUsage === s.id ? "Checking..." : "Archive / Delete"}
+                            disabled={checkingUsage === s.id}
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         )}
                       </div>
                     </td>
                   </tr>
-                ))
+                  )
+                })
               )}
             </tbody>
           </table>
@@ -474,6 +532,25 @@ export default function SuppliersPage() {
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
             <button className="btn btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+          </div>
+        </div>
+      )}
+
+      {confirmTarget && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setConfirmTarget(null)}>
+          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, maxWidth: 380, width: "90%", boxShadow: "0 12px 32px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
+              {confirmTarget._willArchive ? "Archive Supplier?" : "Delete Supplier?"}
+            </h3>
+            <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px 0", lineHeight: 1.5 }}>
+              {confirmTarget._willArchive
+                ? `${confirmTarget.name} has existing balance, bills, or payments, so it will be archived (hidden from the list, fully recoverable) instead of deleted.`
+                : `${confirmTarget.name} has no transaction history and can be safely deleted. This cannot be undone.`}
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn btn-outline" onClick={() => setConfirmTarget(null)}>Cancel</button>
+              <button className="btn" onClick={confirmArchiveOrDelete}>Confirm</button>
+            </div>
           </div>
         </div>
       )}
