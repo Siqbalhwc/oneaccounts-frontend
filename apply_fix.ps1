@@ -1,20 +1,19 @@
 # apply_fix.ps1
 # Run from: C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend
 #
-# Fix: clicking "Link" in the Customers Actions menu did nothing.
+# Your instinct about the scrollbar theme setting was a good lead - it
+# pointed at the right CATEGORY of problem, even if not the exact
+# mechanism. Native browser/OS theming (Windows High Contrast mode, or a
+# browser's "force dark mode for web content" setting) overrides BOTH
+# scrollbars AND native <button> elements at the same time, ignoring the
+# page's own CSS for those controls. That's exactly the kind of setting
+# you'd touch while tuning scrollbar colors, and it would explain why the
+# background/color changes had no visible effect no matter what I set
+# them to - the browser was never applying them in the first place.
 #
-# Root cause (confirmed by reading the code, not a guess): the dropdown
-# menu was built to auto-close itself the instant anything inside it is
-# clicked. "Link" needs to open its own popup instead of just completing
-# an action - but that popup lives inside the same dropdown, so the
-# auto-close tore the whole dropdown down (popup included) in the same
-# instant it tried to open. This is a pre-existing bug in the shared menu
-# component, unrelated to the recent button-color changes.
-#
-# Fix: stop auto-closing specifically for actions that render their own
-# popup (like Link). Plain actions (View Ledger, Edit, Archive, etc.)
-# still close the menu on click exactly as before - only this one
-# category changes.
+# Fix: explicitly tell the browser "don't use your native styling on this
+# button, use my CSS instead" via appearance: none. This is the standard,
+# well-known fix for exactly this class of problem.
 
 $ErrorActionPreference = "Stop"
 
@@ -46,22 +45,56 @@ function Replace-Unique($path, $old, $new, $label) {
 $path = "src\components\RowActionsMenu.tsx"
 Backup-File $path
 
-$old = '                <div key={a.key} className="row-actions-menu-custom" onClick={() => setOpen(false)}>'
-$new = '                <div key={a.key} className="row-actions-menu-custom">'
-Replace-Unique $path $old $new "RowActionsMenu: stop auto-closing on Link/render-type actions"
+$old = @'
+        .row-actions-trigger {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          padding: 0;
+          border: none;
+          border-radius: 6px;
+          background: var(--primary);
+          color: var(--primary-text);
+          box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+          cursor: pointer;
+          transition: background 0.15s, transform 0.1s;
+        }
+'@
+$new = @'
+        .row-actions-trigger {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          padding: 0;
+          border: none;
+          border-radius: 6px;
+          background: var(--primary);
+          color: var(--primary-text);
+          box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+          cursor: pointer;
+          transition: background 0.15s, transform 0.1s;
+          appearance: none;
+          -webkit-appearance: none;
+          -moz-appearance: none;
+        }
+'@
+Replace-Unique $path $old $new "RowActionsMenu: force CSS to override native button styling"
 
 Write-Host ""
 Write-Host "Applied. Next steps:"
 Write-Host "  1. rmdir /s /q `".next`""
 Write-Host "  2. npm run dev"
-Write-Host "  3. On Customers list, click the Actions button on a row, then click Link -"
-Write-Host "     the possible-match popup should now open correctly."
-Write-Host "  4. git add -A"
-Write-Host "  5. git commit -m `"Fix: Link popup not opening from Actions menu`""
-Write-Host "  6. git push"
-Write-Host "  7. Paste the full Vercel build log back."
-Write-Host ""
-Write-Host "One more thing - I have NOT yet seen a Vercel build log for the last"
-Write-Host "few fixes (button color, chevron redesign). Please paste those in too"
-Write-Host "if you have them, or let me know if any of those deploys actually failed -"
-Write-Host "that would also explain why the button itself still looked unchanged."
+Write-Host "  3. Check the Customers list Actions button again."
+Write-Host "  4. If it STILL looks unchanged even locally, that would tell us this is"
+Write-Host "     coming from an OS/browser-level setting (Windows High Contrast mode,"
+Write-Host "     or a Chrome accessibility/dark-mode override), not the app's own CSS"
+Write-Host "     at all - worth checking Windows Settings > Ease of Access > High"
+Write-Host "     Contrast, and Chrome's own site settings for this page."
+Write-Host "  5. git add -A"
+Write-Host "  6. git commit -m `"Fix: force appearance:none on Actions button`""
+Write-Host "  7. git push"
+Write-Host "  8. Paste the full Vercel build log back."
