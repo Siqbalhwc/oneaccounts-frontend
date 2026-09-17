@@ -1454,7 +1454,7 @@ export default function NewBillPage() {
                             style={{ height: 34, fontSize: 12, textAlign: "center" }}
                             type="number"
                             value={item.qty}
-                            onChange={e => updateItem(idx, "qty", Number(e.target.value))}
+                            onChange={e => updateItem(idx, "qty", e.target.value === "" ? "" : Number(e.target.value))}
                           />
 
                           <input
@@ -1462,7 +1462,7 @@ export default function NewBillPage() {
                             style={{ height: 34, fontSize: 12, textAlign: "right" }}
                             type="number"
                             value={item.unit_price}
-                            onChange={e => updateItem(idx, "unit_price", Number(e.target.value))}
+                            onChange={e => updateItem(idx, "unit_price", e.target.value === "" ? "" : Number(e.target.value))}
                           />
 
                           {taxEnabled && (
