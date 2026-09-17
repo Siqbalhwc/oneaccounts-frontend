@@ -1,10 +1,11 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { Plus, Edit, Trash2, X, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useRole } from "@/contexts/RoleContext"
+import ActionSlots from "@/components/ActionSlots"
 
 interface BankAccount {
   id: number
@@ -449,18 +450,25 @@ export default function BankAccountsPage() {
                       PKR {(b.balance || 0).toLocaleString()}
                     </td>
                     <td style={{ ...tdStyle, textAlign: "center" }}>
-                      <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
-                        {canEdit && (
-                          <button className="btn-icon" onClick={() => openEdit(b)} title="Edit">
-                            <Edit size={13} />
-                          </button>
-                        )}
-                        {canEdit && (
-                          <button className="btn-icon" onClick={() => setDeleteId(b.id)} style={{ color: "#EF4444" }} title="Delete">
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
+                      <ActionSlots
+                        slot1={null}
+                        slot2={canEdit ? {
+                          icon: <Edit size={13} />,
+                          title: "Edit",
+                          onClick: () => openEdit(b),
+                        } : null}
+                        slot3={null}
+                        overflow={[
+                          {
+                            key: "delete",
+                            label: "Delete",
+                            icon: <Trash2 size={14} />,
+                            color: "#EF4444",
+                            hidden: !canEdit,
+                            onClick: () => setDeleteId(b.id),
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))

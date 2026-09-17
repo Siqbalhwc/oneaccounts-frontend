@@ -7,6 +7,7 @@ import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { Plus, Search, Edit, Trash2, Eye, RotateCcw, ArrowUpDown, ArrowUp, ArrowDown, FileText, Download, Upload } from "lucide-react"
 import CustomerVendorLink from "@/components/CustomerVendorLink"
+import ActionSlots from "@/components/ActionSlots"
 
 interface Supplier {
   id: number
@@ -485,35 +486,53 @@ export default function SuppliersPage() {
                     <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>PKR {s.opening_balance?.toLocaleString() ?? "0"}</td>
                     <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: s.balance >= 0 ? "#10B981" : "#EF4444", whiteSpace: "nowrap" }}>PKR {s.balance?.toLocaleString()}</td>
                     <td style={{ ...tdStyle, textAlign: "center" }}>
-                      <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
-                        <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/vendor-ledger?supplierId=${s.id}`)} title="View Ledger"><Eye size={13} /></button>
-                        {canEdit && companyId && (
-                          <CustomerVendorLink
-                            partyType="supplier"
-                            party={s}
-                            companyId={companyId}
-                            counterparts={customersForLink}
-                            onUpdated={refreshLinkData}
-                          />
-                        )}
-                        {canEdit && (
-                          <button className="btn-icon" onClick={() => openEdit(s)} title="Edit"><Edit size={13} /></button>
-                        )}
-                        {canEdit && isArchived && (
-                          <button className="btn-icon" onClick={() => restoreSupplier(s)} style={{ color: "#10B981" }} title="Restore"><RotateCcw size={13} /></button>
-                        )}
-                        {canEdit && !isArchived && (
-                          <button
-                            className="btn-icon"
-                            onClick={() => { if (checkingUsage === null) handleArchiveOrDelete(s) }}
-                            style={{ color: "#EF4444" }}
-                            title={checkingUsage === s.id ? "Checking..." : "Archive / Delete"}
-                            disabled={checkingUsage === s.id}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
+                      <ActionSlots
+                        slot1={{
+                          icon: <Eye size={13} />,
+                          title: "View Ledger",
+                          onClick: () => router.push(`/dashboard/reports/vendor-ledger?supplierId=${s.id}`),
+                        }}
+                        slot2={canEdit ? {
+                          icon: <Edit size={13} />,
+                          title: "Edit",
+                          onClick: () => openEdit(s),
+                        } : null}
+                        slot3={null}
+                        overflow={[
+                          {
+                            key: "link",
+                            label: "Link",
+                            icon: <></>,
+                            hidden: !(canEdit && companyId),
+                            render: () => (
+                              <CustomerVendorLink
+                                partyType="supplier"
+                                party={s}
+                                companyId={companyId!}
+                                counterparts={customersForLink}
+                                onUpdated={refreshLinkData}
+                                asMenuItem
+                              />
+                            ),
+                          },
+                          {
+                            key: "restore",
+                            label: "Restore",
+                            icon: <RotateCcw size={14} />,
+                            color: "#10B981",
+                            hidden: !(canEdit && isArchived),
+                            onClick: () => restoreSupplier(s),
+                          },
+                          {
+                            key: "archive",
+                            label: checkingUsage === s.id ? "Checking..." : "Archive / Delete",
+                            icon: <Trash2 size={14} />,
+                            color: "#EF4444",
+                            hidden: !(canEdit && !isArchived),
+                            onClick: () => { if (checkingUsage === null) handleArchiveOrDelete(s) },
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                   )

@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
@@ -9,6 +9,7 @@ import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import { useCompany } from "@/contexts/CompanyContext"
+import ActionSlots from "@/components/ActionSlots"
 
 type SortField = "sale_no" | "date" | "customer" | "total"
 type SortDir = "asc" | "desc"
@@ -409,22 +410,32 @@ export default function CashSalesListPage() {
                         PKR {sale.total?.toLocaleString()}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
-                        <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
-                          <button className="btn-icon" onClick={() => router.push(`/dashboard/cash-sales/${sale.id}`)} title="View">
-                            <Eye size={13} />
-                          </button>
-                          <button className="btn-icon" onClick={() => router.push(`/dashboard/cash-sales/new?id=${sale.id}`)} title="Edit">
-                            <Edit size={13} />
-                          </button>
-                          <button className="btn-icon" onClick={() => handlePrintPDF(sale)} title="PDF">
-                            <FileText size={13} />
-                          </button>
-                          {hasFeature("whatsapp_invoice") && cust?.phone && (
-                            <button className="btn-icon" onClick={() => sendWhatsApp(sale)} title="Send WhatsApp" style={{ color: "#25D366" }}>
-                              <Send size={13} />
-                            </button>
-                          )}
-                        </div>
+                        <ActionSlots
+                          slot1={{
+                            icon: <Eye size={13} />,
+                            title: "View",
+                            onClick: () => router.push(`/dashboard/cash-sales/${sale.id}`),
+                          }}
+                          slot2={{
+                            icon: <Edit size={13} />,
+                            title: "Edit",
+                            onClick: () => router.push(`/dashboard/cash-sales/new?id=${sale.id}`),
+                          }}
+                          slot3={(hasFeature("whatsapp_invoice") && cust?.phone) ? {
+                            icon: <Send size={13} />,
+                            title: "Send WhatsApp",
+                            color: "#25D366",
+                            onClick: () => sendWhatsApp(sale),
+                          } : null}
+                          overflow={[
+                            {
+                              key: "pdf",
+                              label: "PDF",
+                              icon: <FileText size={14} />,
+                              onClick: () => handlePrintPDF(sale),
+                            },
+                          ]}
+                        />
                       </td>
                     </tr>
                   )

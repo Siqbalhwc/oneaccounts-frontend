@@ -5,6 +5,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { useRole } from "@/contexts/RoleContext"
 import { Plus, Edit, Trash2, Eye, ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react"
+import ActionSlots from "@/components/ActionSlots"
 
 interface Product {
   id: number
@@ -599,17 +600,28 @@ export default function StockRegisterPage() {
                         ) : "-"}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
-                        <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
-                          <button className="btn-icon" onClick={() => router.push(`/dashboard/products/new?id=${prod.id}`)} title="Edit">
-                            <Edit size={13} />
-                          </button>
-                          <button className="btn-icon" onClick={() => handleDelete(prod.id)} style={{ color: "#EF4444" }} title="Delete">
-                            <Trash2 size={13} />
-                          </button>
-                          <button className="btn-icon" onClick={() => router.push(`/dashboard/reports/product-ledger?productId=${prod.id}`)} title="View Ledger">
-                            <Eye size={13} />
-                          </button>
-                        </div>
+                        <ActionSlots
+                          slot1={{
+                            icon: <Eye size={13} />,
+                            title: "View Ledger",
+                            onClick: () => router.push(`/dashboard/reports/product-ledger?productId=${prod.id}`),
+                          }}
+                          slot2={{
+                            icon: <Edit size={13} />,
+                            title: "Edit",
+                            onClick: () => router.push(`/dashboard/products/new?id=${prod.id}`),
+                          }}
+                          slot3={null}
+                          overflow={[
+                            {
+                              key: "delete",
+                              label: "Delete",
+                              icon: <Trash2 size={14} />,
+                              color: "#EF4444",
+                              onClick: () => handleDelete(prod.id),
+                            },
+                          ]}
+                        />
                       </td>
                     </tr>
                     {expandedCostId === prod.id && (

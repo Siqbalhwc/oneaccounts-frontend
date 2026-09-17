@@ -32,9 +32,13 @@ interface RowActionsMenuProps {
   actions: RowAction[]
   /** Which side of the trigger button the menu opens toward. Default "right". */
   align?: "left" | "right"
+  /** Trigger visual style. "primary" = filled circular button (default, original style). "flat" = bordered icon button matching the .btn-icon style used elsewhere in list rows. */
+  variant?: "primary" | "flat"
+  /** Icon shown in the trigger button. Defaults to a chevron-down. */
+  triggerIcon?: React.ReactNode
 }
 
-export default function RowActionsMenu({ actions, align = "right" }: RowActionsMenuProps) {
+export default function RowActionsMenu({ actions, align = "right", variant = "primary", triggerIcon }: RowActionsMenuProps) {
   const [open, setOpen] = useState(false)
   const [coords, setCoords] = useState<{ top: number; left?: number; right?: number } | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -92,14 +96,14 @@ export default function RowActionsMenu({ actions, align = "right" }: RowActionsM
       <button
         ref={triggerRef}
         type="button"
-        className="row-actions-trigger"
+        className={variant === "flat" ? "row-actions-trigger row-actions-trigger-flat" : "row-actions-trigger"}
         onClick={(e) => {
           e.stopPropagation()
           toggleOpen()
         }}
-        title="Actions"
+        title="More actions"
       >
-        <ChevronDown size={18} strokeWidth={2.5} />
+        {triggerIcon ?? <ChevronDown size={18} strokeWidth={2.5} />}
       </button>
 
       {open && coords && typeof document !== "undefined" &&
@@ -163,6 +167,18 @@ export default function RowActionsMenu({ actions, align = "right" }: RowActionsM
         }
         .row-actions-trigger:active {
           transform: translateY(0);
+        }
+        .row-actions-trigger-flat {
+          width: 26px;
+          height: 26px;
+          background: transparent;
+          border: 1.5px solid var(--border);
+          color: var(--text-muted);
+          box-shadow: none;
+        }
+        .row-actions-trigger-flat:hover {
+          background: var(--card-hover);
+          transform: none;
         }
         .row-actions-menu {
           z-index: 1000;
