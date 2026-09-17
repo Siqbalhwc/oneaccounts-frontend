@@ -171,6 +171,9 @@ export default function RowActionsMenu({ actions, align = "right", variant = "pr
         .row-actions-trigger-flat {
           width: 26px;
           height: 26px;
+          box-sizing: border-box;
+          appearance: none;
+          -webkit-appearance: none;
           background: transparent;
           border: 1.5px solid var(--border);
           color: var(--text-muted);

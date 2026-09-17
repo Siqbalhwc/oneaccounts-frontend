@@ -350,7 +350,6 @@ export default function BillsPage() {
                             title: "View bill",
                             onClick: () => router.push(`/dashboard/bills/${bill.id}`),
                           }}
-                          slot2={null}
                           slot3={hasFeature("whatsapp_invoice") ? {
                             icon: (
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">

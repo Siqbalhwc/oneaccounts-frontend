@@ -14,11 +14,11 @@ export interface ActionSlotItem {
 }
 
 interface ActionSlotsProps {
-  /** 1st fixed slot - View / View Ledger. Pass null/undefined to leave blank. */
+  /** 1st fixed slot - View / View Ledger. Omit (undefined) if this page never has this action. Pass null if the page has it but not this row. */
   slot1?: ActionSlotItem | null
-  /** 2nd fixed slot - Edit. Pass null/undefined to leave blank. */
+  /** 2nd fixed slot - Edit. Omit (undefined) if this page never has this action. Pass null if the page has it but not this row. */
   slot2?: ActionSlotItem | null
-  /** 3rd fixed slot - WhatsApp (or leave blank if not applicable to this entity/row). */
+  /** 3rd fixed slot - WhatsApp. Omit (undefined) if this page never has this action. Pass null if the page has it but not this row. */
   slot3?: ActionSlotItem | null
   /** Any remaining actions, shown behind a "more actions" overflow trigger. Empty/all-hidden = no trigger shown. */
   overflow?: RowAction[]
@@ -31,7 +31,10 @@ function Blank() {
 }
 
 function Slot({ item }: { item?: ActionSlotItem | null }) {
-  if (!item) return <Blank />
+  // undefined = this action type never applies on this page at all -> collapse, no reserved space
+  if (item === undefined) return null
+  // null = applies on this page, just not to this particular row -> reserve blank space for row alignment
+  if (item === null) return <Blank />
   if (item.render) {
     return (
       <span style={{ display: "inline-flex", width: SLOT_SIZE, height: SLOT_SIZE, alignItems: "center", justifyContent: "center", flexShrink: 0 }}>

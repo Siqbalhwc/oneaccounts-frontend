@@ -384,7 +384,6 @@ export default function InvoicesPage() {
                             title: "View",
                             onClick: () => router.push(`/dashboard/invoices/${inv.id}`),
                           }}
-                          slot2={null}
                           slot3={hasFeature("whatsapp_invoice") ? {
                             icon: (
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">

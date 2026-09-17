@@ -497,7 +497,6 @@ export default function SuppliersPage() {
                           title: "Edit",
                           onClick: () => openEdit(s),
                         } : null}
-                        slot3={null}
                         overflow={[
                           {
                             key: "link",

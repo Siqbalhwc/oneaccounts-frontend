@@ -451,7 +451,6 @@ export default function BankAccountsPage() {
                     </td>
                     <td style={{ ...tdStyle, textAlign: "center" }}>
                       <ActionSlots
-                        slot1={null}
                         slot2={canEdit ? {
                           icon: <Edit size={13} />,
                           title: "Edit",

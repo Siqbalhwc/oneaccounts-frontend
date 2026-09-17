@@ -611,7 +611,6 @@ export default function StockRegisterPage() {
                             title: "Edit",
                             onClick: () => router.push(`/dashboard/products/new?id=${prod.id}`),
                           }}
-                          slot3={null}
                           overflow={[
                             {
                               key: "delete",
