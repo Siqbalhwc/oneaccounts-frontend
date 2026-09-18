@@ -131,7 +131,7 @@ export default function ReceiptsPage() {
     if (!cust?.phone) { alert("No phone number for this customer."); return }
     const code = (cust.country_code || "+92").replace(/\D/g, "")
     const phone = cust.phone.replace(/\D/g, "")
-    const msg = `Dear ${cust.name}, your receipt ${rec.receipt_no} of PKR ${rec.amount?.toLocaleString()} has been recorded.`
+    const msg = `Dear ${cust.name}, Your receipt ${rec.receipt_no} of PKR ${rec.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/receipt/${rec.id}\nDate: ${rec.date}\nThank you for your business.\n- OneAccounts by Siqbal`
     const link = getWhatsAppLink(phone, msg)
     if (link) window.open(link, "_blank")
   }

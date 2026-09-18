@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
@@ -145,7 +145,7 @@ export default function ReceiptDetailPage() {
   const waLink = customer?.phone
     ? getWhatsAppLink(
         customer.phone,
-        `Dear ${customer.name},\n\nYour receipt ${receipt?.receipt_no} for PKR ${receipt?.amount?.toLocaleString()} has been recorded.\n\nThank you for your business.\n— OneAccounts`
+        `Dear ${customer.name}, Your receipt ${receipt?.receipt_no} of PKR ${receipt?.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/receipt/${receipt?.id}\nDate: ${receipt?.date}\nThank you for your business.\n— OneAccounts`
       )
     : ""
 

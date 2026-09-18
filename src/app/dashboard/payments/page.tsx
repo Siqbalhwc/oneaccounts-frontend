@@ -132,7 +132,7 @@ export default function PaymentsPage() {
   const sendWhatsApp = (pay: any) => {
     const supp = supplierMap[pay.party_id]
     if (!supp?.phone) { alert("No phone number for this supplier."); return }
-    const msg = `Dear ${supp.name}, your payment ${pay.payment_no} of PKR ${pay.amount?.toLocaleString()} has been recorded.`
+    const msg = `Dear ${supp.name}, Your payment ${pay.payment_no} of PKR ${pay.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/payment/${pay.id}\nDate: ${pay.payment_date}\nThank you for your business.\n- OneAccounts by Siqbal`
     const link = getWhatsAppLink(supp.phone, msg)
     if (link) window.open(link, "_blank")
   }

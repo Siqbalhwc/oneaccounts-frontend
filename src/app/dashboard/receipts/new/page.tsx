@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Search, X, CheckCircle, RefreshCw, Paperclip, ChevronDown, FileText, Upload } from "lucide-react"
+import { ArrowLeft, Search, X, CheckCircle, RefreshCw, Paperclip, ChevronDown, FileText, Upload, Send } from "lucide-react"
 import { useTheme } from "@/contexts/ThemeContext"
+import { getWhatsAppLink } from "@/lib/whatsapp"
 
 export default function NewReceiptPage() {
   const router = useRouter()
@@ -45,6 +46,12 @@ export default function NewReceiptPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
+  const [savedReceiptId, setSavedReceiptId] = useState<number | null>(null)
+  const [savedReceiptNo, setSavedReceiptNo] = useState<string>("")
+  const [savedCustomerName, setSavedCustomerName] = useState<string>("")
+  const [savedCustomerPhone, setSavedCustomerPhone] = useState<string>("")
+  const [savedAmount, setSavedAmount] = useState<number>(0)
+  const [savedDate, setSavedDate] = useState<string>("")
 
   const [customerOpeningBalance, setCustomerOpeningBalance] = useState(0)
   const [customerOpeningTotal, setCustomerOpeningTotal] = useState(0)
@@ -403,7 +410,13 @@ export default function NewReceiptPage() {
           return
         }
         setFlash("✅ Receipt updated successfully!")
-        setTimeout(() => router.push("/dashboard/receipts"), 1500)
+        setSavedReceiptId(parseInt(editId))
+        setSavedCustomerName(selectedCustomer?.name || "")
+        setSavedCustomerPhone(selectedCustomer?.phone || "")
+        setSavedAmount(totalAmount)
+        setSavedDate(receiptDate)
+        const { data: savedReceiptRow } = await supabase.from("receipts").select("receipt_no").eq("id", editId).single()
+        setSavedReceiptNo(savedReceiptRow?.receipt_no || "")
       } else {
         // Create: call create RPC (existing)
         const { data, error: rpcError } = await supabase.rpc('create_receipt_transaction', {
@@ -426,6 +439,15 @@ export default function NewReceiptPage() {
           return
         }
         setFlash("✅ Receipt saved successfully!")
+        setSavedReceiptId(data?.receipt_id || null)
+        setSavedCustomerName(selectedCustomer?.name || "")
+        setSavedCustomerPhone(selectedCustomer?.phone || "")
+        setSavedAmount(totalAmount)
+        setSavedDate(receiptDate)
+        if (data?.receipt_id) {
+          const { data: savedReceiptRow } = await supabase.from("receipts").select("receipt_no").eq("id", data.receipt_id).single()
+          setSavedReceiptNo(savedReceiptRow?.receipt_no || "")
+        }
         if (data?.receipt_id) {
           try {
             await supabase.rpc('link_receipt_attachments', { p_company_id: companyId, p_temp_key: tempAttachKey, p_receipt_id: data.receipt_id })
@@ -522,6 +544,24 @@ export default function NewReceiptPage() {
 
         {error && <div style={{ background: "var(--card)", border: "1px solid #EF4444", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
         {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
+        {savedReceiptId && (
+          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px", marginBottom: 12, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>What would you like to do next?</span>
+            <button className="inv-btn" onClick={() => { if (editId) { window.location.href = "/dashboard/receipts/new" } else { setSavedReceiptId(null) } }}>+ Add Another Receipt</button>
+            <button className="inv-btn" onClick={() => router.push("/dashboard/receipts")}>Go to List</button>
+            {savedCustomerPhone && (
+              <button
+                className="inv-btn"
+                onClick={() => {
+                  const msg = `Dear ${savedCustomerName}, Your receipt ${savedReceiptNo} of PKR ${savedAmount.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/receipt/${savedReceiptId}\nDate: ${savedDate}\nThank you for your business.\n- OneAccounts by Siqbal`
+                  window.open(getWhatsAppLink(savedCustomerPhone, msg), "_blank")
+                }}
+              >
+                <Send size={14} /> Send WhatsApp
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="header-grid">
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>

@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
@@ -170,7 +170,7 @@ export default function PaymentDetailPage() {
   const waLink = payment && payment.supplier
     ? getWhatsAppLink(
         payment.supplier.phone || "",
-        `Dear ${payment.supplier.name},\n\nYour payment ${payment.payment_no} for PKR ${payment.amount?.toLocaleString()} has been processed.\nDate: ${payment.payment_date}\nMethod: ${payment.payment_method}\n${payment.notes ? "Notes: " + payment.notes : ""}\n\nThank you.\n— ${companyName || "OneAccounts"}`
+        `Dear ${payment.supplier.name}, Your payment ${payment.payment_no} of PKR ${payment.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/payment/${payment.id}\nDate: ${payment.payment_date}\nThank you for your business.\n— ${companyName || "OneAccounts"}`
       )
     : ""
 
