@@ -1150,7 +1150,7 @@ export default function NewBillPage() {
               <button
                 className="inv-btn"
                 onClick={() => {
-                  const msg = `Dear ${selectedSupplier.name}, Your bill ${savedBillNo} of PKR ${grossTotal.toLocaleString()} has been recorded.\nðŸ“„ View Online: https://app.oneaccountsbysiqbal.com/bill/${savedBillId}\nðŸ“… Date: ${billDate}   ðŸ“† Due: ${dueDate}\nThank you for your business.\nâ€” OneAccounts by Siqbal`
+                  const msg = `Dear ${selectedSupplier.name}, Your bill ${savedBillNo} of PKR ${grossTotal.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/bill/${savedBillId}\nDate: ${billDate}   Due: ${dueDate}\nThank you for your business.\n- OneAccounts by Siqbal`
                   window.open(getWhatsAppLink(selectedSupplier.phone, msg), "_blank")
                 }}
               >

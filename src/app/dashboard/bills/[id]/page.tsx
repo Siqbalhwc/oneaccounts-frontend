@@ -158,7 +158,7 @@ export default function BillDetailPage() {
   const waLink = bill && bill.supplier
     ? getWhatsAppLink(
         bill.supplier.phone || "",
-        `Dear ${bill.supplier.name}, Your bill ${bill.invoice_no} of PKR ${bill.total?.toLocaleString()} has been recorded.\nðŸ“„ View Online: https://app.oneaccountsbysiqbal.com/bill/${bill.id}\nðŸ“… Date: ${bill.date}   ðŸ“† Due: ${bill.due_date}\nThank you for your business.\n— OneAccounts`
+        `Dear ${bill.supplier.name}, Your bill ${bill.invoice_no} of PKR ${bill.total?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/bill/${bill.id}\nDate: ${bill.date}   Due: ${bill.due_date}\nThank you for your business.\n- OneAccounts`
       )
     : ""
 

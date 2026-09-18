@@ -149,7 +149,7 @@ export default function BillsPage() {
   const sendWhatsApp = (bill: any) => {
     const supp = supplierMap[bill.party_id]
     if (!supp?.phone) { alert("No phone number for this supplier."); return }
-    const message = `Dear ${supp.name}, Your bill ${bill.invoice_no} of PKR ${bill.total?.toLocaleString()} has been recorded.\nðŸ“„ View Online: https://app.oneaccountsbysiqbal.com/bill/${bill.id}\nðŸ“… Date: ${bill.date}   ðŸ“† Due: ${bill.due_date}\nThank you for your business.\nâ€” OneAccounts by Siqbal`
+    const message = `Dear ${supp.name}, Your bill ${bill.invoice_no} of PKR ${bill.total?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/bill/${bill.id}\nDate: ${bill.date}   Due: ${bill.due_date}\nThank you for your business.\n- OneAccounts by Siqbal`
     const link = getWhatsAppLink(supp.phone, message)
     if (link) window.open(link, "_blank")
   }
