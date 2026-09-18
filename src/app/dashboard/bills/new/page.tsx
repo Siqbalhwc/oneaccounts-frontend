@@ -5,13 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   ArrowLeft, Plus, Trash2, Search, X, Download, CheckCircle,
-  RefreshCw, Paperclip, ChevronDown, FileText, Upload,
+  RefreshCw, Paperclip, ChevronDown, FileText, Upload, Send,
 } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
 import { getLabel, type BusinessType } from "@/lib/labels"
+import { getWhatsAppLink } from "@/lib/whatsapp"
 
 export default function NewBillPage() {
   const router = useRouter()
@@ -71,6 +72,8 @@ export default function NewBillPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
+  const [savedBillId, setSavedBillId] = useState<number | null>(null)
+  const [savedBillNo, setSavedBillNo] = useState<string>("")
 
   const [locations, setLocations] = useState<any[]>([])
   const [activities, setActivities] = useState<any[]>([])
@@ -790,7 +793,9 @@ export default function NewBillPage() {
         setFlash("Bill updated successfully.")
         loadSuppliers()
         setSaving(false)
-        setTimeout(() => router.push(`/dashboard/bills/${editId}`), 800)
+        setSavedBillId(Number(editId))
+        const { data: savedRow } = await supabase.from("invoices").select("invoice_no").eq("id", editId).single()
+        setSavedBillNo(savedRow?.invoice_no || "")
         return
       } catch (err: any) {
         setError(err.message || "Network error")
@@ -873,7 +878,9 @@ export default function NewBillPage() {
       setFlash(`✅ Bill saved successfully!`)
       loadSuppliers()
       setSaving(false)
-      setTimeout(() => router.push(`/dashboard/bills/${newBillId}`), 800)
+      setSavedBillId(newBillId)
+      const { data: savedRow } = await supabase.from("invoices").select("invoice_no").eq("id", newBillId).single()
+      setSavedBillNo(savedRow?.invoice_no || "")
 
     } catch (err: any) {
       setError(err.message || "Network error")
@@ -1132,6 +1139,24 @@ export default function NewBillPage() {
         {flash && (
           <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
             <CheckCircle size={16} /> {flash}
+          </div>
+        )}
+        {savedBillId && (
+          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px", marginBottom: 12, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>What would you like to do next?</span>
+            <button className="inv-btn" onClick={() => { window.location.href = "/dashboard/bills/new" }}>+ Add Another Bill</button>
+            <button className="inv-btn" onClick={() => router.push("/dashboard/bills")}>Go to List</button>
+            {selectedSupplier?.phone && (
+              <button
+                className="inv-btn"
+                onClick={() => {
+                  const msg = `Dear ${selectedSupplier.name}, Your bill ${savedBillNo} of PKR ${grossTotal.toLocaleString()} has been recorded.\nðŸ“„ View Online: https://app.oneaccountsbysiqbal.com/bill/${savedBillId}\nðŸ“… Date: ${billDate}   ðŸ“† Due: ${dueDate}\nThank you for your business.\nâ€” OneAccounts by Siqbal`
+                  window.open(getWhatsAppLink(selectedSupplier.phone, msg), "_blank")
+                }}
+              >
+                <Send size={14} /> Send WhatsApp
+              </button>
+            )}
           </div>
         )}
 
