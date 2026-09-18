@@ -19,6 +19,8 @@ export default function ProductFormPage() {
   const [productCode, setProductCode] = useState("")
   const [name, setName] = useState("")
   const [category, setCategory] = useState("")
+  const [categoryList, setCategoryList] = useState<string[]>([])
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
   const [unit, setUnit] = useState("PCS")
   const [salePrice, setSalePrice] = useState("")
   const [openingCostPrice, setOpeningCostPrice] = useState("")
@@ -33,6 +35,12 @@ export default function ProductFormPage() {
   const qty = parseFloat(openingQty) || 0
   const cost = parseFloat(openingCostPrice) || 0
   const totalCost = qty * cost
+
+  const categoryQuery = category.trim().toLowerCase()
+  const filteredCategories = categoryQuery
+    ? categoryList.filter(c => c.toLowerCase().startsWith(categoryQuery))
+    : categoryList
+  const categoryExists = categoryList.some(c => c.toLowerCase() === categoryQuery)
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -75,6 +83,22 @@ export default function ProductFormPage() {
       }
     })
   }, [editId])
+
+  useEffect(() => {
+    if (!companyId) return
+    supabase
+      .from("products")
+      .select("category")
+      .eq("company_id", companyId)
+      .is("deleted_at", null)
+      .not("category", "is", null)
+      .then(({ data }) => {
+        if (data) {
+          const unique = Array.from(new Set(data.map((item: any) => item.category).filter(Boolean))) as string[]
+          setCategoryList(unique.sort())
+        }
+      })
+  }, [companyId])
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -254,9 +278,55 @@ export default function ProductFormPage() {
               <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Widget A" />
             </div>
 
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 16, position: "relative" }}>
               <label className="label">Category (optional)</label>
-              <input className="input" value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. Cabinet Handles, Cabinet Knobs" />
+              <input
+                className="input"
+                value={category}
+                onChange={e => { setCategory(e.target.value); setShowCategoryDropdown(true) }}
+                onFocus={() => setShowCategoryDropdown(true)}
+                onBlur={() => setTimeout(() => setShowCategoryDropdown(false), 150)}
+                onKeyDown={e => { if (e.key === "Escape") setShowCategoryDropdown(false) }}
+                placeholder="e.g. Cabinet Handles, Cabinet Knobs"
+                autoComplete="off"
+              />
+              {showCategoryDropdown && (
+                <div
+                  style={{
+                    position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4,
+                    background: "var(--card)", border: "1.5px solid var(--border)", borderRadius: 8,
+                    boxShadow: "var(--shadow-sm)", zIndex: 20, maxHeight: 220, overflowY: "auto",
+                  }}
+                >
+                  {filteredCategories.map(c => (
+                    <div
+                      key={c}
+                      onMouseDown={e => { e.preventDefault(); setCategory(c); setShowCategoryDropdown(false) }}
+                      style={{ padding: "8px 12px", fontSize: 13, cursor: "pointer", color: "var(--text)" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                    >
+                      {c}
+                    </div>
+                  ))}
+                  {categoryQuery && !categoryExists && (
+                    <div
+                      onMouseDown={e => { e.preventDefault(); setShowCategoryDropdown(false) }}
+                      style={{
+                        padding: "8px 12px", fontSize: 13, cursor: "pointer", color: "var(--primary)",
+                        borderTop: filteredCategories.length > 0 ? "1px solid var(--border)" : "none",
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                    >
+                      + Add "{category.trim()}" as new category
+                    </div>
+                  )}
+                  {filteredCategories.length === 0 && !categoryQuery && (
+                    <div style={{ padding: "8px 12px", fontSize: 12, color: "var(--text-muted)" }}>No categories yet</div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div style={{ marginBottom: 16 }}>
