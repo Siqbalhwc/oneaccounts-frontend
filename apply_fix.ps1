@@ -1,208 +1,146 @@
-$ts = Get-Date -Format "yyyyMMdd_HHmmss"
+$ErrorActionPreference = "Stop"
+$rel  = "src\app\dashboard\payments\page.tsx"
+$full = Join-Path (Get-Location).Path $rel
+if (-not (Test-Path -LiteralPath $full)) { throw "File not found: $full (run from the frontend folder)" }
 
-function Patch-File($path, $replacements) {
-    if (-not (Test-Path -LiteralPath $path)) {
-        Write-Host "FILE NOT FOUND: $path"
-        return
-    }
-    Copy-Item -LiteralPath $path -Destination "$path.bak_$ts"
-    $content = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
-    foreach ($r in $replacements) {
-        if (-not $content.Contains($r[0])) {
-            Write-Host "ANCHOR NOT FOUND in $path -- STOPPING, no changes written for this file:"
-            Write-Host $r[0]
-            return
-        }
-        $content = $content.Replace($r[0], $r[1])
-    }
-    [System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::UTF8)
-    Write-Host "Patched: $path"
+$utf8 = New-Object System.Text.UTF8Encoding($true)
+$text = [System.IO.File]::ReadAllText($full, $utf8)
+if ($text.Contains("reverseTarget")) { throw "Fix already applied to this file." }
+$nl = "`n"
+if ($text.Contains("`r`n")) { $nl = "`r`n" }
+
+$lines = New-Object 'System.Collections.Generic.List[string]'
+foreach ($l in ($text -split "\r?\n")) { $lines.Add($l) }
+
+function Find-One([string]$trimmed) {
+  $hits = @()
+  for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -eq $trimmed) { $hits += $i } }
+  if ($hits.Count -ne 1) { throw "Anchor expected exactly once but found $($hits.Count): $trimmed" }
+  return [int]$hits[0]
+}
+function Insert-Block([int]$idx, [string]$block) {
+  $arr = [string[]]($block -split "\r?\n")
+  $lines.InsertRange($idx, $arr)
 }
 
-# ---------- receipts/page.tsx (list) ----------
-$rl = @()
-$rl += ,@(
-'    const msg = `Dear ${cust.name}, your receipt ${rec.receipt_no} of PKR ${rec.amount?.toLocaleString()} has been recorded.`'
-,
-'    const msg = `Dear ${cust.name}, Your receipt ${rec.receipt_no} of PKR ${rec.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/receipt/${rec.id}\nDate: ${rec.date}\nThank you for your business.\n- OneAccounts by Siqbal`'
-)
-Patch-File "src\app\dashboard\receipts\page.tsx" $rl
+# 1. Imports
+$i = Find-One 'import { Plus, Eye, Edit, Search, ArrowUpDown, ArrowUp, ArrowDown, Undo2 } from "lucide-react"'
+$lines[$i] = 'import { Plus, Eye, Edit, Search, ArrowUpDown, ArrowUp, ArrowDown, Undo2, CheckCircle, AlertCircle, X } from "lucide-react"'
 
-# ---------- receipts/[id]/page.tsx (detail) ----------
-$rd = @()
-$rd += ,@(
-'        `Dear ${customer.name},\n\nYour receipt ${receipt?.receipt_no} for PKR ${receipt?.amount?.toLocaleString()} has been recorded.\n\nThank you for your business.\n'
-,
-'        `Dear ${customer.name}, Your receipt ${receipt?.receipt_no} of PKR ${receipt?.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/receipt/${receipt?.id}\nDate: ${receipt?.date}\nThank you for your business.\n'
-)
-Patch-File "src\app\dashboard\receipts\[id]\page.tsx" $rd
+# 2. State + auto-dismiss for success banner
+$i = Find-One 'const [supplierMap, setSupplierMap] = useState<Record<number, { name: string; phone: string }>>({})'
+$block = @'
+  const [banner, setBanner] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [reverseTarget, setReverseTarget] = useState<any>(null)
+  const [reversing, setReversing] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
 
-# ---------- receipts/new/page.tsx (create/edit) ----------
-$rn = @()
-$rn += ,@(
-'import { ArrowLeft, Search, X, CheckCircle, RefreshCw, Paperclip, ChevronDown, FileText, Upload } from "lucide-react"
-import { useTheme } from "@/contexts/ThemeContext"'
-,
-'import { ArrowLeft, Search, X, CheckCircle, RefreshCw, Paperclip, ChevronDown, FileText, Upload, Send } from "lucide-react"
-import { useTheme } from "@/contexts/ThemeContext"
-import { getWhatsAppLink } from "@/lib/whatsapp"'
+  useEffect(() => {
+    if (banner?.type === "success") {
+      const t = setTimeout(() => setBanner(null), 8000)
+      return () => clearTimeout(t)
+    }
+    return undefined
+  }, [banner])
+'@
+Insert-Block ($i + 1) $block
+
+# 3. Reload list after a reversal
+$i = Find-One '}, [role, canView, companyId, sortField, sortDir])'
+$lines[$i] = $lines[$i].Replace('sortDir])', 'sortDir, reloadKey])')
+
+# 4. Replace handleReverse (6 lines) with dialog-based flow
+$i = Find-One 'const handleReverse = async (paymentId: number) => {'
+$expect = @(
+  'if (!window.confirm("Reverse this payment? This will undo all its effects.")) return',
+  "const { error } = await supabase.rpc('reverse_vendor_payment', { p_payment_id: paymentId, p_company_id: companyId })",
+  'if (error) alert(error.message)',
+  "else setPayments(prev => prev.map(p => p.id === paymentId ? { ...p, status: 'reversed' } : p))",
+  '}'
 )
-$rn += ,@(
-'  const [flash, setFlash] = useState<string | null>(null)'
-,
-'  const [flash, setFlash] = useState<string | null>(null)
-  const [savedReceiptId, setSavedReceiptId] = useState<number | null>(null)
-  const [savedReceiptNo, setSavedReceiptNo] = useState<string>("")
-  const [savedCustomerName, setSavedCustomerName] = useState<string>("")
-  const [savedCustomerPhone, setSavedCustomerPhone] = useState<string>("")
-  const [savedAmount, setSavedAmount] = useState<number>(0)
-  const [savedDate, setSavedDate] = useState<string>("")'
-)
-$rn += ,@(
-'        setTimeout(() => router.push("/dashboard/receipts"), 1500)'
-,
-'        setSavedReceiptId(parseInt(editId))
-        setSavedCustomerName(selectedCustomer?.name || "")
-        setSavedCustomerPhone(selectedCustomer?.phone || "")
-        setSavedAmount(totalAmount)
-        setSavedDate(receiptDate)
-        const { data: savedReceiptRow } = await supabase.from("receipts").select("receipt_no").eq("id", editId).single()
-        setSavedReceiptNo(savedReceiptRow?.receipt_no || "")'
-)
-$rn += ,@(
-'        if (data?.receipt_id) {
-          try {
-            await supabase.rpc(''link_receipt_attachments'', { p_company_id: companyId, p_temp_key: tempAttachKey, p_receipt_id: data.receipt_id })
-          } catch (linkErr) {
-            console.error(''Attachment linking failed (receipt already saved successfully):'', linkErr)
-          }
-        }'
-,
-'        setSavedReceiptId(data?.receipt_id || null)
-        setSavedCustomerName(selectedCustomer?.name || "")
-        setSavedCustomerPhone(selectedCustomer?.phone || "")
-        setSavedAmount(totalAmount)
-        setSavedDate(receiptDate)
-        if (data?.receipt_id) {
-          const { data: savedReceiptRow } = await supabase.from("receipts").select("receipt_no").eq("id", data.receipt_id).single()
-          setSavedReceiptNo(savedReceiptRow?.receipt_no || "")
-        }
-        if (data?.receipt_id) {
-          try {
-            await supabase.rpc(''link_receipt_attachments'', { p_company_id: companyId, p_temp_key: tempAttachKey, p_receipt_id: data.receipt_id })
-          } catch (linkErr) {
-            console.error(''Attachment linking failed (receipt already saved successfully):'', linkErr)
-          }
-        }'
-)
-$rn += ,@(
-'        {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}'
-,
-'        {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
-        {savedReceiptId && (
-          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px", marginBottom: 12, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>What would you like to do next?</span>
-            <button className="inv-btn" onClick={() => { if (editId) { window.location.href = "/dashboard/receipts/new" } else { setSavedReceiptId(null) } }}>+ Add Another Receipt</button>
-            <button className="inv-btn" onClick={() => router.push("/dashboard/receipts")}>Go to List</button>
-            {savedCustomerPhone && (
-              <button
-                className="inv-btn"
-                onClick={() => {
-                  const msg = `Dear ${savedCustomerName}, Your receipt ${savedReceiptNo} of PKR ${savedAmount.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/receipt/${savedReceiptId}\nDate: ${savedDate}\nThank you for your business.\n- OneAccounts by Siqbal`
-                  window.open(getWhatsAppLink(savedCustomerPhone, msg), "_blank")
-                }}
-              >
-                <Send size={14} /> Send WhatsApp
-              </button>
-            )}
+for ($k = 0; $k -lt $expect.Count; $k++) {
+  if ($lines[$i + 1 + $k].Trim() -ne $expect[$k]) { throw "handleReverse block differs from expected at line offset $($k + 1)" }
+}
+$lines.RemoveRange($i, 6)
+$block = @'
+  const handleReverse = (paymentId: number) => {
+    const pay = payments.find(p => p.id === paymentId)
+    if (pay) setReverseTarget(pay)
+  }
+
+  const friendlyReverseError = (msg: string) => {
+    const m = (msg || "").toLowerCase()
+    if (m.includes("already been reversed")) return "This payment has already been reversed. Please refresh the page to see its current status."
+    if (m.includes("not found")) return "This payment could not be found. Please refresh the page and try again."
+    if (m.includes("cannot be reversed") || m.includes("only supplier payments")) return msg
+    return `The payment could not be reversed. ${msg || "Please try again."}`
+  }
+
+  const confirmReverse = async () => {
+    if (!reverseTarget || reversing) return
+    const pay = reverseTarget
+    setReversing(true)
+    const { error } = await supabase.rpc('reverse_vendor_payment', { p_payment_id: pay.id, p_company_id: companyId })
+    setReversing(false)
+    setReverseTarget(null)
+    if (error) {
+      setBanner({ type: "error", text: friendlyReverseError(error.message) })
+      return
+    }
+    setBanner({ type: "success", text: `Payment ${pay.payment_no} has been reversed. The supplier ledger and balances are updated.` })
+    setReloadKey(k => k + 1)
+  }
+'@
+Insert-Block $i $block
+
+# 5. WhatsApp "no phone" alert -> banner
+$i = Find-One 'if (!supp?.phone) { alert("No phone number for this supplier."); return }'
+$lines[$i] = '    if (!supp?.phone) { setBanner({ type: "error", text: "This supplier has no phone number on file, so the WhatsApp message could not be sent." }); return }'
+
+# 6. Banner above the summary cards
+$i = Find-One '<div className="summary-grid">'
+$block = @'
+      {banner && (
+        <div style={{ background: "var(--card)", border: `1px solid ${banner.type === "success" ? "var(--success)" : "var(--danger)"}`, color: "var(--text)", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          {banner.type === "success" ? <CheckCircle size={16} style={{ color: "var(--success)", flexShrink: 0 }} /> : <AlertCircle size={16} style={{ color: "var(--danger)", flexShrink: 0 }} />}
+          <span style={{ flex: 1 }}>{banner.text}</span>
+          <button onClick={() => setBanner(null)} aria-label="Dismiss" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", display: "inline-flex", padding: 0 }}><X size={14} /></button>
+        </div>
+      )}
+
+'@
+Insert-Block $i $block
+
+# 7. Confirm dialog before the closing </div> of the page
+$end = $lines.Count - 1
+while ($end -ge 0 -and $lines[$end].Trim() -eq '') { $end-- }
+if ($lines[$end].Trim() -ne '}' -or $lines[$end - 1].Trim() -ne ')' -or $lines[$end - 2].Trim() -ne '</div>') { throw "Unexpected end-of-file structure; nothing written." }
+$block = @'
+      {reverseTarget && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => { if (!reversing) setReverseTarget(null) }}>
+          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, maxWidth: 440, width: "90%", boxShadow: "0 12px 32px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Reverse Payment?</h3>
+            <p style={{ fontSize: 13, color: "var(--text)", margin: "0 0 10px 0", lineHeight: 1.5 }}>
+              You are about to reverse payment <strong>{reverseTarget.payment_no}</strong> to <strong>{supplierMap[reverseTarget.party_id]?.name || "this supplier"}</strong> for <strong>PKR {Number(reverseTarget.amount || 0).toLocaleString()}</strong>.
+            </p>
+            <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px 0", lineHeight: 1.5 }}>
+              A reversing journal entry will be posted, and the supplier balance and any bills paid by this payment will be restored. The original entry is kept for audit.
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setReverseTarget(null)} disabled={reversing}>Cancel</button>
+              <button className="btn btn-primary" onClick={confirmReverse} disabled={reversing}>{reversing ? "Reversing..." : "Reverse Payment"}</button>
+            </div>
           </div>
-        )}'
-)
-Patch-File "src\app\dashboard\receipts\new\page.tsx" $rn
+        </div>
+      )}
+'@
+Insert-Block ($end - 2) $block
 
-# ---------- payments/page.tsx (list) ----------
-$pl = @()
-$pl += ,@(
-'    const msg = `Dear ${supp.name}, your payment ${pay.payment_no} of PKR ${pay.amount?.toLocaleString()} has been recorded.`'
-,
-'    const msg = `Dear ${supp.name}, Your payment ${pay.payment_no} of PKR ${pay.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/payment/${pay.id}\nDate: ${pay.payment_date}\nThank you for your business.\n- OneAccounts by Siqbal`'
-)
-Patch-File "src\app\dashboard\payments\page.tsx" $pl
+# Final sanity checks
+$newText = [string]::Join($nl, $lines)
+if ($newText.Contains("window.confirm") -or $newText.Contains("alert(")) { throw "Browser popup still present; nothing written." }
 
-# ---------- payments/[id]/page.tsx (detail) ----------
-$pd = @()
-$pd += ,@(
-'        `Dear ${payment.supplier.name},\n\nYour payment ${payment.payment_no} for PKR ${payment.amount?.toLocaleString()} has been processed.\nDate: ${payment.payment_date}\nMethod: ${payment.payment_method}\n${payment.notes ? "Notes: " + payment.notes : ""}\n\nThank you.\n'
-,
-'        `Dear ${payment.supplier.name}, Your payment ${payment.payment_no} of PKR ${payment.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/payment/${payment.id}\nDate: ${payment.payment_date}\nThank you for your business.\n'
-)
-Patch-File "src\app\dashboard\payments\[id]\page.tsx" $pd
-
-# ---------- payments/new/page.tsx (create/edit) ----------
-$pn = @()
-$pn += ,@(
-'import { ArrowLeft, Search, X, CheckCircle, RefreshCw, Paperclip, ChevronDown, FileText, Upload } from "lucide-react"'
-,
-'import { ArrowLeft, Search, X, CheckCircle, RefreshCw, Paperclip, ChevronDown, FileText, Upload, Send } from "lucide-react"
-import { getWhatsAppLink } from "@/lib/whatsapp"'
-)
-$pn += ,@(
-'  const [flash, setFlash] = useState<string | null>(null)'
-,
-'  const [flash, setFlash] = useState<string | null>(null)
-  const [savedPaymentId, setSavedPaymentId] = useState<number | null>(null)
-  const [savedPaymentNo, setSavedPaymentNo] = useState<string>("")
-  const [savedSupplierName, setSavedSupplierName] = useState<string>("")
-  const [savedSupplierPhone, setSavedSupplierPhone] = useState<string>("")
-  const [savedAmount, setSavedAmount] = useState<number>(0)
-  const [savedDate, setSavedDate] = useState<string>("")'
-)
-$pn += ,@(
-'        setTimeout(() => router.push("/dashboard/payments"), 1500)'
-,
-'        setSavedPaymentId(parseInt(editId))
-        setSavedPaymentNo("")
-        setSavedSupplierName(selectedSupplier?.name || "")
-        setSavedSupplierPhone(selectedSupplier?.phone || "")
-        setSavedAmount(totalAmount)
-        setSavedDate(paymentDate)'
-)
-$pn += ,@(
-'        setFlash(`Payment ${result.payment_no} saved!`)
-        if (result.payment?.id) {'
-,
-'        setFlash(`Payment ${result.payment_no} saved!`)
-        setSavedPaymentId(result.payment?.id || null)
-        setSavedPaymentNo(result.payment_no || "")
-        setSavedSupplierName(selectedSupplier?.name || "")
-        setSavedSupplierPhone(selectedSupplier?.phone || "")
-        setSavedAmount(totalAmount)
-        setSavedDate(paymentDate)
-        if (result.payment?.id) {'
-)
-$pn += ,@(
-'        {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}'
-,
-'        {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle size={16} /> {flash}</div>}
-        {savedPaymentId && (
-          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px", marginBottom: 12, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>What would you like to do next?</span>
-            <button className="pay-btn" onClick={() => { if (editId) { window.location.href = "/dashboard/payments/new" } else { setSavedPaymentId(null) } }}>+ Add Another Payment</button>
-            <button className="pay-btn" onClick={() => router.push("/dashboard/payments")}>Go to List</button>
-            {savedSupplierPhone && (
-              <button
-                className="pay-btn"
-                onClick={() => {
-                  const msg = `Dear ${savedSupplierName}, Your payment ${savedPaymentNo} of PKR ${savedAmount.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/payment/${savedPaymentId}\nDate: ${savedDate}\nThank you for your business.\n- OneAccounts by Siqbal`
-                  window.open(getWhatsAppLink(savedSupplierPhone, msg), "_blank")
-                }}
-              >
-                <Send size={14} /> Send WhatsApp
-              </button>
-            )}
-          </div>
-        )}'
-)
-Patch-File "src\app\dashboard\payments\new\page.tsx" $pn
-
-Write-Host "Done. Review .bak_$ts backups before deploying if anything looks off."
+$stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+Copy-Item -LiteralPath $full -Destination ($full + ".backup_" + $stamp)
+[System.IO.File]::WriteAllText($full, $newText, $utf8)
+Write-Host "Done. Backup saved as page.tsx.backup_$stamp"

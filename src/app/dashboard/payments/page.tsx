@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Plus, Eye, Edit, Search, ArrowUpDown, ArrowUp, ArrowDown, Undo2 } from "lucide-react"
+import { Plus, Eye, Edit, Search, ArrowUpDown, ArrowUp, ArrowDown, Undo2, CheckCircle, AlertCircle, X } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
@@ -47,6 +47,18 @@ export default function PaymentsPage() {
   const [companyId, setCompanyId] = useState("")
 
   const [supplierMap, setSupplierMap] = useState<Record<number, { name: string; phone: string }>>({})
+  const [banner, setBanner] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [reverseTarget, setReverseTarget] = useState<any>(null)
+  const [reversing, setReversing] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    if (banner?.type === "success") {
+      const t = setTimeout(() => setBanner(null), 8000)
+      return () => clearTimeout(t)
+    }
+    return undefined
+  }, [banner])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -83,7 +95,7 @@ export default function PaymentsPage() {
         setPayments(data || [])
         setLoading(false)
       })
-  }, [role, canView, companyId, sortField, sortDir])
+  }, [role, canView, companyId, sortField, sortDir, reloadKey])
 
   const filtered = payments.filter((pay) => {
     if (!search.trim()) return true
@@ -122,16 +134,37 @@ export default function PaymentsPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  const handleReverse = async (paymentId: number) => {
-    if (!window.confirm("Reverse this payment? This will undo all its effects.")) return
-    const { error } = await supabase.rpc('reverse_vendor_payment', { p_payment_id: paymentId, p_company_id: companyId })
-    if (error) alert(error.message)
-    else setPayments(prev => prev.map(p => p.id === paymentId ? { ...p, status: 'reversed' } : p))
+  const handleReverse = (paymentId: number) => {
+    const pay = payments.find(p => p.id === paymentId)
+    if (pay) setReverseTarget(pay)
+  }
+
+  const friendlyReverseError = (msg: string) => {
+    const m = (msg || "").toLowerCase()
+    if (m.includes("already been reversed")) return "This payment has already been reversed. Please refresh the page to see its current status."
+    if (m.includes("not found")) return "This payment could not be found. Please refresh the page and try again."
+    if (m.includes("cannot be reversed") || m.includes("only supplier payments")) return msg
+    return `The payment could not be reversed. ${msg || "Please try again."}`
+  }
+
+  const confirmReverse = async () => {
+    if (!reverseTarget || reversing) return
+    const pay = reverseTarget
+    setReversing(true)
+    const { error } = await supabase.rpc('reverse_vendor_payment', { p_payment_id: pay.id, p_company_id: companyId })
+    setReversing(false)
+    setReverseTarget(null)
+    if (error) {
+      setBanner({ type: "error", text: friendlyReverseError(error.message) })
+      return
+    }
+    setBanner({ type: "success", text: `Payment ${pay.payment_no} has been reversed. The supplier ledger and balances are updated.` })
+    setReloadKey(k => k + 1)
   }
 
   const sendWhatsApp = (pay: any) => {
     const supp = supplierMap[pay.party_id]
-    if (!supp?.phone) { alert("No phone number for this supplier."); return }
+    if (!supp?.phone) { setBanner({ type: "error", text: "This supplier has no phone number on file, so the WhatsApp message could not be sent." }); return }
     const msg = `Dear ${supp.name}, Your payment ${pay.payment_no} of PKR ${pay.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/payment/${pay.id}\nDate: ${pay.payment_date}\nThank you for your business.\n- OneAccounts by Siqbal`
     const link = getWhatsAppLink(supp.phone, msg)
     if (link) window.open(link, "_blank")
@@ -191,6 +224,14 @@ export default function PaymentsPage() {
           </button>
         )}
       </div>
+
+      {banner && (
+        <div style={{ background: "var(--card)", border: `1px solid ${banner.type === "success" ? "var(--success)" : "var(--danger)"}`, color: "var(--text)", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          {banner.type === "success" ? <CheckCircle size={16} style={{ color: "var(--success)", flexShrink: 0 }} /> : <AlertCircle size={16} style={{ color: "var(--danger)", flexShrink: 0 }} />}
+          <span style={{ flex: 1 }}>{banner.text}</span>
+          <button onClick={() => setBanner(null)} aria-label="Dismiss" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", display: "inline-flex", padding: 0 }}><X size={14} /></button>
+        </div>
+      )}
 
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Payments</div><div className="summary-value">{totalPayments}</div></div>
@@ -285,6 +326,23 @@ export default function PaymentsPage() {
           </table>
         </div>
       </div>
+      {reverseTarget && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => { if (!reversing) setReverseTarget(null) }}>
+          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, maxWidth: 440, width: "90%", boxShadow: "0 12px 32px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Reverse Payment?</h3>
+            <p style={{ fontSize: 13, color: "var(--text)", margin: "0 0 10px 0", lineHeight: 1.5 }}>
+              You are about to reverse payment <strong>{reverseTarget.payment_no}</strong> to <strong>{supplierMap[reverseTarget.party_id]?.name || "this supplier"}</strong> for <strong>PKR {Number(reverseTarget.amount || 0).toLocaleString()}</strong>.
+            </p>
+            <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px 0", lineHeight: 1.5 }}>
+              A reversing journal entry will be posted, and the supplier balance and any bills paid by this payment will be restored. The original entry is kept for audit.
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setReverseTarget(null)} disabled={reversing}>Cancel</button>
+              <button className="btn btn-primary" onClick={confirmReverse} disabled={reversing}>{reversing ? "Reversing..." : "Reverse Payment"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
