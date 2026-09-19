@@ -11,6 +11,8 @@ import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
+import { applyLineEdit, setLineLock, lineDisplay, getLock, type CalcLock } from "@/lib/line-calc"
+import LineCalcInput from "@/components/LineCalcInput"
 import { getLabel, type BusinessType } from "@/lib/labels"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 
@@ -434,9 +436,9 @@ export default function NewBillPage() {
     setItems([...items, {
       product_id: prod.id,
       description: `${prod.code} - ${prod.name}`,
-      qty: 1,
+      qty: "",
       unit_price: prod.cost_price,
-      total: prod.cost_price,
+      total: 0,
       location_id: "",
       activity_id: "",
       account_id: null,
@@ -594,6 +596,15 @@ export default function NewBillPage() {
     setBudgetError(overBudget ? "⚠️ Some lines exceed the available budget" : "")
   }
 
+  const toggleLineLock = (idx: number, lock: CalcLock) => {
+    const updated = [...items]
+    updated[idx] = setLineLock(updated[idx], lock)
+    if (updated[idx].tax_rate > 0) {
+      updated[idx].tax_amount = (Number(updated[idx].qty || 0) * Number(updated[idx].unit_price || 0) * updated[idx].tax_rate) / 100
+    }
+    setItems(updated)
+  }
+
   const updateTax = (idx: number, codeId: string | null) => {
     const updated = [...items]
     if (codeId) {
@@ -623,8 +634,8 @@ export default function NewBillPage() {
     const updated = [...items]
     updated[idx] = { ...updated[idx], [field]: value }
 
-    if (field === "qty" || field === "unit_price") {
-      updated[idx].total = updated[idx].qty * updated[idx].unit_price
+    if (field === "qty" || field === "unit_price" || field === "total") {
+      updated[idx] = applyLineEdit(updated[idx], field, value)
       if (taxEnabled && updated[idx].tax_code_id) {
         const tc = inputTaxCodes.find(t => t.id === updated[idx].tax_code_id)
         if (tc) {
@@ -730,6 +741,7 @@ export default function NewBillPage() {
   const handleSubmit = async () => {
     if (!supplierId) { setError("Please select a supplier"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
+    if (items.some((i: any) => i.qty === "" || !Number(i.qty) || i.unit_price === "")) { setError("Enter Qty and Rate for every item"); return }
 
     if (editId) {
       for (const item of items) {
@@ -1474,21 +1486,9 @@ export default function NewBillPage() {
                             placeholder="Description"
                           />
 
-                          <input
-                            className="inv-input"
-                            style={{ height: 34, fontSize: 12, textAlign: "center" }}
-                            type="number"
-                            value={item.qty}
-                            onChange={e => updateItem(idx, "qty", e.target.value === "" ? "" : Number(e.target.value))}
-                          />
+                          <LineCalcInput className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "center" }} value={lineDisplay(item, "qty")} locked={getLock(item) === "qty"} onChange={v => updateItem(idx, "qty", v)} onLock={() => toggleLineLock(idx, "qty")} />
 
-                          <input
-                            className="inv-input"
-                            style={{ height: 34, fontSize: 12, textAlign: "right" }}
-                            type="number"
-                            value={item.unit_price}
-                            onChange={e => updateItem(idx, "unit_price", e.target.value === "" ? "" : Number(e.target.value))}
-                          />
+                          <LineCalcInput className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right" }} value={lineDisplay(item, "unit_price")} locked={getLock(item) === "rate"} onChange={v => updateItem(idx, "unit_price", v)} onLock={() => toggleLineLock(idx, "rate")} />
 
                           {taxEnabled && (
                             <div className="tax-wrapper">
@@ -1552,9 +1552,7 @@ export default function NewBillPage() {
                             />
                           )}
 
-                          <div className="inv-cell inv-cell-total" style={{ color: overBudget ? "#FCA5A5" : undefined }}>
-                            PKR {item.total.toLocaleString()}
-                          </div>
+                          <LineCalcInput className="inv-input" style={{ height: 34, fontSize: 12, textAlign: "right", fontWeight: 600, color: overBudget ? "#FCA5A5" : undefined }} value={lineDisplay(item, "total")} locked={getLock(item) === "total"} onChange={v => updateItem(idx, "total", v)} onLock={() => toggleLineLock(idx, "total")} />
 
                           <button className="delete-btn" onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
                         </div>

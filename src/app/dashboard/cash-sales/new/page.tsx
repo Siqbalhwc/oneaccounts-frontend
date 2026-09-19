@@ -4,6 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Plus, Trash2, CheckCircle } from "lucide-react"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
+import { applyLineEdit, setLineLock, lineDisplay, getLock, type CalcLock } from "@/lib/line-calc"
+import LineCalcInput from "@/components/LineCalcInput"
 
 function NewCashSalePageContent() {
   const router = useRouter()
@@ -127,9 +129,9 @@ function NewCashSalePageContent() {
     setItems([...items, {
       product_id: prod.id,
       description: prod.code + " - " + prod.name,
-      qty: 1,
+      qty: "",
       unit_price: prod.sale_price || 0,
-      total: prod.sale_price || 0,
+      total: 0,
       available: prod.qty_on_hand || 0,
       unit: prod.unit || "PCS",
     }])
@@ -150,11 +152,15 @@ function NewCashSalePageContent() {
   const updateItem = (idx: number, field: string, value: any) => {
     const updated = [...items]
     updated[idx] = { ...updated[idx], [field]: value }
-    if (field === "qty" || field === "unit_price") {
-      updated[idx].total = updated[idx].qty * updated[idx].unit_price
-    } else if (field === "total") {
-      updated[idx].unit_price = updated[idx].qty > 0 ? updated[idx].total / updated[idx].qty : 0
+    if (field === "qty" || field === "unit_price" || field === "total") {
+      updated[idx] = applyLineEdit(updated[idx], field, value)
     }
+    setItems(updated)
+  }
+
+  const toggleLineLock = (idx: number, lock: CalcLock) => {
+    const updated = [...items]
+    updated[idx] = setLineLock(updated[idx], lock)
     setItems(updated)
   }
 
@@ -165,6 +171,7 @@ function NewCashSalePageContent() {
 
   const handleSubmit = async () => {
     if (items.length === 0) { setError("Add at least one item"); return }
+    if (items.some((i: any) => i.qty === "" || !Number(i.qty) || i.unit_price === "")) { setError("Enter Qty and Rate for every item"); return }
     if (hasStockErrors) { setError("Cannot save: some items have insufficient stock."); return }
     setSaving(true); setError("")
     try {
@@ -352,9 +359,9 @@ function NewCashSalePageContent() {
                 <div key={idx}>
                   <div className="cs-item-row">
                     <input className="cs-input cs-desc" style={{ height: 34 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
-                    <input className="cs-input" style={{ height: 34, textAlign: "center", borderColor: stockErrors[idx] ? "#EF4444" : undefined }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value))} />
-                    <input className="cs-input" style={{ height: 34, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", Number(e.target.value))} />
-                    <input className="cs-input cs-total" style={{ height: 34, textAlign: "right", fontWeight: 600 }} type="number" value={item.total} onChange={e => updateItem(idx, "total", Number(e.target.value))} />
+                    <LineCalcInput className="cs-input" style={{ height: 34, textAlign: "center", borderColor: stockErrors[idx] ? "#EF4444" : undefined }} value={lineDisplay(item, "qty")} locked={getLock(item) === "qty"} onChange={v => updateItem(idx, "qty", v)} onLock={() => toggleLineLock(idx, "qty")} />
+                    <LineCalcInput className="cs-input" style={{ height: 34, textAlign: "right" }} value={lineDisplay(item, "unit_price")} locked={getLock(item) === "rate"} onChange={v => updateItem(idx, "unit_price", v)} onLock={() => toggleLineLock(idx, "rate")} />
+                    <LineCalcInput className="cs-input cs-total" style={{ height: 34, textAlign: "right", fontWeight: 600 }} value={lineDisplay(item, "total")} locked={getLock(item) === "total"} onChange={v => updateItem(idx, "total", v)} onLock={() => toggleLineLock(idx, "total")} />
                     <button className="cs-remove" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
                   </div>
                   {stockErrors[idx] && <div style={{ fontSize: 11, color: "#EF4444", marginTop: -4, marginBottom: 8 }}>{stockErrors[idx]}</div>}

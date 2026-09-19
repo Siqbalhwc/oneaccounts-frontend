@@ -12,6 +12,8 @@ import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
+import { applyLineEdit, setLineLock, lineDisplay, getLock, type CalcLock } from "@/lib/line-calc"
+import LineCalcInput from "@/components/LineCalcInput"
 import { useTheme } from "@/contexts/ThemeContext"
 
 function getCreditDays(term?: string | null): number {
@@ -280,7 +282,7 @@ function NewInvoicePageContent() {
       const taxCode = taxCodes.find((t: any) => String(t.id) === newTaxCodeId)
       if (taxCode) {
         newTaxRate = taxCode.rate
-        newTaxAmount = (prod.sale_price * newTaxRate) / 100
+        newTaxAmount = 0
       }
     }
 
@@ -289,10 +291,10 @@ function NewInvoicePageContent() {
       description: `${prod.code} - ${prod.name}`,
       product_name: prod.name,
       product_image: prod.image_path || null,
-      qty: 1,
+      qty: "",
       unit_price: prod.sale_price,
       cost_price: prod.cost_price,
-      total: prod.sale_price,
+      total: 0,
       project_id: null,
       donor_id: null,
       tax_code_id: newTaxCodeId,
@@ -328,19 +330,10 @@ function NewInvoicePageContent() {
     const updated = [...items]
     updated[idx] = { ...updated[idx], [field]: value }
 
-    if (field === "qty" || field === "unit_price") {
-      updated[idx].total = updated[idx].qty * updated[idx].unit_price
+    if (field === "qty" || field === "unit_price" || field === "total") {
+      updated[idx] = applyLineEdit(updated[idx], field, value)
       if (updated[idx].tax_rate > 0) {
-        updated[idx].tax_amount = (updated[idx].qty * updated[idx].unit_price * updated[idx].tax_rate) / 100
-      } else {
-        updated[idx].tax_amount = 0
-      }
-    }
-
-    if (field === "total") {
-      updated[idx].unit_price = updated[idx].qty > 0 ? updated[idx].total / updated[idx].qty : 0
-      if (updated[idx].tax_rate > 0) {
-        updated[idx].tax_amount = (updated[idx].qty * updated[idx].unit_price * updated[idx].tax_rate) / 100
+        updated[idx].tax_amount = (Number(updated[idx].qty || 0) * Number(updated[idx].unit_price || 0) * updated[idx].tax_rate) / 100
       } else {
         updated[idx].tax_amount = 0
       }
@@ -354,6 +347,15 @@ function NewInvoicePageContent() {
       }
     }
 
+    setItems(updated)
+  }
+
+  const toggleLineLock = (idx: number, lock: CalcLock) => {
+    const updated = [...items]
+    updated[idx] = setLineLock(updated[idx], lock)
+    if (updated[idx].tax_rate > 0) {
+      updated[idx].tax_amount = (Number(updated[idx].qty || 0) * Number(updated[idx].unit_price || 0) * updated[idx].tax_rate) / 100
+    }
     setItems(updated)
   }
 
@@ -458,6 +460,7 @@ function NewInvoicePageContent() {
   const handleSubmit = async () => {
     if (!customerId) { setError("Please select a customer"); return }
     if (items.length === 0) { setError("Add at least one item"); return }
+    if (items.some((i: any) => i.qty === "" || !Number(i.qty) || i.unit_price === "")) { setError("Enter Qty and Rate for every item"); return }
     if (hasStockErrors) {
       setError("Cannot save: some items have insufficient stock. Please adjust quantities.");
       return
@@ -1079,8 +1082,8 @@ function NewInvoicePageContent() {
                           )}
 
                           <input className="inv-input" style={{ height: 32, fontSize: 12 }} value={item.description} onChange={e => updateItem(idx, "description", e.target.value)} placeholder="Description" />
-                          <input className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "center", borderColor: stockError ? "#EF4444" : undefined }} type="number" value={item.qty} onChange={e => updateItem(idx, "qty", e.target.value === "" ? "" : Number(e.target.value))} />
-                          <input className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "right" }} type="number" value={item.unit_price} onChange={e => updateItem(idx, "unit_price", e.target.value === "" ? "" : Number(e.target.value))} />
+                          <LineCalcInput className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "center", borderColor: stockError ? "#EF4444" : undefined }} value={lineDisplay(item, "qty")} locked={getLock(item) === "qty"} onChange={v => updateItem(idx, "qty", v)} onLock={() => toggleLineLock(idx, "qty")} />
+                          <LineCalcInput className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "right" }} value={lineDisplay(item, "unit_price")} locked={getLock(item) === "rate"} onChange={v => updateItem(idx, "unit_price", v)} onLock={() => toggleLineLock(idx, "rate")} />
 
                           {taxEnabled && (
                             <div className="tax-wrapper">
@@ -1092,7 +1095,7 @@ function NewInvoicePageContent() {
                             </div>
                           )}
 
-                          <input className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "right", fontWeight: 600 }} type="number" value={item.total} onChange={e => updateItem(idx, "total", Number(e.target.value))} />
+                          <LineCalcInput className="inv-input" style={{ height: 32, fontSize: 12, textAlign: "right", fontWeight: 600 }} value={lineDisplay(item, "total")} locked={getLock(item) === "total"} onChange={v => updateItem(idx, "total", v)} onLock={() => toggleLineLock(idx, "total")} />
 
                           {taxEnabled && (
                             <div className="inv-cell inv-cell-tax">
