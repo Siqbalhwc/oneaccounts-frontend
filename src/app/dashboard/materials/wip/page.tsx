@@ -1,5 +1,6 @@
 "use client"
 
+import { fmtQty } from "@/lib/format-number"
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { usePlan } from "@/contexts/PlanContext"
@@ -398,7 +399,7 @@ export default function WipProductionPage() {
             <label className="field-label">Raw Material (from WIP)</label>
             <select className="input-field" style={{ marginBottom: 14 }} value={form.raw_product_id} onChange={e => setForm({ ...form, raw_product_id: e.target.value, consumed_qty: "" })}>
               <option value="">— Select —</option>
-              {wipStock.map(p => <option key={p.id} value={p.id}>{p.name} (avail: {p.qty_on_hand} {p.unit})</option>)}
+              {wipStock.map(p => <option key={p.id} value={p.id}>{p.name} (avail: {fmtQty(p.qty_on_hand)} {p.unit})</option>)}
             </select>
 
             {rawProduct && (

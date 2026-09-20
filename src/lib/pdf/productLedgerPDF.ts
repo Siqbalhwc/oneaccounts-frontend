@@ -1,3 +1,4 @@
+import { fmtQty } from "../format-number"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -38,11 +39,11 @@ export async function generateProductLedgerPDF(data:ProductLedgerPDFData):Promis
     l.isOpening?"":l.date,
     l.type==="Opening"?"Opening":l.type==="purchase"?"Purchase":"Sale",
     l.invoice_no||"",
-    l.qty_in>0?`${l.qty_in} ${data.unit}`:"-",
-    l.qty_out>0?`${l.qty_out} ${data.unit}`:"-",
-    `${l.balance} ${data.unit}`
+    l.qty_in>0?`${fmtQty(l.qty_in)} ${data.unit}`:"-",
+    l.qty_out>0?`${fmtQty(l.qty_out)} ${data.unit}`:"-",
+    `${fmtQty(l.balance)} ${data.unit}`
   ])
-  rows.push(["","","Total",`${data.totalInflow} ${data.unit}`,`${data.totalOutflow} ${data.unit}`,`${data.closingBalance} ${data.unit}`])
+  rows.push(["","","Total",`${fmtQty(data.totalInflow)} ${data.unit}`,`${fmtQty(data.totalOutflow)} ${data.unit}`,`${fmtQty(data.closingBalance)} ${data.unit}`])
   autoTable(doc,{
     startY:Y,margin:{left:ML,right:MR},head:[headers],body:rows,
     styles:{fontSize:7.5,cellPadding:{top:2,bottom:2,left:2,right:2},textColor:DARK,lineColor:BORDER,lineWidth:0.2},

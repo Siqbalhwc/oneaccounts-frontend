@@ -1,5 +1,6 @@
 ﻿"use client"
 
+import { fmtQty } from "@/lib/format-number"
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
@@ -590,10 +591,10 @@ export default function StockRegisterPage() {
                         </span>
                       </td>
                       <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>PKR {prod.sale_price?.toLocaleString()}</td>
-                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>{prod.opening_qty}</td>
-                      {!isConstruction && <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#10B981" }}>{inflow}</td>}
-                      {!isConstruction && <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#EF4444" }}>{outflow}</td>}
-                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{closing} {productUnit}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>{fmtQty(prod.opening_qty)}</td>
+                      {!isConstruction && <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#10B981" }}>{fmtQty(inflow)}</td>}
+                      {!isConstruction && <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#EF4444" }}>{fmtQty(outflow)}</td>}
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{fmtQty(closing)} {productUnit}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         {prod.image_path ? (
                           <img src={prod.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
@@ -650,9 +651,9 @@ export default function StockRegisterPage() {
                                   <tr key={idx}>
                                     <td style={{ padding: "4px 8px" }}>{row.step_label}</td>
                                     <td style={{ padding: "4px 8px" }}>{row.step_date ? new Date(row.step_date).toLocaleDateString() : "-"}</td>
-                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{row.qty}</td>
-                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{row.unit_price}</td>
-                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{row.running_qty}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{fmtQty(row.qty)}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{fmtQty(row.unit_price)}</td>
+                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{fmtQty(row.running_qty)}</td>
                                     <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{row.running_avg_cost}</td>
                                   </tr>
                                 ))}
@@ -664,12 +665,12 @@ export default function StockRegisterPage() {
                             const totalQty = rows.reduce((s: number, r: any) => s + Number(r.qty || 0), 0)
                             const totalValue = rows.reduce((s: number, r: any) => s + Number(r.qty || 0) * Number(r.unit_price || 0), 0)
                             const finalAvg = totalQty > 0 ? totalValue / totalQty : 0
-                            const formula = rows.map((r: any) => "(" + Number(r.qty) + " x " + Number(r.unit_price).toFixed(2) + ")").join(" + ")
+                            const formula = rows.map((r: any) => "(" + fmtQty(r.qty) + " x " + Number(r.unit_price).toFixed(2) + ")").join(" + ")
                             return (
                               <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border)", fontSize: 12 }}>
                                 <div>{formula} = {totalValue.toFixed(2)}</div>
-                                <div>{totalValue.toFixed(2)} / {totalQty} = <b>{finalAvg.toFixed(2)}</b></div>
-                                <div style={{ marginTop: 4, color: "var(--text-muted)" }}>Current Average Cost (as of last recorded event, {totalQty} units): <b>{finalAvg.toFixed(2)}</b></div>
+                                <div>{totalValue.toFixed(2)} / {fmtQty(totalQty)} = <b>{finalAvg.toFixed(2)}</b></div>
+                                <div style={{ marginTop: 4, color: "var(--text-muted)" }}>Current Average Cost (as of last recorded event, {fmtQty(totalQty)} units): <b>{finalAvg.toFixed(2)}</b></div>
                               </div>
                             )
                           })()}

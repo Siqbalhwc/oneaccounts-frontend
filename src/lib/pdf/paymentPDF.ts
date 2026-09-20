@@ -3,6 +3,7 @@
  * Generates a supplier payment PDF – style matched to invoice (square, 6mm rows, white column lines)
  */
 
+import { fmtQty } from "../format-number"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -228,7 +229,7 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
       i,               // image index
       i + 1,           // row number
       desc,
-      item.qty.toString(),
+      fmtQty(item.qty),
       pkr(item.unit_price),
       pkr(item.total),
     ]

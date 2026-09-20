@@ -12,6 +12,7 @@ const isBlank = (v: any) => v === "" || v === null || v === undefined
 const r4 = (n: number) => Math.round(n * 10000) / 10000
 const r2 = (n: number) => Math.round(n * 100) / 100
 const r6 = (n: number) => Math.round(n * 1000000) / 1000000
+const r3 = (n: number) => Math.round(n * 1000) / 1000
 
 export const getLock = (line: any): CalcLock => line?.calc_lock || "total"
 
@@ -72,11 +73,11 @@ export function setLineLock(line: any, lock: CalcLock): any {
 export function lineDisplay(line: any, field: "qty" | "unit_price" | "total"): string | number {
   const lock = getLock(line)
   if (field === "qty") {
-    if (lock === "qty" || line.calc_shadow === "qty") return isBlank(line.qty) ? "" : r4(Number(line.qty))
+    if (lock === "qty" || line.calc_shadow === "qty") return isBlank(line.qty) ? "" : r3(Number(line.qty))
     return line.qty ?? ""
   }
   if (field === "unit_price") {
-    if (lock === "rate" || line.calc_shadow === "unit_price") return isBlank(line.unit_price) ? "" : r4(Number(line.unit_price))
+    if (lock === "rate" || line.calc_shadow === "unit_price") return isBlank(line.unit_price) ? "" : r3(Number(line.unit_price))
     return line.unit_price ?? ""
   }
   if (lock === "total") {

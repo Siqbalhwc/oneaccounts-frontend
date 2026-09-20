@@ -1,5 +1,6 @@
 "use client"
 
+import { fmtQty } from "@/lib/format-number"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
@@ -320,7 +321,7 @@ export default function CashSaleDetailPage() {
                       </span>
                     </td>
                     <td style={{ color: "var(--text-muted)" }}>{item.product_code ? item.description : ""}</td>
-                    <td style={{ textAlign: "center" }}>{item.qty}</td>
+                    <td style={{ textAlign: "center" }}>{fmtQty(item.qty)}</td>
                     <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
                     <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
                   </tr>

@@ -1,3 +1,4 @@
+import { fmtQty } from "../format-number"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -322,7 +323,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
       i,               // image index (will be drawn manually)
       i + 1,
       desc,
-      item.qty.toString(),
+      fmtQty(item.qty),
       pkr(item.unit_price),
     ]
     if (hasTax) {

@@ -1,5 +1,6 @@
 ﻿"use client"
 
+import { fmtQty } from "@/lib/format-number"
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
@@ -253,7 +254,7 @@ export default function ProductLedgerPage() {
         <div className="summary-item">
           <div className="summary-label">Closing Balance</div>
           <div className="summary-value" style={{ color: closingBalance >= 0 ? "#10B981" : "#EF4444" }}>
-            {closingBalance} {product?.unit || "PCS"}
+            {fmtQty(closingBalance)} {product?.unit || "PCS"}
           </div>
         </div>
       </div>

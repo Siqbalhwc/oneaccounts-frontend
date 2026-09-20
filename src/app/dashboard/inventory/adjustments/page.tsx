@@ -1,5 +1,6 @@
 "use client"
 
+import { fmtQty } from "@/lib/format-number"
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
@@ -294,7 +295,7 @@ export default function InventoryAdjustmentsPage() {
                     <tr key={adj.id}>
                       <td style={{ ...tdStyle, whiteSpace: "nowrap" }}><span style={{ fontWeight: 600, color: "var(--primary)" }}>{adj.product?.code || "—"}</span></td>
                       <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{adj.product?.name || "—"}</td>
-                      <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap", color: adj.qty >= 0 ? "#10B981" : "#EF4444", fontWeight: 600 }}>{adj.qty > 0 ? "+" : ""}{adj.qty}</td>
+                      <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap", color: adj.qty >= 0 ? "#10B981" : "#EF4444", fontWeight: 600 }}>{adj.qty > 0 ? "+" : ""}{fmtQty(adj.qty)}</td>
                       <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{new Date(adj.date).toLocaleDateString()}</td>
                       <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{adj.reason || "—"}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>

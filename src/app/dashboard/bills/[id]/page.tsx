@@ -1,5 +1,6 @@
 ﻿"use client"
 
+import { fmtQty } from "@/lib/format-number"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
@@ -363,7 +364,7 @@ export default function BillDetailPage() {
                 {bill.items.map(item => (
                   <tr key={item.id}>
                     <td>{item.description}</td>
-                    <td style={{ textAlign: "center" }}>{item.qty}</td>
+                    <td style={{ textAlign: "center" }}>{fmtQty(item.qty)}</td>
                     <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
                     {taxEnabled && (
                       <td style={{ textAlign: "right", color: "var(--text-muted)" }}>

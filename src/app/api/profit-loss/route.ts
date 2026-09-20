@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     code: a.code,
     name: a.name,
     type: a.type,
-    net: netMap[a.id] || 0,
+    net: Math.round((netMap[a.id] || 0) * 100) / 100,
   }))
 
   return NextResponse.json(result)

@@ -3,6 +3,7 @@
  * Generates a purchase bill PDF using the same square‑edged format as invoices.
  */
 
+import { fmtQty } from "../format-number"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -212,7 +213,7 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
     const row = [
       i + 1,
       item.description || "",
-      item.qty || 1,
+      fmtQty(item.qty || 1),
       pkr(item.unit_price || 0),
     ]
     if (hasTax) {

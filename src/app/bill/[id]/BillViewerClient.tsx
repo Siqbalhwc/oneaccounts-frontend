@@ -1,5 +1,6 @@
 "use client"
 
+import { fmtQty } from "@/lib/format-number"
 import { useEffect, useState } from "react"
 
 export default function BillViewerClient({ id }: { id: string }) {
@@ -111,7 +112,7 @@ export default function BillViewerClient({ id }: { id: string }) {
                     <td style={{ padding: "10px 4px", color: "#0f172a", lineHeight: 1.4 }}>
                       {item.description || item.product_name || "—"}
                     </td>
-                    <td style={{ padding: "10px 4px", textAlign: "center", color: "#475569" }}>{item.qty}</td>
+                    <td style={{ padding: "10px 4px", textAlign: "center", color: "#475569" }}>{fmtQty(item.qty)}</td>
                     <td style={{ padding: "10px 4px", textAlign: "right", color: "#475569" }}>
                       PKR {Number(item.unit_price).toLocaleString()}
                     </td>
