@@ -289,6 +289,8 @@ export default function NewBillPage() {
       .single()
       .then(async ({ data: bill }) => {
         if (!bill) return
+        // A returned bill is locked: send the user to its read-only page instead
+        if (bill.status === "Returned") { router.replace(`/dashboard/bills/${bill.id}`); return }
         setSupplierId(bill.party_id)
         const supp = suppliers.find((s: any) => s.id === bill.party_id)
         if (supp) { setSelectedSupplier(supp); setSupplierSearch(supp.name) }

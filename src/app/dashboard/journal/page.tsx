@@ -110,6 +110,7 @@ export default function JournalPage() {
                   switch (firstLine.source_type) {
                     case "sale_invoice": source = "Sales Invoice"; break
                     case "purchase_bill": source = "Purchase Bill"; break
+                    case "purchase_return": source = "Purchase Return"; break
                     case "receipt": source = "Receipt"; break
                     case "payment": source = "Payment"; break
                     case "inventory_adjustment": source = "Inventory Adjustment"; break

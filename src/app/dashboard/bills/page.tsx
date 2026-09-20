@@ -3,11 +3,12 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown, Undo2 } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 import ActionSlots from "@/components/ActionSlots"
+import PurchaseReturnModal from "@/components/PurchaseReturnModal"
 
 type SortField = "invoice_no" | "date" | "supplier" | "total" | "status"
 type SortDir = "asc" | "desc"
@@ -47,6 +48,7 @@ export default function BillsPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [companyId, setCompanyId] = useState("")
+  const [returnBill, setReturnBill] = useState<any | null>(null)
 
   const [supplierMap, setSupplierMap] = useState<Record<number, { name: string; phone: string }>>({})
 
@@ -275,11 +277,16 @@ export default function BillsPage() {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📦 Purchase Bills</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Create and manage bills" : "View bills"}</p>
         </div>
-        {canEdit && (
-          <button className="btn" onClick={() => router.push("/dashboard/bills/new")}>
-            <Plus size={16} /> New Bill
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn" onClick={() => router.push("/dashboard/purchase-returns")} title="View all purchase returns">
+            <Undo2 size={16} /> Purchase Returns
           </button>
-        )}
+          {canEdit && (
+            <button className="btn" onClick={() => router.push("/dashboard/bills/new")}>
+              <Plus size={16} /> New Bill
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="summary-grid">
@@ -340,7 +347,7 @@ export default function BillsPage() {
                       <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
                         PKR {bill.total?.toLocaleString()}
                       </td>
-                      <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, whiteSpace: "nowrap", color: bill.status === "Paid" ? "#10B981" : bill.status === "Unpaid" ? "#EF4444" : "#F59E0B" }}>
+                      <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, whiteSpace: "nowrap", color: bill.status === "Paid" ? "#10B981" : bill.status === "Unpaid" ? "#EF4444" : bill.status === "Returned" ? "#3B82F6" : "#F59E0B" }}>
                         {bill.status}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
@@ -362,10 +369,18 @@ export default function BillsPage() {
                           } : null}
                           overflow={[
                             {
+                              key: "return",
+                              label: "Return bill",
+                              color: "#EF4444",
+                              hidden: !(canEdit && bill.status !== "Returned"),
+                              icon: <Undo2 size={14} />,
+                              onClick: () => setReturnBill(bill),
+                            },
+                            {
                               key: "reminder",
                               label: "Send payment reminder",
                               color: "#F97316",
-                              hidden: !(hasFeature("payment_reminders") && bill.status !== "Paid"),
+                              hidden: !(hasFeature("payment_reminders") && bill.status !== "Paid" && bill.status !== "Returned"),
                               icon: (
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -385,6 +400,13 @@ export default function BillsPage() {
           </table>
         </div>
       </div>
+      {returnBill && (
+        <PurchaseReturnModal
+          bill={{ id: returnBill.id, invoice_no: returnBill.invoice_no, date: returnBill.date, total: returnBill.total, company_id: returnBill.company_id }}
+          onClose={() => setReturnBill(null)}
+          onDone={(returnId) => router.push(`/dashboard/purchase-returns/${returnId}`)}
+        />
+      )}
     </div>
   )
 }

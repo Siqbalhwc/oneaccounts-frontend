@@ -53,6 +53,8 @@ export default function JournalEntryDrawer({ entryId, onClose }: JournalEntryDra
         return `/dashboard/invoices/${id}`
       case "purchase_bill":
         return `/dashboard/bills/${id}`
+      case "purchase_return":
+        return `/dashboard/purchase-returns/${id}`
       case "receipt":
         return `/dashboard/receipts/${id}`
       case "payment":

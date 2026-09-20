@@ -94,7 +94,7 @@ export default function VendorLedgerPage() {
         .from("invoices")
         .select("id, total, invoice_no, date, type")
         .eq("party_id", selectedSupplierId)
-        .eq("type", "purchase")
+        .in("type", ["purchase", "purchase_return"])
         .is("deleted_at", null)
         .order("date", { ascending: true })
 
@@ -167,20 +167,24 @@ export default function VendorLedgerPage() {
 
       // Bills
       for (const bill of allBills || []) {
-        const credit = bill.total || 0
+        // A purchase return reverses the bill: it is a DEBIT on the supplier (reduces what we owe)
+        const isReturn = bill.type === "purchase_return"
+        const credit = isReturn ? 0 : (bill.total || 0)
+        const debit = isReturn ? (bill.total || 0) : 0
         if (bill.date < startDate) {
           openingCredit += credit
+          openingDebit += debit
           continue
         }
         if (bill.date > endDate) continue
 
         periodLines.push({
-          id: `bill-${bill.id}`,
-          entry_no: `BILL-${bill.invoice_no}`,
+          id: isReturn ? `pret-${bill.id}` : `bill-${bill.id}`,
+          entry_no: isReturn ? bill.invoice_no : `BILL-${bill.invoice_no}`,
           date: bill.date,
           created_at: billCreatedAtById.get(bill.id) || `${bill.date}T00:00:00`,
-          description: `Purchase Bill ${bill.invoice_no}`,
-          debit: 0,
+          description: isReturn ? `Purchase Return ${bill.invoice_no}` : `Purchase Bill ${bill.invoice_no}`,
+          debit,
           credit,
           running_balance: 0,
         })

@@ -9,6 +9,8 @@ import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
+import { useRole } from "@/contexts/RoleContext"
+import PurchaseReturnModal from "@/components/PurchaseReturnModal"
 
 interface BillItem {
   id: number
@@ -36,6 +38,7 @@ interface Bill {
   reference?: string
   notes?: string
   party_id: number
+  company_id?: string
   items?: BillItem[]
   supplier?: {
     name: string
@@ -74,6 +77,10 @@ export default function BillDetailPage() {
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
   const [attachments, setAttachments] = useState<any[]>([])
+  const { role } = useRole()
+  const canReturn = role === "admin" || role === "accountant"
+  const [showReturn, setShowReturn] = useState(false)
+  const [returnDoc, setReturnDoc] = useState<{ id: number; invoice_no: string } | null>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -139,6 +146,17 @@ export default function BillDetailPage() {
         asset_id: item.asset_id ?? null,
       }))
 
+      if (b.status === "Returned") {
+        const { data: rd } = await supabase
+          .from("invoices")
+          .select("id, invoice_no")
+          .eq("type", "purchase_return")
+          .eq("original_invoice_id", b.id)
+          .is("deleted_at", null)
+          .maybeSingle()
+        if (!cancelled) setReturnDoc(rd || null)
+      }
+
       if (!cancelled) {
         setBill(b)
         setLoading(false)
@@ -196,7 +214,7 @@ export default function BillDetailPage() {
       total:      bill.total,
       totalTax:   bill.total_tax || 0,
       paid:       bill.paid || 0,
-      balanceDue: bill.total - (bill.paid || 0),
+      balanceDue: bill.status === "Returned" ? 0 : bill.total - (bill.paid || 0),
       whtRate:    whtData?.wht_rate,
       whtAmount:  whtData?.wht_amount,
     }
@@ -208,7 +226,8 @@ export default function BillDetailPage() {
   if (loading) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Loading…</div>
   if (!bill) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Bill not found</div>
 
-  const balanceDue = bill.total - (bill.paid || 0)
+  const isReturned = bill.status === "Returned"
+  const balanceDue = isReturned ? 0 : bill.total - (bill.paid || 0)
 
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
@@ -227,6 +246,7 @@ export default function BillDetailPage() {
         .btn-primary:hover { background: var(--primary-hover); }
         .btn-success { background: #25D366; color: white; border-color: #25D366; }
         .btn-success:hover { background: #22C55E; }
+        .badge-returned { background: #1D4ED8; color: #DBEAFE; padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; }
         .btn-asset { color: var(--primary); border-color: var(--primary); padding: 4px 10px; font-size: 11px; }
         .btn-asset:hover { background: var(--primary); color: var(--primary-text); }
         .btn-view-asset { color: #10B981; border-color: #10B981; padding: 4px 10px; font-size: 11px; }
@@ -261,9 +281,17 @@ export default function BillDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" onClick={() => router.push(`/dashboard/bills/new?id=${bill.id}`)}>
-            ✏️ Edit
-          </button>
+          {!isReturned && (
+            <button className="btn" onClick={() => router.push(`/dashboard/bills/new?id=${bill.id}`)}>
+              ✏️ Edit
+            </button>
+          )}
+          {!isReturned && canReturn && (
+            <button className="btn" onClick={() => setShowReturn(true)} title="Fully reverse this bill">
+              ↩️ Return
+            </button>
+          )}
+          {isReturned && <span className="badge-returned">↩️ Returned</span>}
           {waLink && hasFeature("whatsapp_invoice") && (
             <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
               <Send size={16} /> WhatsApp
@@ -286,8 +314,16 @@ export default function BillDetailPage() {
           <div><div className="label">Due</div><div className="value" style={{ color: balanceDue > 0 ? "#EF4444" : "#10B981", fontWeight: 600 }}>PKR {balanceDue.toLocaleString()}</div></div>
           <div>
             <div className="label">Status</div>
-            <span style={{ padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 700, background: bill.status === "Paid" ? "#065F46" : "#7C2D12", color: bill.status === "Paid" ? "#6EE7B7" : "#FCA5A5" }}>{bill.status}</span>
+            <span style={{ padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 700, background: bill.status === "Paid" ? "#065F46" : isReturned ? "#1D4ED8" : "#7C2D12", color: bill.status === "Paid" ? "#6EE7B7" : isReturned ? "#DBEAFE" : "#FCA5A5" }}>{bill.status}</span>
           </div>
+          {isReturned && returnDoc && (
+            <div>
+              <div className="label">Return Document</div>
+              <div className="value">
+                <a href={`/dashboard/purchase-returns/${returnDoc.id}`} style={{ color: "var(--primary)", fontWeight: 600 }}>{returnDoc.invoice_no}</a>
+              </div>
+            </div>
+          )}
           {bill.reference && <div><div className="label">Reference</div><div className="value">{bill.reference}</div></div>}
           {bill.notes && <div><div className="label">Notes</div><div className="value">{bill.notes}</div></div>}
           {bill.created_by && <div><div className="label">Created by</div><div className="value">{bill.created_by}</div></div>}
@@ -350,7 +386,7 @@ export default function BillDetailPage() {
                           >
                             <Eye size={12} /> View
                           </button>
-                        ) : (
+                        ) : isReturned ? null : (
                           <button
                             className="btn btn-asset"
                             onClick={() => router.push(`/dashboard/assets/new?billId=${bill.id}&itemId=${item.id}`)}
@@ -397,6 +433,14 @@ export default function BillDetailPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {showReturn && bill.company_id && (
+        <PurchaseReturnModal
+          bill={{ id: bill.id, invoice_no: bill.invoice_no, date: bill.date, total: bill.total, company_id: bill.company_id }}
+          onClose={() => setShowReturn(false)}
+          onDone={(returnId) => router.push(`/dashboard/purchase-returns/${returnId}`)}
+        />
       )}
 
       {bill && (
