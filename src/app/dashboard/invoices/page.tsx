@@ -3,11 +3,12 @@
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown, Undo2 } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 import ActionSlots from "@/components/ActionSlots"
+import SalesReturnModal from "@/components/SalesReturnModal"
 
 type SortField = "invoice_no" | "date" | "customer" | "total" | "status"
 type SortDir = "asc" | "desc"
@@ -43,6 +44,7 @@ export default function InvoicesPage() {
   const canEdit = role === "admin" || role === "accountant"
 
   const [invoices, setInvoices] = useState<any[]>([])
+  const [returnInvoice, setReturnInvoice] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [sortField, setSortField] = useState<SortField>("date")
@@ -301,9 +303,12 @@ export default function InvoicesPage() {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🧾 Sales Invoices</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Create and manage invoices" : "View invoices"}</p>
         </div>
-        {canEdit && (
-          <button className="btn" onClick={() => router.push("/dashboard/invoices/new")}><Plus size={16} /> New Invoice</button>
-        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn" onClick={() => router.push("/dashboard/sales-returns")} title="View all sales returns"><Undo2 size={16} /> Sales Returns</button>
+          {canEdit && (
+            <button className="btn" onClick={() => router.push("/dashboard/invoices/new")}><Plus size={16} /> New Invoice</button>
+          )}
+        </div>
       </div>
 
       {/* ── Summary cards ── */}
@@ -361,7 +366,8 @@ export default function InvoicesPage() {
                   const custName = cust?.name || "—"
                   const statusColor =
                     inv.status === "Paid"   ? "#10B981" :
-                    inv.status === "Unpaid" ? "#EF4444" : "#F59E0B"
+                    inv.status === "Unpaid" ? "#EF4444" :
+                    inv.status === "Returned" ? "#3B82F6" : "#F59E0B"
                   return (
                     <tr key={inv.id}>
                       <td style={tdStyle}>
@@ -396,10 +402,18 @@ export default function InvoicesPage() {
                           } : null}
                           overflow={[
                             {
+                              key: "return",
+                              label: "Return invoice",
+                              color: "#EF4444",
+                              hidden: !(canEdit && inv.status !== "Returned"),
+                              icon: <Undo2 size={14} />,
+                              onClick: () => setReturnInvoice(inv),
+                            },
+                            {
                               key: "reminder",
                               label: "Send Reminder",
                               color: "#F97316",
-                              hidden: !(hasFeature("payment_reminders") && inv.status !== "Paid"),
+                              hidden: !(hasFeature("payment_reminders") && inv.status !== "Paid" && inv.status !== "Returned"),
                               icon: (
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -419,6 +433,13 @@ export default function InvoicesPage() {
           </table>
         </div>
       </div>
+      {returnInvoice && (
+        <SalesReturnModal
+          invoice={{ id: returnInvoice.id, invoice_no: returnInvoice.invoice_no, date: returnInvoice.date, total: returnInvoice.total, company_id: returnInvoice.company_id }}
+          onClose={() => setReturnInvoice(null)}
+          onDone={(returnId) => router.push(`/dashboard/sales-returns/${returnId}`)}
+        />
+      )}
     </div>
   )
 }

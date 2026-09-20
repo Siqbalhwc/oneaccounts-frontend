@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Eye, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { Eye, Search, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 
@@ -213,13 +213,15 @@ export default function SalesReturnsPage() {
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>↩️ Sales Returns</h1>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Create and manage returns" : "View returns"}</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button className="btn-icon" onClick={() => router.push("/dashboard/invoices")} title="Back to Sales Invoices" style={{ padding: 8 }}>
+            <ArrowLeft size={16} />
+          </button>
+          <div>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>↩️ Sales Returns</h1>
+            <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>To return an invoice, open it from Sales Invoices and use Return</p>
+          </div>
         </div>
-        {canEdit && (
-          <button className="btn" onClick={() => router.push("/dashboard/sales-returns/new")}><Plus size={16} /> New Return</button>
-        )}
       </div>
 
       <div className="summary-grid">
@@ -294,7 +296,7 @@ export default function SalesReturnsPage() {
                       <td style={tdStyle}>{ret.date}</td>
                       <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{custName}</td>
                       <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600 }}>PKR {ret.total?.toLocaleString()}</td>
-                      <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, color: ret.status === "Paid" ? "#10B981" : "#EF4444" }}>{ret.status}</td>
+                      <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, color: "#3B82F6" }}>Returned</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         <button className="btn-icon" onClick={() => router.push(`/dashboard/sales-returns/${ret.id}`)} title="View">
                           <Eye size={13} />

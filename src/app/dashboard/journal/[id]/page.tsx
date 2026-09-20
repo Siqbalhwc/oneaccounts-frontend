@@ -36,6 +36,12 @@ function getSourceLink(sourceType: string, sourceId: number): string {
       return `/dashboard/bills/${sourceId}`
     case "purchase_return":
       return `/dashboard/purchase-returns/${sourceId}`
+    case "sale_return":
+      return `/dashboard/sales-returns/${sourceId}`
+    case "cash_sale":
+    case "cash_sale_reversal":
+    case "cash_sale_return":
+      return `/dashboard/cash-sales/${sourceId}`
     case "receipt":
       return `/dashboard/receipts/${sourceId}`
     case "payment":

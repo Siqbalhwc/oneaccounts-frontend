@@ -9,6 +9,8 @@ import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
+import { useRole } from "@/contexts/RoleContext"
+import CashSaleReturnModal from "@/components/CashSaleReturnModal"
 
 interface CashSaleItem {
   id: number
@@ -32,6 +34,9 @@ interface CashSale {
   notes?: string
   party_id: number | null
   created_by?: string
+  status?: string
+  returned_at?: string | null
+  company_id?: string
   items?: CashSaleItem[]
   customer?: {
     name: string
@@ -58,6 +63,9 @@ export default function CashSaleDetailPage() {
   const [sale, setSale] = useState<CashSale | null>(null)
   const [loading, setLoading] = useState(true)
   const [companyId, setCompanyId] = useState<string>("")
+  const { role } = useRole()
+  const canReturn = role === "admin" || role === "accountant"
+  const [showReturn, setShowReturn] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -128,6 +136,7 @@ export default function CashSaleDetailPage() {
       })
   }, [companyId, saleId])
 
+  const isReturned = !!sale && sale.status === "returned"
   const waLink = sale && sale.customer
     ? getWhatsAppLink(
         sale.customer.phone || "",
@@ -162,7 +171,7 @@ export default function CashSaleDetailPage() {
       paymentTerms: null,
       notes: sale.notes || null,
       createdBy: sale.created_by || "—",
-      status: "Paid",       // cash sales are always paid
+      status: sale.status === "returned" ? "Returned" : "Paid",       // cash sales are paid unless returned
 
       items: (sale.items || []).map(item => ({
         description: item.description || "",
@@ -207,6 +216,7 @@ export default function CashSaleDetailPage() {
         .btn-primary:hover { background: var(--primary-hover); }
         .btn-success { background: #25D366; color: white; border-color: #25D366; }
         .btn-success:hover { background: #22C55E; }
+        .badge-returned { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: #1D4ED8; color: #DBEAFE; }
         .badge-paid { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: #065F46; color: #6EE7B7; }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
         .hide-mobile { }
@@ -227,7 +237,9 @@ export default function CashSaleDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" onClick={() => router.push(`/dashboard/cash-sales/new?id=${sale.id}`)}>✏️ Edit</button>
+          {!isReturned && <button className="btn" onClick={() => router.push(`/dashboard/cash-sales/new?id=${sale.id}`)}>✏️ Edit</button>}
+          {!isReturned && canReturn && <button className="btn" onClick={() => setShowReturn(true)} title="Fully reverse this cash sale">↩️ Return</button>}
+          {isReturned && <span className="badge-returned">↩️ Returned</span>}
           {waLink && hasFeature("whatsapp_invoice") && (
             <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
               <Send size={14} /> WhatsApp
@@ -272,8 +284,9 @@ export default function CashSaleDetailPage() {
           </div>
           <div>
             <div className="label">Status</div>
-            <span className="badge-paid">PAID</span>
+            {isReturned ? <span className="badge-returned">RETURNED</span> : <span className="badge-paid">PAID</span>}
           </div>
+          {isReturned && sale.returned_at && <div><div className="label">Returned On</div><div className="value">{sale.returned_at}</div></div>}
           {sale.reference && <div><div className="label">Reference</div><div className="value">{sale.reference}</div></div>}
           {sale.notes && <div><div className="label">Notes</div><div className="value">{sale.notes}</div></div>}
         </div>
@@ -316,6 +329,14 @@ export default function CashSaleDetailPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {showReturn && sale && sale.company_id && (
+        <CashSaleReturnModal
+          sale={{ id: sale.id, sale_no: sale.sale_no, date: sale.date, total: sale.total, company_id: sale.company_id }}
+          onClose={() => setShowReturn(false)}
+          onDone={() => window.location.reload()}
+        />
       )}
 
       {sale && (

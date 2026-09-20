@@ -176,6 +176,8 @@ function NewInvoicePageContent() {
       .single()
       .then(({ data: bill }) => {
         if (!bill) return
+        // A returned invoice is locked: send the user to its read-only page instead
+        if (bill.status === "Returned") { router.replace(`/dashboard/invoices/${bill.id}`); return }
         setCustomerId(bill.party_id)
         const cust = customers.find((s: any) => s.id === bill.party_id)
         if (cust) { setSelectedCustomer(cust); setCustomerSearch(cust.name) }

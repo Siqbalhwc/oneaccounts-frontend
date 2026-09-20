@@ -111,6 +111,10 @@ export default function JournalPage() {
                     case "sale_invoice": source = "Sales Invoice"; break
                     case "purchase_bill": source = "Purchase Bill"; break
                     case "purchase_return": source = "Purchase Return"; break
+                    case "sale_return": source = "Sales Return"; break
+                    case "cash_sale": source = "Cash Sale"; break
+                    case "cash_sale_reversal": source = "Cash Sale (edit reversal)"; break
+                    case "cash_sale_return": source = "Cash Sale Return"; break
                     case "receipt": source = "Receipt"; break
                     case "payment": source = "Payment"; break
                     case "inventory_adjustment": source = "Inventory Adjustment"; break

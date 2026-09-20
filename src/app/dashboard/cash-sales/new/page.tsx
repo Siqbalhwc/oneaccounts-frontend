@@ -63,6 +63,8 @@ function NewCashSalePageContent() {
       .single()
       .then(async ({ data: cs }) => {
         if (!cs) { setError("Cash sale not found"); setLoadingEdit(false); return }
+        // A returned cash sale is locked: send the user to its read-only page instead
+        if (cs.status === "returned") { router.replace("/dashboard/cash-sales/" + cs.id); return }
 
         setEditSaleNo(cs.sale_no)
         setSaleDate(cs.date)

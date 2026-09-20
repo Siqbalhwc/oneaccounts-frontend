@@ -9,6 +9,8 @@ import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
+import { useRole } from "@/contexts/RoleContext"
+import SalesReturnModal from "@/components/SalesReturnModal"
 
 interface InvoiceItem {
   id: number
@@ -39,6 +41,7 @@ interface Invoice {
   reference?: string
   notes?: string
   party_id: number
+  company_id?: string
   created_by?: string
   items?: InvoiceItem[]
   customer?: {
@@ -78,6 +81,10 @@ export default function InvoiceDetailPage() {
   const [companyId, setCompanyId] = useState<string>("")
   const [journalLines, setJournalLines] = useState<JournalLine[]>([])
   const [attachments, setAttachments] = useState<any[]>([])
+  const { role } = useRole()
+  const canReturn = role === "admin" || role === "accountant"
+  const [showReturn, setShowReturn] = useState(false)
+  const [returnDoc, setReturnDoc] = useState<{ id: number; invoice_no: string } | null>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -133,6 +140,17 @@ export default function InvoiceDetailPage() {
           inv.items = []
         }
 
+        if (inv.status === "Returned") {
+          const { data: rd } = await supabase
+            .from("invoices")
+            .select("id, invoice_no")
+            .eq("type", "sale_return")
+            .eq("original_invoice_id", inv.id)
+            .is("deleted_at", null)
+            .maybeSingle()
+          setReturnDoc(rd || null)
+        }
+
         setInvoice(inv)
         setLoading(false)
       })
@@ -185,7 +203,7 @@ export default function InvoiceDetailPage() {
         tax_rate: item.tax_rate || 0, tax_amount: item.tax_amount || 0
       })),
       subtotal: subTotal, total: invoice.total, totalTax: invoice.total_tax || 0,
-      paid: invoice.paid || 0, balanceDue: invoice.total - (invoice.paid || 0)
+      paid: invoice.paid || 0, balanceDue: invoice.status === "Returned" ? 0 : invoice.total - (invoice.paid || 0)
     }
     const doc = await generateInvoicePDF(pdfData)
     doc.save(`Invoice_${invoice.invoice_no}.pdf`)
@@ -194,9 +212,9 @@ export default function InvoiceDetailPage() {
   if (loading) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Loading…</div>
   if (!invoice) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Invoice not found</div>
 
-  const balanceDue = invoice.total - (invoice.paid || 0)
-  const isOverdue  = invoice.status !== "Paid" && new Date(invoice.due_date) < new Date()
   const isReturned = invoice.status === "Returned"
+  const balanceDue = isReturned ? 0 : invoice.total - (invoice.paid || 0)
+  const isOverdue  = invoice.status !== "Paid" && new Date(invoice.due_date) < new Date()
   const totalDebit  = journalLines.reduce((s, l) => s + l.debit, 0)
   const totalCredit = journalLines.reduce((s, l) => s + l.credit, 0)
 
@@ -245,7 +263,7 @@ export default function InvoiceDetailPage() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {!isReturned && <button className="btn" onClick={() => router.push(`/dashboard/invoices/new?id=${invoice.id}`)}>✏️ Edit</button>}
-          {!isReturned && <button className="btn" onClick={() => router.push(`/dashboard/sales-returns/new?original_invoice_id=${invoice.id}`)}>↩️ Return</button>}
+          {!isReturned && canReturn && <button className="btn" onClick={() => setShowReturn(true)} title="Fully reverse this invoice">↩️ Return</button>}
           {isReturned && <span className="badge badge-returned">↩️ Returned</span>}
           {waLink && hasFeature("whatsapp_invoice") && <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success"><Send size={14} /> WhatsApp</a>}
           {reminderLink && hasFeature("payment_reminders") && isOverdue && !isReturned && <a href={reminderLink} target="_blank" rel="noopener noreferrer" className="btn btn-warning"><Send size={14} /> Remind</a>}
@@ -290,6 +308,14 @@ export default function InvoiceDetailPage() {
             <div className="label">Status</div>
             <span className={`badge ${invoice.status === "Paid" ? "badge-paid" : invoice.status === "Returned" ? "badge-returned" : invoice.status === "Overdue" ? "badge-overdue" : "badge-unpaid"}`}>{invoice.status}</span>
           </div>
+          {isReturned && returnDoc && (
+            <div>
+              <div className="label">Return Document</div>
+              <div className="value">
+                <a href={`/dashboard/sales-returns/${returnDoc.id}`} style={{ color: "var(--primary)", fontWeight: 600 }}>{returnDoc.invoice_no}</a>
+              </div>
+            </div>
+          )}
           {invoice.reference && <div><div className="label">Reference</div><div className="value">{invoice.reference}</div></div>}
           {invoice.notes && <div><div className="label">Notes</div><div className="value">{invoice.notes}</div></div>}
         </div>
@@ -371,6 +397,14 @@ export default function InvoiceDetailPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {showReturn && invoice.company_id && (
+        <SalesReturnModal
+          invoice={{ id: invoice.id, invoice_no: invoice.invoice_no, date: invoice.date, total: invoice.total, company_id: invoice.company_id }}
+          onClose={() => setShowReturn(false)}
+          onDone={(returnId) => router.push(`/dashboard/sales-returns/${returnId}`)}
+        />
       )}
 
       {attachments.length > 0 && (

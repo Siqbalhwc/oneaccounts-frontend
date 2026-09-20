@@ -3,13 +3,14 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Eye, Edit, Search, ArrowUpDown, ArrowUp, ArrowDown, FileText, Send } from "lucide-react"
+import { Plus, Eye, Edit, Search, ArrowUpDown, ArrowUp, ArrowDown, FileText, Send, Undo2 } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import { useCompany } from "@/contexts/CompanyContext"
 import ActionSlots from "@/components/ActionSlots"
+import CashSaleReturnModal from "@/components/CashSaleReturnModal"
 
 type SortField = "sale_no" | "date" | "customer" | "total"
 type SortDir = "asc" | "desc"
@@ -44,6 +45,7 @@ export default function CashSalesListPage() {
   const canEdit = role === "admin" || role === "accountant"
 
   const [sales, setSales] = useState<any[]>([])
+  const [returnSale, setReturnSale] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [sortField, setSortField] = useState<SortField>("date")
@@ -119,11 +121,13 @@ export default function CashSalesListPage() {
     return sortDir === "asc" ? (valA < valB ? -1 : 1) : (valA > valB ? -1 : 1)
   })
 
-  const totalSales = sortedFiltered.length
-  const totalAmount = sortedFiltered.reduce((s, i) => s + (i.total || 0), 0)
+  // returned sales are not counted: the cash was refunded
+  const activeSales = sortedFiltered.filter(s => s.status !== "returned")
+  const totalSales = activeSales.length
+  const totalAmount = activeSales.reduce((s, i) => s + (i.total || 0), 0)
   const today = new Date().toISOString().split("T")[0]
-  const todaySales = sortedFiltered.filter(s => s.date === today).length
-  const todayAmount = sortedFiltered.filter(s => s.date === today).reduce((s, i) => s + (i.total || 0), 0)
+  const todaySales = activeSales.filter(s => s.date === today).length
+  const todayAmount = activeSales.filter(s => s.date === today).reduce((s, i) => s + (i.total || 0), 0)
 
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir(prev => prev === "asc" ? "desc" : "asc")
@@ -401,6 +405,7 @@ export default function CashSalesListPage() {
                     <tr key={sale.id}>
                       <td style={tdStyle}>
                         <span style={{ fontWeight: 600, color: "var(--primary)" }}>{sale.sale_no}</span>
+                        {sale.status === "returned" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: "#3B82F6" }}>Returned</span>}
                       </td>
                       <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{sale.date}</td>
                       <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -416,7 +421,7 @@ export default function CashSalesListPage() {
                             title: "View",
                             onClick: () => router.push(`/dashboard/cash-sales/${sale.id}`),
                           }}
-                          slot2={{
+                          slot2={sale.status === "returned" ? null : {
                             icon: <Edit size={13} />,
                             title: "Edit",
                             onClick: () => router.push(`/dashboard/cash-sales/new?id=${sale.id}`),
@@ -428,6 +433,14 @@ export default function CashSalesListPage() {
                             onClick: () => sendWhatsApp(sale),
                           } : null}
                           overflow={[
+                            {
+                              key: "return",
+                              label: "Return cash sale",
+                              color: "#EF4444",
+                              hidden: !(canEdit && sale.status !== "returned"),
+                              icon: <Undo2 size={14} />,
+                              onClick: () => setReturnSale(sale),
+                            },
                             {
                               key: "pdf",
                               label: "PDF",
@@ -445,6 +458,13 @@ export default function CashSalesListPage() {
           </table>
         </div>
       </div>
+      {returnSale && (
+        <CashSaleReturnModal
+          sale={{ id: returnSale.id, sale_no: returnSale.sale_no, date: returnSale.date, total: returnSale.total, company_id: returnSale.company_id }}
+          onClose={() => setReturnSale(null)}
+          onDone={(saleId) => router.push(`/dashboard/cash-sales/${saleId}`)}
+        />
+      )}
     </div>
   )
 }
