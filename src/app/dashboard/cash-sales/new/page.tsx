@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 import { Suspense, useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
@@ -402,11 +402,6 @@ function NewCashSalePageContent() {
         </button>
       </div>
 
-      {savedSaleNo && (
-        <div style={{ marginTop: 12, textAlign: "center" }}>
-          <button className="cs-btn" onClick={() => router.push("/dashboard")}>Done</button>
-        </div>
-      )}
     </div>
   )
 }
