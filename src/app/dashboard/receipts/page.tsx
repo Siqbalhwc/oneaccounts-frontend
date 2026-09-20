@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
-import { Plus, Eye, Edit, Search, ArrowUpDown, ArrowUp, ArrowDown, Undo2 } from "lucide-react"
+import { Plus, Eye, Edit, Search, ArrowUpDown, ArrowUp, ArrowDown, Undo2, CheckCircle, AlertCircle, X } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
@@ -45,6 +45,17 @@ export default function ReceiptsPage() {
   const [sortField, setSortField] = useState<SortField>("date")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [companyId, setCompanyId] = useState("")
+  const [banner, setBanner] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [reverseTarget, setReverseTarget] = useState<any>(null)
+  const [reversing, setReversing] = useState(false)
+
+  useEffect(() => {
+    if (banner?.type === "success") {
+      const t = setTimeout(() => setBanner(null), 8000)
+      return () => clearTimeout(t)
+    }
+    return undefined
+  }, [banner])
   const [customerMap, setCustomerMap] = useState<Record<number, { name: string; phone: string; country_code?: string }>>({})
 
   useEffect(() => {
@@ -119,16 +130,35 @@ export default function ReceiptsPage() {
     return sortDir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />
   }
 
-  const handleReverse = async (receiptId: number) => {
-    if (!window.confirm("Reverse this receipt? This will undo all its effects.")) return
-    const { error } = await supabase.rpc('reverse_receipt_transaction', { p_receipt_id: receiptId, p_company_id: companyId })
-    if (error) alert(error.message)
-    else setReceipts(prev => prev.map(r => r.id === receiptId ? { ...r, status: 'reversed' } : r))
+  const handleReverse = (receiptId: number) => {
+    const rec = receipts.find(r => r.id === receiptId)
+    if (rec) setReverseTarget(rec)
+  }
+
+  const friendlyReverseError = (msg: string) => {
+    const m = (msg || "").toLowerCase()
+    if (m.includes("already reversed")) return "This receipt could not be reversed: it was not found, or it has already been reversed. Please refresh the page to see its current status."
+    return `The receipt could not be reversed. ${msg || "Please try again."}`
+  }
+
+  const confirmReverse = async () => {
+    if (!reverseTarget || reversing) return
+    const rec = reverseTarget
+    setReversing(true)
+    const { error } = await supabase.rpc('reverse_receipt_transaction', { p_receipt_id: rec.id, p_company_id: companyId })
+    setReversing(false)
+    setReverseTarget(null)
+    if (error) {
+      setBanner({ type: "error", text: friendlyReverseError(error.message) })
+      return
+    }
+    setReceipts(prev => prev.map(r => r.id === rec.id ? { ...r, status: 'reversed' } : r))
+    setBanner({ type: "success", text: `Receipt ${rec.receipt_no} has been reversed. The customer ledger and balances are updated.` })
   }
 
   const sendWhatsApp = (rec: any) => {
     const cust = customerMap[rec.party_id]
-    if (!cust?.phone) { alert("No phone number for this customer."); return }
+    if (!cust?.phone) { setBanner({ type: "error", text: "This customer has no phone number on file, so the WhatsApp message could not be sent." }); return }
     const code = (cust.country_code || "+92").replace(/\D/g, "")
     const phone = cust.phone.replace(/\D/g, "")
     const msg = `Dear ${cust.name}, Your receipt ${rec.receipt_no} of PKR ${rec.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/receipt/${rec.id}\nDate: ${rec.date}\nThank you for your business.\n- OneAccounts by Siqbal`
@@ -190,6 +220,14 @@ export default function ReceiptsPage() {
           </button>
         )}
       </div>
+
+      {banner && (
+        <div style={{ background: "var(--card)", border: `1px solid ${banner.type === "success" ? "var(--success)" : "var(--danger)"}`, color: "var(--text)", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          {banner.type === "success" ? <CheckCircle size={16} style={{ color: "var(--success)", flexShrink: 0 }} /> : <AlertCircle size={16} style={{ color: "var(--danger)", flexShrink: 0 }} />}
+          <span style={{ flex: 1 }}>{banner.text}</span>
+          <button onClick={() => setBanner(null)} aria-label="Dismiss" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", display: "inline-flex", padding: 0 }}><X size={14} /></button>
+        </div>
+      )}
 
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Receipts</div><div className="summary-value">{totalReceipts}</div></div>
@@ -284,6 +322,23 @@ export default function ReceiptsPage() {
           </table>
         </div>
       </div>
+      {reverseTarget && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => { if (!reversing) setReverseTarget(null) }}>
+          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, maxWidth: 440, width: "90%", boxShadow: "0 12px 32px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Reverse Receipt?</h3>
+            <p style={{ fontSize: 13, color: "var(--text)", margin: "0 0 10px 0", lineHeight: 1.5 }}>
+              You are about to reverse receipt <strong>{reverseTarget.receipt_no}</strong> from <strong>{customerMap[reverseTarget.party_id]?.name || "this customer"}</strong> for <strong>PKR {Number(reverseTarget.amount || 0).toLocaleString()}</strong>.
+            </p>
+            <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px 0", lineHeight: 1.5 }}>
+              A reversing journal entry will be posted, and the customer balance and any invoices paid by this receipt will be restored. The original entry is kept for audit.
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setReverseTarget(null)} disabled={reversing}>Cancel</button>
+              <button className="btn btn-primary" onClick={confirmReverse} disabled={reversing}>{reversing ? "Reversing..." : "Reverse Receipt"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
