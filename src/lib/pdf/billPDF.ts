@@ -58,6 +58,14 @@ export interface BillPDFData {
 
   whtRate?:       number
   whtAmount?:     number
+
+  // Account balance summary (as at issue) - printed on PDF / shared link only
+  balanceSummary?: {
+    partyType: "customer" | "supplier"
+    opening:   number
+    current:   number
+    total:     number
+  } | null
 }
 
 async function loadImage(url: string): Promise<string | null> {
@@ -325,6 +333,39 @@ export async function generateBillPDF(data: BillPDFData): Promise<jsPDF> {
     doc.text("Balance Due", sumX, SY)
     doc.text(pkr(data.balanceDue), valX, SY, { align: "right" })
     SY += 5
+  }
+
+  // ---- ACCOUNT BALANCE SUMMARY (as at issue) - PDF / shared link only ----
+  if (data.balanceSummary) {
+    const bs = data.balanceSummary
+    const isCust = bs.partyType === "customer"
+    const money = (n: number) => (n < 0 ? "(" + pkr(Math.abs(n)) + ")" : pkr(n))
+    const boxH = 24
+    SY += 6
+    if (SY + boxH > PH - 20) { doc.addPage(); SY = 20 }
+    const bx = valX - 80
+    const bw = 80
+    const tx = bx + 3
+    const vx = valX - 3
+    filledRect(doc, bx, SY - 4, bw, boxH, ROW_ALT)
+    doc.setDrawColor(...BORDER)
+    doc.setLineWidth(0.3)
+    doc.rect(bx, SY - 4, bw, boxH, "S")
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9)
+    doc.setTextColor(...MUTED)
+    doc.text("Opening Balance", tx, SY + 1)
+    doc.text(isCust ? "Current Invoice" : "Current Bill", tx, SY + 7)
+    doc.setTextColor(...DARK)
+    doc.text(money(bs.opening), vx, SY + 1, { align: "right" })
+    doc.text(money(bs.current), vx, SY + 7, { align: "right" })
+    doc.setDrawColor(...BORDER)
+    doc.line(bx + 3, SY + 10, valX - 3, SY + 10)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(...NAVY)
+    doc.text(isCust ? "Total Receivable" : "Total Payable", tx, SY + 16)
+    doc.text(money(bs.total), vx, SY + 16, { align: "right" })
+    SY += boxH - 4
   }
 
   // ── NOTES & TERMS ────────────────────────────────────────────────

@@ -669,7 +669,23 @@ function NewInvoicePageContent() {
         showOnInvoice: b.show_on_invoice
       }))
     }
-    const doc = await generateInvoicePDF(pdfData)
+    // Account balance summary (as at issue) - shown on the PDF only
+    let balanceSummary: { partyType: "customer" | "supplier"; opening: number; current: number; total: number } | null = null
+    if (invoiceIdForLink) try {
+      const { data: bsum } = await supabase.rpc("get_document_balance_summary", {
+        p_company_id: companyId,
+        p_invoice_id: Number(invoiceIdForLink),
+      })
+      if (bsum) {
+        balanceSummary = {
+          partyType: bsum.party_type,
+          opening: Number(bsum.opening_balance),
+          current: Number(bsum.document_amount),
+          total: Number(bsum.total),
+        }
+      }
+    } catch {}
+    const doc = await generateInvoicePDF({ ...pdfData, balanceSummary })
     const blob = doc.output("blob")
     const filePath = `invoices/${Date.now()}-${Math.random().toString(36).substr(2,5)}.pdf`
     try {

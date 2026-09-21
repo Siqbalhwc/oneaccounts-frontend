@@ -62,6 +62,18 @@ export async function GET(request: NextRequest) {
     .eq('company_id', bill.company_id)
     .maybeSingle()
 
+  // Account balance summary (as at issue) - null if unavailable, the page simply hides it
+  let balanceSummary: any = null
+  try {
+    const { data: bsum } = await supabaseAdmin.rpc('get_document_balance_summary', {
+      p_company_id: bill.company_id,
+      p_invoice_id: bill.id,
+    })
+    balanceSummary = bsum || null
+  } catch {
+    balanceSummary = null
+  }
+
   return NextResponse.json({
     bill: {
       ...bill,
@@ -72,6 +84,7 @@ export async function GET(request: NextRequest) {
       supplier_email: supplier?.email || '',
     },
     items: itemsWithNames,
+    balance_summary: balanceSummary,
     company: {
       name: settings?.business_name || 'OneAccounts',
       logo: settings?.logo_url || null,

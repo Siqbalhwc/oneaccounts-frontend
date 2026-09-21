@@ -135,6 +135,31 @@ export default function BillViewerClient({ id }: { id: string }) {
           </div>
         </div>
 
+        {/* Account summary (as at issue) */}
+        {data.balance_summary && (() => {
+          const bs = data.balance_summary
+          const isCust = bs.party_type === "customer"
+          const money = (n: number) => n < 0 ? "(PKR " + Math.abs(Number(n)).toLocaleString() + ")" : "PKR " + Number(n).toLocaleString()
+          return (
+            <div style={{ background: "white", borderRadius: 16, padding: "18px 22px", marginBottom: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", letterSpacing: "0.06em", marginBottom: 12 }}>Account Summary</div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7, fontSize: 13 }}>
+                <span style={{ color: "#64748b" }}>Opening Balance</span>
+                <span style={{ fontWeight: 600, color: "#0f172a" }}>{money(bs.opening_balance)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7, fontSize: 13 }}>
+                <span style={{ color: "#64748b" }}>{isCust ? "Current Invoice" : "Current Bill"}</span>
+                <span style={{ fontWeight: 600, color: "#0f172a" }}>{money(bs.document_amount)}</span>
+              </div>
+              <div style={{ height: 1, background: "#f1f5f9", margin: "8px 0" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15 }}>
+                <span style={{ color: "#64748b", fontWeight: 700 }}>{isCust ? "Total Receivable" : "Total Payable"}</span>
+                <span style={{ fontWeight: 800, color: "#1740c8" }}>{money(bs.total)}</span>
+              </div>
+            </div>
+          )
+        })()}
+
         {bill.notes && (
           <div style={{ background: "white", borderRadius: 16, padding: "20px 22px", marginBottom: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}>
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", letterSpacing: "0.06em", marginBottom: 8 }}>Notes</div>

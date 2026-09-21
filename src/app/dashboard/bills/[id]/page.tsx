@@ -220,7 +220,23 @@ export default function BillDetailPage() {
       whtAmount:  whtData?.wht_amount,
     }
 
-    const doc = await generateBillPDF(pdfData)
+    // Account balance summary (as at issue) - shown on the PDF only
+    let balanceSummary: { partyType: "customer" | "supplier"; opening: number; current: number; total: number } | null = null
+    try {
+      const { data: bsum } = await supabase.rpc("get_document_balance_summary", {
+        p_company_id: companyId,
+        p_invoice_id: Number(billId),
+      })
+      if (bsum) {
+        balanceSummary = {
+          partyType: bsum.party_type,
+          opening: Number(bsum.opening_balance),
+          current: Number(bsum.document_amount),
+          total: Number(bsum.total),
+        }
+      }
+    } catch {}
+    const doc = await generateBillPDF({ ...pdfData, balanceSummary })
     doc.save(`Bill_${bill.invoice_no}.pdf`)
   }
 

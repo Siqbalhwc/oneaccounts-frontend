@@ -206,7 +206,23 @@ export default function InvoiceDetailPage() {
       subtotal: subTotal, total: invoice.total, totalTax: invoice.total_tax || 0,
       paid: invoice.paid || 0, balanceDue: invoice.status === "Returned" ? 0 : invoice.total - (invoice.paid || 0)
     }
-    const doc = await generateInvoicePDF(pdfData)
+    // Account balance summary (as at issue) - shown on the PDF only
+    let balanceSummary: { partyType: "customer" | "supplier"; opening: number; current: number; total: number } | null = null
+    try {
+      const { data: bsum } = await supabase.rpc("get_document_balance_summary", {
+        p_company_id: companyId,
+        p_invoice_id: Number(invoiceId),
+      })
+      if (bsum) {
+        balanceSummary = {
+          partyType: bsum.party_type,
+          opening: Number(bsum.opening_balance),
+          current: Number(bsum.document_amount),
+          total: Number(bsum.total),
+        }
+      }
+    } catch {}
+    const doc = await generateInvoicePDF({ ...pdfData, balanceSummary })
     doc.save(`Invoice_${invoice.invoice_no}.pdf`)
   }
 
