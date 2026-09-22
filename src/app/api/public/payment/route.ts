@@ -25,6 +25,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
   }
 
+  // Account balance summary (as at issue) - null if unavailable, the page simply hides it
+  let balanceSummary: any = null
+  try {
+    const { data: bsum } = await supabaseAdmin.rpc('get_payment_balance_summary', {
+      p_company_id: payment.company_id,
+      p_payment_id: payment.id,
+    })
+    balanceSummary = bsum || null
+  } catch {
+    balanceSummary = null
+  }
+
   let supplierName = 'Unknown', supplierPhone = '', supplierAddress = ''
   if (payment.party_id && payment.party_type === 'supplier') {
     const { data: supplier } = await supabaseAdmin
@@ -50,6 +62,7 @@ export async function GET(request: NextRequest) {
       supplier_phone: supplierPhone,
       supplier_address: supplierAddress,
     },
+    balance_summary: balanceSummary,
     company: {
       name: settings?.business_name || 'OneAccounts',
       logo: settings?.logo_url || null,
