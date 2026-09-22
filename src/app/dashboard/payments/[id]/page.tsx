@@ -176,6 +176,25 @@ export default function PaymentDetailPage() {
 
   const handlePrintPDF = async () => {
     if (!payment) return
+
+    // Account balance summary (as at issue) - null if unavailable, PDF simply hides it
+    let balanceSummary: { opening: number; current: number; total: number } | null = null
+    try {
+      const { data: bsum } = await supabase.rpc("get_payment_balance_summary", {
+        p_company_id: companyId,
+        p_payment_id: Number(payment.id),
+      })
+      if (bsum) {
+        balanceSummary = {
+          opening: bsum.opening_balance,
+          current: bsum.document_amount,
+          total:   bsum.total,
+        }
+      }
+    } catch {
+      balanceSummary = null
+    }
+
     const pdfData = {
       companyName:    companyName || "OneAccounts",
       companyAddress: "",
@@ -197,6 +216,7 @@ export default function PaymentDetailPage() {
       total:          payment.amount,
       paid:           payment.amount,
       balanceDue:     0,
+      balanceSummary,
     }
     const doc = await generatePaymentPDF(pdfData)
     doc.save(`Payment_${payment.payment_no}.pdf`)

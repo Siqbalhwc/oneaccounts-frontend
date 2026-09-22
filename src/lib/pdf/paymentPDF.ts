@@ -52,6 +52,13 @@ export interface PaymentPDFData {
   total:      number
   balanceDue: number
   paid:       number
+
+  // Account balance summary (as at issue) - PDF / shared link only
+  balanceSummary?: {
+    opening:  number   // payable balance before this payment
+    current:  number   // amount THIS payment reduced payable by (net + tax)
+    total:    number   // payable balance after this payment
+  } | null
 }
 
 async function loadImage(url: string): Promise<string | null> {
@@ -297,17 +304,37 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
   doc.text(pkr(data.total), valX - 2, SY + TOTAL_H / 2 - 0.5, { align: "right" })
   SY += TOTAL_H + 2
 
-  if (data.paid > 0) {
-    SY += 2
-    doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED)
-    doc.text("Amount Paid", sumX, SY)
-    doc.setTextColor(16, 185, 129).text("- " + pkr(data.paid), valX, SY, { align: "right" })
-    SY += 5.5
-
-    doc.setFont("helvetica", "bold").setTextColor(...[220,38,38])
-    doc.text("Balance Due", sumX, SY)
-    doc.text(pkr(data.balanceDue), valX, SY, { align: "right" })
-    SY += 5
+  // ---- ACCOUNT BALANCE SUMMARY (as at issue) - PDF / shared link only ----
+  if (data.balanceSummary) {
+    const bs = data.balanceSummary
+    const money = (n: number) => (n < 0 ? "(" + pkr(Math.abs(n)) + ")" : pkr(n))
+    const boxH = 24
+    SY += 6
+    if (SY + boxH > PH - 20) { doc.addPage(); SY = 20 }
+    const bx = valX - 80
+    const bw = 80
+    const tx = bx + 3
+    const vx = valX - 3
+    filledRect(doc, bx, SY - 4, bw, boxH, ROW_ALT)
+    doc.setDrawColor(...BORDER)
+    doc.setLineWidth(0.3)
+    doc.rect(bx, SY - 4, bw, boxH, "S")
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9)
+    doc.setTextColor(...MUTED)
+    doc.text("Total Payable", tx, SY + 1)
+    doc.text("Current Payment", tx, SY + 7)
+    doc.setTextColor(...DARK)
+    doc.text(money(bs.opening), vx, SY + 1, { align: "right" })
+    doc.setTextColor(16, 185, 129)
+    doc.text("- " + pkr(bs.current), vx, SY + 7, { align: "right" })
+    doc.setDrawColor(...BORDER)
+    doc.line(bx + 3, SY + 10, valX - 3, SY + 10)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(...NAVY)
+    doc.text("Total Balance Payable", tx, SY + 16)
+    doc.text(money(bs.total), vx, SY + 16, { align: "right" })
+    SY += boxH - 4
   }
 
   // ── NOTES ──

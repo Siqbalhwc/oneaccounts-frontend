@@ -1,7 +1,12 @@
 # apply_fix.ps1
-# Adds the "Opening Balance / This Payment / Total Payable" Account Summary box
-# to the public WhatsApp payment link (vendor payments only).
-# Run the SQL file (get_payment_balance_summary.sql) in Supabase FIRST, then run this.
+# Fixes the Payment PDF: replaces the meaningless "Amount Paid / Balance Due: PKR 0.00"
+# line with the real vendor balance - "Total Payable / Current Payment / Total Balance Payable"
+# (same numbers as the Vendor Ledger closing balance, as at the date of this payment).
+#
+# IMPORTANT: this needs the get_payment_balance_summary SQL function.
+# If you have NOT already run get_payment_balance_summary.sql from the last message,
+# run that in Supabase SQL Editor FIRST, then run this script.
+#
 # Safe to re-run: already-applied edits are skipped. Nothing is written unless ALL edits match.
 # Run from: C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend
 
@@ -11,120 +16,132 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $utf8Bom = New-Object System.Text.UTF8Encoding($true)
 $edits = @()
 
-# ---- Edit 1: fetch balance summary in the public payment API route ----
+# ---- Edit 1: paymentPDF.ts - add balanceSummary to the interface ----
 $old = @'
-  const { data: payment, error } = await supabaseAdmin
-    .from('payments')
-    .select('id, payment_no, payment_date, amount, payment_method, reference, notes, party_id, party_type, company_id')
-    .eq('id', id)
-    .single()
+  status:     string
+  items:      PaymentItem[]
+  subtotal:   number
+  total:      number
+  balanceDue: number
+  paid:       number
+}
+'@
+$new = @'
+  status:     string
+  items:      PaymentItem[]
+  subtotal:   number
+  total:      number
+  balanceDue: number
+  paid:       number
 
-  if (error || !payment) {
-    return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
+  // Account balance summary (as at issue) - PDF / shared link only
+  balanceSummary?: {
+    opening:  number   // payable balance before this payment
+    current:  number   // amount THIS payment reduced payable by (net + tax)
+    total:    number   // payable balance after this payment
+  } | null
+}
+'@
+$edits += [pscustomobject]@{ File = 'src\lib\pdf\paymentPDF.ts'; Old = $old; New = $new }
+
+# ---- Edit 2: paymentPDF.ts - replace the Amount Paid / Balance Due block ----
+$old = @'
+  if (data.paid > 0) {
+    SY += 2
+    doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED)
+    doc.text("Amount Paid", sumX, SY)
+    doc.setTextColor(16, 185, 129).text("- " + pkr(data.paid), valX, SY, { align: "right" })
+    SY += 5.5
+
+    doc.setFont("helvetica", "bold").setTextColor(...[220,38,38])
+    doc.text("Balance Due", sumX, SY)
+    doc.text(pkr(data.balanceDue), valX, SY, { align: "right" })
+    SY += 5
   }
 '@
 $new = @'
-  const { data: payment, error } = await supabaseAdmin
-    .from('payments')
-    .select('id, payment_no, payment_date, amount, payment_method, reference, notes, party_id, party_type, company_id')
-    .eq('id', id)
-    .single()
-
-  if (error || !payment) {
-    return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
-  }
-
-  // Account balance summary (as at issue) - null if unavailable, the page simply hides it
-  let balanceSummary: any = null
-  try {
-    const { data: bsum } = await supabaseAdmin.rpc('get_payment_balance_summary', {
-      p_company_id: payment.company_id,
-      p_payment_id: payment.id,
-    })
-    balanceSummary = bsum || null
-  } catch {
-    balanceSummary = null
+  // ---- ACCOUNT BALANCE SUMMARY (as at issue) - PDF / shared link only ----
+  if (data.balanceSummary) {
+    const bs = data.balanceSummary
+    const money = (n: number) => (n < 0 ? "(" + pkr(Math.abs(n)) + ")" : pkr(n))
+    const boxH = 24
+    SY += 6
+    if (SY + boxH > PH - 20) { doc.addPage(); SY = 20 }
+    const bx = valX - 80
+    const bw = 80
+    const tx = bx + 3
+    const vx = valX - 3
+    filledRect(doc, bx, SY - 4, bw, boxH, ROW_ALT)
+    doc.setDrawColor(...BORDER)
+    doc.setLineWidth(0.3)
+    doc.rect(bx, SY - 4, bw, boxH, "S")
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(9)
+    doc.setTextColor(...MUTED)
+    doc.text("Total Payable", tx, SY + 1)
+    doc.text("Current Payment", tx, SY + 7)
+    doc.setTextColor(...DARK)
+    doc.text(money(bs.opening), vx, SY + 1, { align: "right" })
+    doc.setTextColor(16, 185, 129)
+    doc.text("- " + pkr(bs.current), vx, SY + 7, { align: "right" })
+    doc.setDrawColor(...BORDER)
+    doc.line(bx + 3, SY + 10, valX - 3, SY + 10)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(...NAVY)
+    doc.text("Total Balance Payable", tx, SY + 16)
+    doc.text(money(bs.total), vx, SY + 16, { align: "right" })
+    SY += boxH - 4
   }
 '@
-$edits += [pscustomobject]@{ File = 'src\app\api\public\payment\route.ts'; Old = $old; New = $new }
+$edits += [pscustomobject]@{ File = 'src\lib\pdf\paymentPDF.ts'; Old = $old; New = $new }
 
-# ---- Edit 2: return the balance summary in the JSON response ----
+# ---- Edit 3: payments/[id]/page.tsx - fetch the balance summary before building the PDF ----
 $old = @'
-  return NextResponse.json({
-    payment: {
-      ...payment,
-      supplier_name: supplierName,
-      supplier_phone: supplierPhone,
-      supplier_address: supplierAddress,
-    },
-    company: {
+  const handlePrintPDF = async () => {
+    if (!payment) return
+    const pdfData = {
 '@
 $new = @'
-  return NextResponse.json({
-    payment: {
-      ...payment,
-      supplier_name: supplierName,
-      supplier_phone: supplierPhone,
-      supplier_address: supplierAddress,
-    },
-    balance_summary: balanceSummary,
-    company: {
+  const handlePrintPDF = async () => {
+    if (!payment) return
+
+    // Account balance summary (as at issue) - null if unavailable, PDF simply hides it
+    let balanceSummary: { opening: number; current: number; total: number } | null = null
+    try {
+      const { data: bsum } = await supabase.rpc("get_payment_balance_summary", {
+        p_company_id: companyId,
+        p_payment_id: Number(payment.id),
+      })
+      if (bsum) {
+        balanceSummary = {
+          opening: bsum.opening_balance,
+          current: bsum.document_amount,
+          total:   bsum.total,
+        }
+      }
+    } catch {
+      balanceSummary = null
+    }
+
+    const pdfData = {
 '@
-$edits += [pscustomobject]@{ File = 'src\app\api\public\payment\route.ts'; Old = $old; New = $new }
+$edits += [pscustomobject]@{ File = 'src\app\dashboard\payments\[id]\page.tsx'; Old = $old; New = $new }
 
-# ---- Edit 3: render the Account Summary box on the payment link page ----
+# ---- Edit 4: payments/[id]/page.tsx - pass balanceSummary into pdfData ----
 $old = @'
-        <div style={{ background: "white", borderRadius: 16, padding: "20px 22px", marginBottom: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}>
-          <DetailRow label="Date" value={payment.payment_date} />
-          <DetailRow label="Method" value={payment.payment_method} />
-          {payment.reference && <DetailRow label="Reference" value={payment.reference} />}
-          <div style={{ height: 1, background: "#f1f5f9", margin: "10px 0" }} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}>
-            <span style={{ fontWeight: 700, color: "#64748b" }}>Amount Paid</span>
-            <span style={{ fontWeight: 800, color: "#10b981" }}>PKR {Number(payment.amount || 0).toLocaleString()}</span>
-          </div>
-        </div>
-
-        {payment.notes && (
+      paid:           payment.amount,
+      balanceDue:     0,
+    }
+    const doc = await generatePaymentPDF(pdfData)
 '@
 $new = @'
-        <div style={{ background: "white", borderRadius: 16, padding: "20px 22px", marginBottom: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}>
-          <DetailRow label="Date" value={payment.payment_date} />
-          <DetailRow label="Method" value={payment.payment_method} />
-          {payment.reference && <DetailRow label="Reference" value={payment.reference} />}
-          <div style={{ height: 1, background: "#f1f5f9", margin: "10px 0" }} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}>
-            <span style={{ fontWeight: 700, color: "#64748b" }}>Amount Paid</span>
-            <span style={{ fontWeight: 800, color: "#10b981" }}>PKR {Number(payment.amount || 0).toLocaleString()}</span>
-          </div>
-        </div>
-
-        {data.balance_summary && (() => {
-          const bs = data.balance_summary
-          const money = (n: number) => n < 0 ? "(PKR " + Math.abs(Number(n)).toLocaleString() + ")" : "PKR " + Number(n).toLocaleString()
-          return (
-            <div style={{ background: "white", borderRadius: 16, padding: "18px 22px", marginBottom: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", letterSpacing: "0.06em", marginBottom: 12 }}>Account Summary</div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7, fontSize: 13 }}>
-                <span style={{ color: "#64748b" }}>Opening Balance</span>
-                <span style={{ fontWeight: 600, color: "#0f172a" }}>{money(bs.opening_balance)}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7, fontSize: 13 }}>
-                <span style={{ color: "#64748b" }}>Less: This Payment</span>
-                <span style={{ fontWeight: 600, color: "#0f172a" }}>{money(bs.document_amount)}</span>
-              </div>
-              <div style={{ height: 1, background: "#f1f5f9", margin: "8px 0" }} />
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15 }}>
-                <span style={{ color: "#64748b", fontWeight: 700 }}>Total Payable</span>
-                <span style={{ fontWeight: 800, color: "#1740c8" }}>{money(bs.total)}</span>
-              </div>
-            </div>
-          )
-        })()}
-
-        {payment.notes && (
+      paid:           payment.amount,
+      balanceDue:     0,
+      balanceSummary,
+    }
+    const doc = await generatePaymentPDF(pdfData)
 '@
-$edits += [pscustomobject]@{ File = 'src\app\payment\[id]\PaymentViewerClient.tsx'; Old = $old; New = $new }
+$edits += [pscustomobject]@{ File = 'src\app\dashboard\payments\[id]\page.tsx'; Old = $old; New = $new }
 
 $content = @{}
 $bom = @{}
