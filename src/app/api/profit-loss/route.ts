@@ -22,8 +22,17 @@ export async function GET(request: NextRequest) {
   const { data: { user }, error: userError } = await supabase.auth.getUser()
   if (userError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const companyId = user.app_metadata?.company_id
-  if (!companyId) return NextResponse.json({ error: 'No company linked' }, { status: 400 })
+  const { data: roleRow, error: roleErr } = await supabase
+    .from('user_roles')
+    .select('company_id')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .single()
+
+  if (roleErr || !roleRow?.company_id) {
+    return NextResponse.json({ error: 'No active company found for this user' }, { status: 400 })
+  }
+  const companyId = roleRow.company_id as string
 
   const { searchParams } = new URL(request.url)
   const startDate = searchParams.get('startDate')
@@ -46,9 +55,10 @@ export async function GET(request: NextRequest) {
   let linesQuery = supabase
     .from('journal_lines')
     .select('account_id, debit, credit, journal_entries!inner(date, deleted_at)')
+    .eq('company_id', companyId)
     .gte('journal_entries.date', startDate)
     .lte('journal_entries.date', endDate)
-    .is('journal_entries.deleted_at', null)              // ← exclude soft‑deleted entries
+    .is('journal_entries.deleted_at', null)              // -- exclude soft-deleted entries
 
   if (projectId) {
     linesQuery = linesQuery.eq('project_id', projectId)
