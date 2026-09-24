@@ -43,43 +43,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing startDate or endDate' }, { status: 400 })
   }
 
-  const { data: accounts, error: acctErr } = await supabase
-    .from('accounts')
-    .select('id, code, name, type')
-    .in('type', ['Revenue', 'Expense'])
-    .eq('company_id', companyId)
-    .order('code')
-
-  if (acctErr) return NextResponse.json({ error: acctErr.message }, { status: 500 })
-
-  let linesQuery = supabase
-    .from('journal_lines')
-    .select('account_id, debit, credit, journal_entries!inner(date, deleted_at)')
-    .eq('company_id', companyId)
-    .gte('journal_entries.date', startDate)
-    .lte('journal_entries.date', endDate)
-    .is('journal_entries.deleted_at', null)              // -- exclude soft-deleted entries
-
-  if (projectId) {
-    linesQuery = linesQuery.eq('project_id', projectId)
-  }
-
-  const { data: lines, error: linesErr } = await linesQuery
-
-  if (linesErr) return NextResponse.json({ error: linesErr.message }, { status: 500 })
-
-  const netMap: Record<number, number> = {}
-  ;(lines || []).forEach((l: any) => {
-    const net = (l.credit || 0) - (l.debit || 0)
-    netMap[l.account_id] = (netMap[l.account_id] || 0) + net
+  const { data: rows, error: rpcErr } = await supabase.rpc('get_profit_loss_summary', {
+    p_company_id: companyId,
+    p_start_date: startDate,
+    p_end_date: endDate,
+    p_project_id: projectId ? Number(projectId) : null,
   })
 
-  const result = accounts.map(a => ({
-    account_id: a.id,
-    code: a.code,
-    name: a.name,
-    type: a.type,
-    net: Math.round((netMap[a.id] || 0) * 100) / 100,
+  if (rpcErr) return NextResponse.json({ error: rpcErr.message }, { status: 500 })
+
+  const result = (rows || []).map((r: any) => ({
+    account_id: r.account_id,
+    code: r.code,
+    name: r.name,
+    type: r.type,
+    net: Math.round((Number(r.net) || 0) * 100) / 100,
   }))
 
   return NextResponse.json(result)
