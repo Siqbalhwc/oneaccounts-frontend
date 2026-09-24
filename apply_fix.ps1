@@ -1,177 +1,195 @@
-# apply_fix.ps1
-# Fixes the Payment PDF: replaces the meaningless "Amount Paid / Balance Due: PKR 0.00"
-# line with the real vendor balance - "Total Payable / Current Payment / Total Balance Payable"
-# (same numbers as the Vendor Ledger closing balance, as at the date of this payment).
-#
-# IMPORTANT: this needs the get_payment_balance_summary SQL function.
-# If you have NOT already run get_payment_balance_summary.sql from the last message,
-# run that in Supabase SQL Editor FIRST, then run this script.
-#
-# Safe to re-run: already-applied edits are skipped. Nothing is written unless ALL edits match.
-# Run from: C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend
-
 $ErrorActionPreference = "Stop"
-$base = (Get-Location).Path
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-$utf8Bom = New-Object System.Text.UTF8Encoding($true)
-$edits = @()
 
-# ---- Edit 1: paymentPDF.ts - add balanceSummary to the interface ----
-$old = @'
-  status:     string
-  items:      PaymentItem[]
-  subtotal:   number
-  total:      number
-  balanceDue: number
-  paid:       number
+$path = "src\app\dashboard\reports\pl-analysis\page.tsx"
+$backup = "$path.bak_" + (Get-Date -Format "yyyyMMdd_HHmmss")
+
+if (Test-Path $path) {
+    Copy-Item $path $backup
+    Write-Host "Backed up existing file to $backup"
+} else {
+    Write-Host "No existing file found at $path -- creating new."
 }
-'@
-$new = @'
-  status:     string
-  items:      PaymentItem[]
-  subtotal:   number
-  total:      number
-  balanceDue: number
-  paid:       number
 
-  // Account balance summary (as at issue) - PDF / shared link only
-  balanceSummary?: {
-    opening:  number   // payable balance before this payment
-    current:  number   // amount THIS payment reduced payable by (net + tax)
-    total:    number   // payable balance after this payment
-  } | null
+$content = @'
+"use client"
+
+import { useEffect, useState } from "react"
+import { createClient } from "@/lib/supabase/client"
+import { useCompany } from "@/contexts/CompanyContext"
+
+function firstOfMonth() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`
 }
-'@
-$edits += [pscustomobject]@{ File = 'src\lib\pdf\paymentPDF.ts'; Old = $old; New = $new }
+function today() {
+  return new Date().toISOString().slice(0, 10)
+}
+function fmt(n: number | null | undefined) {
+  if (n === null || n === undefined) return "-"
+  const val = new Intl.NumberFormat("en-PK", { maximumFractionDigits: 0 }).format(Math.abs(n))
+  return n < 0 ? `(Rs ${val})` : `Rs ${val}`
+}
+function fmtDate(d: string) {
+  return new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+}
 
-# ---- Edit 2: paymentPDF.ts - replace the Amount Paid / Balance Due block ----
-$old = @'
-  if (data.paid > 0) {
-    SY += 2
-    doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED)
-    doc.text("Amount Paid", sumX, SY)
-    doc.setTextColor(16, 185, 129).text("- " + pkr(data.paid), valX, SY, { align: "right" })
-    SY += 5.5
+type Option = { id: number; name: string }
 
-    doc.setFont("helvetica", "bold").setTextColor(...[220,38,38])
-    doc.text("Balance Due", sumX, SY)
-    doc.text(pkr(data.balanceDue), valX, SY, { align: "right" })
-    SY += 5
-  }
-'@
-$new = @'
-  // ---- ACCOUNT BALANCE SUMMARY (as at issue) - PDF / shared link only ----
-  if (data.balanceSummary) {
-    const bs = data.balanceSummary
-    const money = (n: number) => (n < 0 ? "(" + pkr(Math.abs(n)) + ")" : pkr(n))
-    const boxH = 24
-    SY += 6
-    if (SY + boxH > PH - 20) { doc.addPage(); SY = 20 }
-    const bx = valX - 80
-    const bw = 80
-    const tx = bx + 3
-    const vx = valX - 3
-    filledRect(doc, bx, SY - 4, bw, boxH, ROW_ALT)
-    doc.setDrawColor(...BORDER)
-    doc.setLineWidth(0.3)
-    doc.rect(bx, SY - 4, bw, boxH, "S")
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(9)
-    doc.setTextColor(...MUTED)
-    doc.text("Total Payable", tx, SY + 1)
-    doc.text("Current Payment", tx, SY + 7)
-    doc.setTextColor(...DARK)
-    doc.text(money(bs.opening), vx, SY + 1, { align: "right" })
-    doc.setTextColor(16, 185, 129)
-    doc.text("- " + pkr(bs.current), vx, SY + 7, { align: "right" })
-    doc.setDrawColor(...BORDER)
-    doc.line(bx + 3, SY + 10, valX - 3, SY + 10)
-    doc.setFont("helvetica", "bold")
-    doc.setTextColor(...NAVY)
-    doc.text("Total Balance Payable", tx, SY + 16)
-    doc.text(money(bs.total), vx, SY + 16, { align: "right" })
-    SY += boxH - 4
-  }
-'@
-$edits += [pscustomobject]@{ File = 'src\lib\pdf\paymentPDF.ts'; Old = $old; New = $new }
+export default function PLAnalysisPage() {
+  const { companyName, companyTagline, logoUrl } = useCompany()
+  const [groupBy, setGroupBy] = useState<"day" | "product" | "customer">("day")
+  const [startDate, setStartDate] = useState(firstOfMonth())
+  const [endDate, setEndDate] = useState(today())
+  const [products, setProducts] = useState<Option[]>([])
+  const [customers, setCustomers] = useState<Option[]>([])
+  const [selectedProducts, setSelectedProducts] = useState<number[]>([])
+  const [selectedCustomers, setSelectedCustomers] = useState<number[]>([])
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
-# ---- Edit 3: payments/[id]/page.tsx - fetch the balance summary before building the PDF ----
-$old = @'
-  const handlePrintPDF = async () => {
-    if (!payment) return
-    const pdfData = {
-'@
-$new = @'
-  const handlePrintPDF = async () => {
-    if (!payment) return
+  useEffect(() => {
+    const supabase = createClient()
+    const loadOptions = async () => {
+      const productRes = await supabase.from("products").select("id, name").is("deleted_at", null).order("name")
+      setProducts((productRes.data as Option[]) || [])
+      const customerRes = await supabase.from("customers").select("id, name, archived_at").is("deleted_at", null).order("name")
+      const customerRows = (customerRes.data as (Option & { archived_at: string | null })[]) || []
+      setCustomers(customerRows.filter(c => !c.archived_at))
+    }
+    loadOptions()
+  }, [])
 
-    // Account balance summary (as at issue) - null if unavailable, PDF simply hides it
-    let balanceSummary: { opening: number; current: number; total: number } | null = null
+  const run = async () => {
+    setLoading(true)
+    setError("")
     try {
-      const { data: bsum } = await supabase.rpc("get_payment_balance_summary", {
-        p_company_id: companyId,
-        p_payment_id: Number(payment.id),
-      })
-      if (bsum) {
-        balanceSummary = {
-          opening: bsum.opening_balance,
-          current: bsum.document_amount,
-          total:   bsum.total,
-        }
-      }
-    } catch {
-      balanceSummary = null
+      const params = new URLSearchParams({ groupBy, startDate, endDate })
+      if (selectedProducts.length) params.set("productIds", selectedProducts.join(","))
+      if (selectedCustomers.length) params.set("customerIds", selectedCustomers.join(","))
+      const res = await fetch(`/api/reports/pl-analysis?${params.toString()}`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to load report")
+      setData(json)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
     }
+  }
 
-    const pdfData = {
-'@
-$edits += [pscustomobject]@{ File = 'src\app\dashboard\payments\[id]\page.tsx'; Old = $old; New = $new }
+  useEffect(() => { run() }, [])
 
-# ---- Edit 4: payments/[id]/page.tsx - pass balanceSummary into pdfData ----
-$old = @'
-      paid:           payment.amount,
-      balanceDue:     0,
-    }
-    const doc = await generatePaymentPDF(pdfData)
-'@
-$new = @'
-      paid:           payment.amount,
-      balanceDue:     0,
-      balanceSummary,
-    }
-    const doc = await generatePaymentPDF(pdfData)
-'@
-$edits += [pscustomobject]@{ File = 'src\app\dashboard\payments\[id]\page.tsx'; Old = $old; New = $new }
+  const toggle = (arr: number[], setArr: (v: number[]) => void, id: number) => {
+    setArr(arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id])
+  }
 
-$content = @{}
-$bom = @{}
-$applied = 0
-$skipped = 0
-foreach ($e in $edits) {
-    $path = Join-Path $base $e.File
-    if (-not (Test-Path -LiteralPath $path)) { throw "File not found: $($e.File). Run this from the frontend folder." }
-    if (-not $content.ContainsKey($e.File)) {
-        $bytes = [System.IO.File]::ReadAllBytes($path)
-        $bom[$e.File] = ($bytes.Length -ge 3 -and $bytes[0] -eq 239 -and $bytes[1] -eq 187 -and $bytes[2] -eq 191)
-        $content[$e.File] = [System.IO.File]::ReadAllText($path, $utf8NoBom)
-    }
-    $t = $content[$e.File]
-    $isCrlf = $t.Contains("`r`n")
-    $old = $e.Old.Replace("`r`n", "`n")
-    $new = $e.New.Replace("`r`n", "`n")
-    if ($isCrlf) { $old = $old.Replace("`n", "`r`n"); $new = $new.Replace("`n", "`r`n") }
-    if ($t.Contains($new)) { $skipped++; Write-Host "SKIP (already applied): $($e.File)"; continue }
-    $count = ([regex]::Matches($t, [regex]::Escape($old))).Count
-    if ($count -ne 1) { throw "STOP - nothing was changed. Anchor found $count times (expected 1) in $($e.File). Send me this message." }
-    $content[$e.File] = $t.Replace($old, $new)
-    $applied++
+  const filterNote =
+    selectedProducts.length || selectedCustomers.length
+      ? [
+          selectedProducts.length ? `${selectedProducts.length} product(s)` : null,
+          selectedCustomers.length ? `${selectedCustomers.length} customer(s)` : null,
+        ].filter(Boolean).join(" | ")
+      : null
+
+  return (
+    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh" }}>
+      {/* Filter bar */}
+      <div style={{ display: "flex", gap: 12, alignItems: "end", marginBottom: 20, flexWrap: "wrap", background: "var(--card)", padding: 16, borderRadius: 8, border: "1px solid var(--border)" }}>
+        <div>
+          <label style={labelStyle}>Group by</label>
+          <select value={groupBy} onChange={e => setGroupBy(e.target.value as any)} style={inputStyle}>
+            <option value="day">Day</option>
+            <option value="product">Product</option>
+            <option value="customer">Customer</option>
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>From</label>
+          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={inputStyle} />
+        </div>
+        <div>
+          <label style={labelStyle}>To</label>
+          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={inputStyle} />
+        </div>
+
+        <FilterDropdown label="Products" options={products} selected={selectedProducts}
+          onToggle={id => toggle(selectedProducts, setSelectedProducts, id)}
+          onClear={() => setSelectedProducts([])} />
+
+        <FilterDropdown label="Customers" options={customers} selected={selectedCustomers}
+          onToggle={id => toggle(selectedCustomers, setSelectedCustomers, id)}
+          onClear={() => setSelectedCustomers([])} />
+
+        <button onClick={run} disabled={loading} style={{ padding: "9px 20px", borderRadius: 6, background: "var(--primary)", color: "#fff", border: "none", fontWeight: 600 }}>
+          {loading ? "Loading..." : "Run Report"}
+        </button>
+      </div>
+
+      {error && <div style={{ color: "#c0392b", marginBottom: 16 }}>{error}</div>}
+
+      {/* Report */}
+      {data && (
+        <div style={{ background: "var(--card)", borderRadius: 10, border: "1px solid var(--border)", overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "20px 24px", borderBottom: "2px solid var(--primary)" }}>
+            {logoUrl && <img src={logoUrl} alt="" style={{ height: 44, width: 44, objectFit: "contain" }} />}
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--primary)" }}>{companyName || "Company"}</div>
+              {companyTagline && <div style={{ fontSize: 12, color: "var(--text)", opacity: 0.7 }}>{companyTagline}</div>}
+            </div>
+            <div style={{ marginLeft: "auto", textAlign: "right" }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>Profit &amp; Loss Statement</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>{fmtDate(startDate)} to {fmtDate(endDate)}</div>
+              {filterNote && <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>Filtered: {filterNote}</div>}
+              {data.filtered && (
+                <div style={{ fontSize: 11, color: "#b7791f", marginTop: 2 }}>
+                  Admin &amp; Selling Expenses not shown for filtered views (not attributable to a subset)
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ padding: 20, overflowX: "auto" }}>
+            {data.groupBy === "day" ? <DayTable data={data} /> : <GroupTable data={data} groupBy={data.groupBy} />}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
-foreach ($f in $content.Keys) {
-    $enc = $utf8NoBom
-    if ($bom[$f]) { $enc = $utf8Bom }
-    [System.IO.File]::WriteAllText((Join-Path $base $f), $content[$f], $enc)
-    Write-Host "UPDATED: $f"
+function DayTable({ data }: { data: any }) {
+  return (
+    <table style={tableStyle}>
+      <thead>
+        <tr>
+          <th style={{ ...thStyle, textAlign: "left", minWidth: 220 }}>Particulars</th>
+          {data.columns.map((c: number, i: number) => (
+            <th key={i} style={thStyle}>{c}</th>
+          ))}
+          <th style={{ ...thStyle, background: "var(--primary)" }}>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {data.rows.map((r: any, idx: number) => (
+          <tr key={r.label}
+            style={{
+              background: r.bold ? "rgba(15,157,88,0.06)" : idx % 2 ? "rgba(0,0,0,0.015)" : "transparent",
+              fontWeight: r.bold ? 700 : 400,
+              borderTop: r.label.startsWith("Net Profit") ? "2px solid var(--primary)" : undefined,
+            }}>
+            <td style={tdLabel}>{r.label}</td>
+            {r.values.map((v: number, i: number) => (
+              <td key={i} style={tdVal}>{v === 0 ? "-" : fmt(v)}</td>
+            ))}
+            <td style={{ ...tdVal, fontWeight: 700 }}>{fmt(r.total)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
 }
-Write-Host ""
-Write-Host "Done. Edits applied: $applied, skipped: $skipped, files written: $($content.Count)"
+
+function GroupTable({ data, groupBy }: { data: any; groupBy: string }) {
+  return (
+    <table

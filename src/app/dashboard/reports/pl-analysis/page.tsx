@@ -37,10 +37,14 @@ export default function PLAnalysisPage() {
 
   useEffect(() => {
     const supabase = createClient()
-    supabase.from("products").select("id, name").is("deleted_at", null).order("name")
-      .then(({ data }) => setProducts(data || []))
-    supabase.from("customers").select("id, name").is("archived_at", null).order("name")
-      .then(({ data }) => setCustomers(data || []))
+    const loadOptions = async () => {
+      const productRes = await supabase.from("products").select("id, name").is("deleted_at", null).order("name")
+      setProducts((productRes.data as Option[]) || [])
+      const customerRes = await supabase.from("customers").select("id, name, archived_at").is("deleted_at", null).order("name")
+      const customerRows = (customerRes.data as (Option & { archived_at: string | null })[]) || []
+      setCustomers(customerRows.filter(c => !c.archived_at))
+    }
+    loadOptions()
   }, [])
 
   const run = async () => {
