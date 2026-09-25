@@ -75,9 +75,15 @@ export default function JournalPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc")
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id
-      if (cid) setCompanyId(cid)
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return
+      const { data: roleRow } = await supabase
+        .from("user_roles")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .single()
+      if (roleRow?.company_id) setCompanyId(roleRow.company_id)
     })
   }, [])
 
@@ -94,45 +100,50 @@ export default function JournalPage() {
       .is("deleted_at", null)
       .order("date", { ascending: false })
       .then(async ({ data }) => {
-        if (data) {
-          const enriched = await Promise.all(
-            data.map(async (je) => {
-              const { data: lines } = await supabase
-                .from("journal_lines")
-                .select("debit, credit, source_type, source_id")
-                .eq("entry_id", je.id)
-              const total_debit = lines?.reduce((s, l) => s + (l.debit || 0), 0) || 0
-              const total_credit = lines?.reduce((s, l) => s + (l.credit || 0), 0) || 0
-              let source = getSourceFromReference(je.reference)
-              if (source === je.reference || !je.reference) {
-                const firstLine = lines?.find(l => l.source_type)
-                if (firstLine) {
-                  switch (firstLine.source_type) {
-                    case "sale_invoice": source = "Sales Invoice"; break
-                    case "purchase_bill": source = "Purchase Bill"; break
-                    case "purchase_return": source = "Purchase Return"; break
-                    case "sale_return": source = "Sales Return"; break
-                    case "cash_sale": source = "Cash Sale"; break
-                    case "cash_sale_reversal": source = "Cash Sale (edit reversal)"; break
-                    case "cash_sale_return": source = "Cash Sale Return"; break
-                    case "receipt": source = "Receipt"; break
-                    case "payment": source = "Payment"; break
-                    case "inventory_adjustment": source = "Inventory Adjustment"; break
-                    default: source = firstLine.source_type
-                  }
-                } else {
-                  source = "Manual"
-                }
-              }
-              return { ...je, total_debit, total_credit, source }
-            })
-          )
-          setEntries(enriched)
-          setLoading(false)
-        } else {
+        if (!data || data.length === 0) {
           setEntries([])
           setLoading(false)
+          return
         }
+        const entryIds = data.map(je => je.id)
+        const { data: totals } = await supabase.rpc("get_journal_entry_totals", {
+          p_company_id: companyId,
+          p_entry_ids: entryIds,
+        })
+        const totalsMap: Record<number, { total_debit: number; total_credit: number; source_type: string | null }> = {}
+        ;(totals || []).forEach((t: any) => {
+          totalsMap[t.entry_id] = {
+            total_debit: t.total_debit || 0,
+            total_credit: t.total_credit || 0,
+            source_type: t.source_type || null,
+          }
+        })
+        const enriched = data.map((je) => {
+          const t = totalsMap[je.id] || { total_debit: 0, total_credit: 0, source_type: null }
+          let source = getSourceFromReference(je.reference)
+          if (source === je.reference || !je.reference) {
+            if (t.source_type) {
+              switch (t.source_type) {
+                case "sale_invoice": source = "Sales Invoice"; break
+                case "purchase_bill": source = "Purchase Bill"; break
+                case "purchase_return": source = "Purchase Return"; break
+                case "sale_return": source = "Sales Return"; break
+                case "cash_sale": source = "Cash Sale"; break
+                case "cash_sale_reversal": source = "Cash Sale (edit reversal)"; break
+                case "cash_sale_return": source = "Cash Sale Return"; break
+                case "receipt": source = "Receipt"; break
+                case "payment": source = "Payment"; break
+                case "inventory_adjustment": source = "Inventory Adjustment"; break
+                default: source = t.source_type
+              }
+            } else {
+              source = "Manual"
+            }
+          }
+          return { ...je, total_debit: t.total_debit, total_credit: t.total_credit, source }
+        })
+        setEntries(enriched)
+        setLoading(false)
       })
   }, [role, canView, companyId])
 
