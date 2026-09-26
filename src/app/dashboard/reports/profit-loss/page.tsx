@@ -27,7 +27,9 @@ export default function ProfitLossPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const [accounts, setAccounts] = useState<any[]>([])rn  const [loading, setLoading] = useState(true)rn  const hasLoadedOnce = useRef(false)
+  const [accounts, setAccounts] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const hasLoadedOnce = useRef(false)
 
   const now = new Date()
   const [startDate, setStartDate] = useState(`${now.getFullYear()}-01-01`)
@@ -70,7 +72,14 @@ export default function ProfitLossPage() {
         category: row.category || getCategory({ code: row.code }),
         balance: Number(row.net),
       }))
-      setAccounts(mapped)rn    } catch (e) {rn      console.error(e)rn    } finally {rn      setLoading(false)rn      hasLoadedOnce.current = truern    }rn  }
+      setAccounts(mapped)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+      hasLoadedOnce.current = true
+    }
+  }
 
   // ── Fetch projects (MUST include company_id for isolation) ──
   const fetchProjects = async () => {
