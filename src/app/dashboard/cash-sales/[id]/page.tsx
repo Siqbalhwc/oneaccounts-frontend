@@ -72,7 +72,7 @@ export default function CashSaleDetailPage() {
   const [showReturn, setShowReturn] = useState(false)
 
   const [payments, setPayments] = useState<ExistingBalancePayment[]>([])
-  const [bankAccounts, setBankAccounts] = useState<{ id: number; name: string }[]>([])
+  const [bankAccounts, setBankAccounts] = useState<{ id: number; bank_name: string; account_number?: string }[]>([])
   const [balanceModal, setBalanceModal] = useState<{ mode: "receive" | "edit"; payment?: ExistingBalancePayment } | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -153,8 +153,9 @@ export default function CashSaleDetailPage() {
 
         const { data: banks } = await supabase
           .from("bank_accounts")
-          .select("id, name")
+          .select("id, bank_name, account_number")
           .eq("company_id", companyId)
+          .eq("is_active", true)
         setBankAccounts(banks || [])
       })
   }, [companyId, saleId, reloadKey])

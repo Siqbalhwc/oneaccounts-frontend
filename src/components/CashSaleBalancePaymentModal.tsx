@@ -31,7 +31,8 @@ export interface ExistingBalancePayment {
 
 interface BankAccount {
   id: number
-  name: string
+  bank_name: string
+  account_number?: string
 }
 
 interface Props {
@@ -193,7 +194,7 @@ export default function CashSaleBalancePaymentModal({ mode, sale, payment, bankA
               style={{ width: "100%", boxSizing: "border-box", height: 38, padding: "0 10px", border: "1.5px solid var(--border)", borderRadius: 8, background: "var(--card)", color: "var(--text)", fontSize: 13 }}
             >
               <option value="">Cash (default)</option>
-              {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.bank_name}{b.account_number ? ` — ${b.account_number}` : ""}</option>)}
             </select>
           </div>
           <div>
