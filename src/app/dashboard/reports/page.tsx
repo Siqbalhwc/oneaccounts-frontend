@@ -1,7 +1,7 @@
-﻿"use client"
+"use client"
 
 import { useRouter } from "next/navigation"
-import { Scale, TrendingUp, BarChart3, BookOpen, Users, Truck, Calendar, FileText, ClipboardList, LineChart } from "lucide-react"
+import { Scale, TrendingUp, BarChart3, BookOpen, Users, Truck, Calendar, FileText, ClipboardList, LineChart, Activity } from "lucide-react"
 
 export default function ReportsPage() {
   const router = useRouter()
@@ -17,6 +17,7 @@ export default function ReportsPage() {
     { title: "AP Aging Report",      desc: "Accounts Payable aging analysis",     icon: <Calendar size={24} />,      href: "/dashboard/reports/ap-aging",        color: "#EF4444" },
     { title: "Invoice Print",        desc: "Print or share invoice via WhatsApp",  icon: <FileText size={24} />,      href: "/dashboard/invoices",               color: "#10B981" },
     { title: "Budget vs Actual",     desc: "Compare budget to actual by activity", icon: <ClipboardList size={24} />, href: "/dashboard/reports/budget-vs-actual", color: "#0F9D58" },
+    { title: "P&L Analysis",         desc: "Profit & Loss by day, product or customer", icon: <Activity size={24} />,      href: "/dashboard/reports/pl-analysis",     color: "#EC4899" },
   ]
 
   return (
