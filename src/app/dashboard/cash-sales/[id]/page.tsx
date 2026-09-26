@@ -12,6 +12,7 @@ import { useCompany } from "@/contexts/CompanyContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 import { useRole } from "@/contexts/RoleContext"
 import CashSaleReturnModal from "@/components/CashSaleReturnModal"
+import CashSaleBalancePaymentModal, { ExistingBalancePayment } from "@/components/CashSaleBalancePaymentModal"
 
 interface CashSaleItem {
   id: number
@@ -31,6 +32,8 @@ interface CashSale {
   date: string
   total: number
   total_cogs: number
+  discount_amount?: number
+  amount_received?: number
   reference?: string
   notes?: string
   party_id: number | null
@@ -67,6 +70,11 @@ export default function CashSaleDetailPage() {
   const { role } = useRole()
   const canReturn = role === "admin" || role === "accountant"
   const [showReturn, setShowReturn] = useState(false)
+
+  const [payments, setPayments] = useState<ExistingBalancePayment[]>([])
+  const [bankAccounts, setBankAccounts] = useState<{ id: number; name: string }[]>([])
+  const [balanceModal, setBalanceModal] = useState<{ mode: "receive" | "edit"; payment?: ExistingBalancePayment } | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -134,10 +142,30 @@ export default function CashSaleDetailPage() {
 
         setSale(cs)
         setLoading(false)
+
+        const { data: pays } = await supabase
+          .from("cash_sale_payments")
+          .select("id, amount, payment_date, bank_account_id, status, reference")
+          .eq("cash_sale_id", cs.id)
+          .eq("company_id", companyId)
+          .order("payment_date", { ascending: true })
+        setPayments(pays || [])
+
+        const { data: banks } = await supabase
+          .from("bank_accounts")
+          .select("id, name")
+          .eq("company_id", companyId)
+        setBankAccounts(banks || [])
       })
-  }, [companyId, saleId])
+  }, [companyId, saleId, reloadKey])
 
   const isReturned = !!sale && sale.status === "returned"
+  const netTotal = sale ? (sale.total || 0) - (sale.discount_amount || 0) : 0
+  const amountReceived = sale ? (sale.amount_received ?? sale.total ?? 0) : 0
+  const dueAmount = Math.max(0, netTotal - amountReceived)
+  const isPartial = !isReturned && dueAmount > 0
+  const activePayments = payments.filter(p => (p as any).status !== "reversed")
+
   const waLink = sale && sale.customer
     ? getWhatsAppLink(
         sale.customer.phone || "",
@@ -172,7 +200,7 @@ export default function CashSaleDetailPage() {
       paymentTerms: null,
       notes: sale.notes || null,
       createdBy: sale.created_by || "—",
-      status: sale.status === "returned" ? "Returned" : "Paid",       // cash sales are paid unless returned
+      status: sale.status === "returned" ? "Returned" : (dueAmount > 0 ? "Partial" : "Paid"),
 
       items: (sale.items || []).map(item => ({
         description: item.description || "",
@@ -188,8 +216,8 @@ export default function CashSaleDetailPage() {
       subtotal: subTotal,
       total: sale.total,
       totalTax: 0,
-      paid: sale.total,
-      balanceDue: 0,
+      paid: amountReceived,
+      balanceDue: dueAmount,
     }
 
     const doc = await generateInvoicePDF(pdfData)
@@ -219,6 +247,7 @@ export default function CashSaleDetailPage() {
         .btn-success:hover { background: #22C55E; }
         .badge-returned { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: #1D4ED8; color: #DBEAFE; }
         .badge-paid { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: #065F46; color: #6EE7B7; }
+        .badge-partial { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: #92400E; color: #FDE68A; }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
         .hide-mobile { }
         @media (max-width: 640px) {
@@ -239,6 +268,9 @@ export default function CashSaleDetailPage() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {!isReturned && <button className="btn" onClick={() => router.push(`/dashboard/cash-sales/new?id=${sale.id}`)}>✏️ Edit</button>}
+          {!isReturned && dueAmount > 0 && (
+            <button className="btn btn-primary" onClick={() => setBalanceModal({ mode: "receive" })}>💰 Receive Balance</button>
+          )}
           {!isReturned && canReturn && <button className="btn" onClick={() => setShowReturn(true)} title="Fully reverse this cash sale">↩️ Return</button>}
           {isReturned && <span className="badge-returned">↩️ Returned</span>}
           {waLink && hasFeature("whatsapp_invoice") && (
@@ -271,6 +303,24 @@ export default function CashSaleDetailPage() {
             <div className="label">Total</div>
             <div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#10B981" }}>PKR {sale.total?.toLocaleString()}</div>
           </div>
+          {(sale.discount_amount || 0) > 0 && (
+            <div>
+              <div className="label">Discount</div>
+              <div className="value">PKR {(sale.discount_amount || 0).toLocaleString()}</div>
+            </div>
+          )}
+          {isPartial && (
+            <>
+              <div>
+                <div className="label">Received</div>
+                <div className="value" style={{ fontWeight: 600 }}>PKR {amountReceived.toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="label">Due</div>
+                <div className="value" style={{ fontWeight: 700, color: "#F59E0B" }}>PKR {dueAmount.toLocaleString()}</div>
+              </div>
+            </>
+          )}
           {sale.total_cogs > 0 && (
             <div>
               <div className="label">Cost of Goods</div>
@@ -285,7 +335,7 @@ export default function CashSaleDetailPage() {
           </div>
           <div>
             <div className="label">Status</div>
-            {isReturned ? <span className="badge-returned">RETURNED</span> : <span className="badge-paid">PAID</span>}
+            {isReturned ? <span className="badge-returned">RETURNED</span> : isPartial ? <span className="badge-partial">PARTIAL</span> : <span className="badge-paid">PAID</span>}
           </div>
           {isReturned && sale.returned_at && <div><div className="label">Returned On</div><div className="value">{sale.returned_at}</div></div>}
           {sale.reference && <div><div className="label">Reference</div><div className="value">{sale.reference}</div></div>}
@@ -330,6 +380,70 @@ export default function CashSaleDetailPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {payments.length > 0 && (
+        <div className="card">
+          <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Payment History</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th style={{ textAlign: "right" }}>Amount</th>
+                  <th>Reference</th>
+                  <th>Status</th>
+                  <th className="hide-mobile"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((p: any) => (
+                  <tr key={p.id}>
+                    <td>{p.payment_date}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {Number(p.amount).toLocaleString()}</td>
+                    <td style={{ color: "var(--text-muted)" }}>{p.reference || "—"}</td>
+                    <td>
+                      {p.status === "reversed"
+                        ? <span className="badge-returned">REVERSED</span>
+                        : p.status === "edited"
+                          ? <span className="badge-paid">EDITED</span>
+                          : <span className="badge-paid">POSTED</span>}
+                    </td>
+                    <td className="hide-mobile" style={{ textAlign: "right" }}>
+                      {p.status !== "reversed" && !isReturned && (
+                        <button
+                          className="btn"
+                          style={{ padding: "4px 10px", fontSize: 12 }}
+                          onClick={() => setBalanceModal({ mode: "edit", payment: p })}
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {balanceModal && sale && sale.company_id && (
+        <CashSaleBalancePaymentModal
+          mode={balanceModal.mode}
+          sale={{
+            id: sale.id,
+            sale_no: sale.sale_no,
+            company_id: sale.company_id,
+            due: balanceModal.mode === "edit" && balanceModal.payment
+              ? dueAmount + Number(balanceModal.payment.amount)
+              : dueAmount,
+          }}
+          payment={balanceModal.payment}
+          bankAccounts={bankAccounts}
+          onClose={() => setBalanceModal(null)}
+          onDone={() => { setBalanceModal(null); setReloadKey(k => k + 1) }}
+        />
       )}
 
       {showReturn && sale && sale.company_id && (
