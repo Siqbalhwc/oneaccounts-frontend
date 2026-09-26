@@ -401,11 +401,16 @@ export default function CashSalesListPage() {
                 sortedFiltered.map((sale) => {
                   const cust = customerMap[sale.party_id]
                   const custName = cust?.name || "Walk‑in Customer"
+                  const netTotal = (sale.total || 0) - (sale.discount_amount || 0)
+                  const received = sale.amount_received ?? sale.total ?? 0
+                  const due = Math.max(0, netTotal - received)
+                  const isPartial = sale.status !== "returned" && due > 0
                   return (
                     <tr key={sale.id}>
                       <td style={tdStyle}>
                         <span style={{ fontWeight: 600, color: "var(--primary)" }}>{sale.sale_no}</span>
                         {sale.status === "returned" && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: "#3B82F6" }}>Returned</span>}
+                        {isPartial && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: "#F59E0B" }}>Partial</span>}
                       </td>
                       <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{sale.date}</td>
                       <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -413,6 +418,9 @@ export default function CashSalesListPage() {
                       </td>
                       <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
                         PKR {sale.total?.toLocaleString()}
+                        {isPartial && (
+                          <div style={{ fontSize: 11, fontWeight: 600, color: "#F59E0B" }}>Due PKR {due.toLocaleString()}</div>
+                        )}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         <ActionSlots
