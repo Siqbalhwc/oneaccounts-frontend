@@ -421,7 +421,7 @@ export default function ProfitLossPage() {
         </div>
         <div className="report-header-right">
           <div className="report-title" style={{ color: reportTextColor }}>Profit &amp; Loss</div>
-          <div className="report-period" style={{ color: reportMutedColor }}>From {startDate} to {endDate}</div>
+          <div className="report-period" style={{ color: reportMutedColor }}>From {startDate} to {endDate}{loading && hasLoadedOnce.current && <span style={{ marginLeft: 8, fontStyle: "italic" }}>Updating...</span>}</div>
         </div>
       </div>
 
