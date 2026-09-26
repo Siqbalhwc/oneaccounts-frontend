@@ -38,6 +38,16 @@ function NewCashSalePageContent() {
   const [flash, setFlash] = useState<string | null>(null)
   const [savedSaleNo, setSavedSaleNo] = useState<string | null>(null)
 
+  const [allAccounts, setAllAccounts] = useState<any[]>([])
+  const [discountAmount, setDiscountAmount] = useState<number | "">(0)
+  const [discountAccountId, setDiscountAccountId] = useState<number | null>(null)
+  const [selectedDiscountAccount, setSelectedDiscountAccount] = useState<any>(null)
+  const [receivedOverride, setReceivedOverride] = useState<number | null>(null) // null = full net total (default)
+
+  // Read-only display for edit mode (discount/received are fixed once created; edit only changes line items)
+  const [editSaleDiscount, setEditSaleDiscount] = useState<number>(0)
+  const [editSaleAmountReceived, setEditSaleAmountReceived] = useState<number>(0)
+
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       const cid = (user?.app_metadata as any)?.company_id
@@ -49,6 +59,18 @@ function NewCashSalePageContent() {
         .eq("company_id", cid)
         .eq("is_active", true)
       if (banks) setBankAccounts(banks)
+      const { data: accts } = await supabase
+        .from("accounts")
+        .select("id, code, name")
+        .eq("company_id", cid)
+      if (accts) {
+        setAllAccounts(accts)
+        const suggested = accts.find((a: any) => /discount/i.test(a.name))
+        if (suggested) {
+          setDiscountAccountId(suggested.id)
+          setSelectedDiscountAccount(suggested)
+        }
+      }
     })
   }, [])
 
@@ -71,6 +93,8 @@ function NewCashSalePageContent() {
         setReference(cs.reference || "")
         setNotes(cs.notes || "")
         setBankAccountId(cs.bank_account_id)
+        setEditSaleDiscount(Number(cs.discount_amount || 0))
+        setEditSaleAmountReceived(Number(cs.amount_received ?? cs.total ?? 0))
 
         if (cs.party_id) {
           const { data: cust } = await supabase
@@ -171,10 +195,22 @@ function NewCashSalePageContent() {
   const totalAmount = items.reduce((s, i) => s + (i.total || 0), 0)
   const hasStockErrors = Object.keys(stockErrors).length > 0
 
+  const netTotal = Math.max(0, totalAmount - (Number(discountAmount) || 0))
+  const amountReceived = isEditMode
+    ? editSaleAmountReceived
+    : (receivedOverride === null ? netTotal : Math.min(Math.max(0, receivedOverride), netTotal))
+  const dueAmount = isEditMode
+    ? Math.max(0, netTotal - editSaleAmountReceived)
+    : Math.max(0, netTotal - amountReceived)
+  const needsCustomer = !isEditMode && dueAmount > 0 && !customerId
+  const needsDiscountAccount = !isEditMode && Number(discountAmount) > 0 && !discountAccountId
+
   const handleSubmit = async () => {
     if (items.length === 0) { setError("Add at least one item"); return }
     if (items.some((i: any) => i.qty === "" || !Number(i.qty) || i.unit_price === "")) { setError("Enter Qty and Rate for every item"); return }
     if (hasStockErrors) { setError("Cannot save: some items have insufficient stock."); return }
+    if (!isEditMode && needsDiscountAccount) { setError("A discount account must be selected when a discount is entered."); return }
+    if (!isEditMode && needsCustomer) { setError("A customer must be selected for a partially paid cash sale."); return }
     setSaving(true); setError("")
     try {
       const payloadItems = items.map(i => ({
@@ -207,6 +243,9 @@ function NewCashSalePageContent() {
           p_reference: reference || "",
           p_notes: notes || "",
           p_user_email: "system",
+          p_discount_amount: Number(discountAmount) || 0,
+          p_discount_account_id: Number(discountAmount) > 0 ? discountAccountId : null,
+          p_amount_received: amountReceived,
         })
       }
       const { data, error: rpcError } = rpcResult
@@ -227,6 +266,8 @@ function NewCashSalePageContent() {
       setBankAccountId(null)
       setReference("")
       setNotes("")
+      setDiscountAmount(0)
+      setReceivedOverride(null)
       setSaving(false)
     } catch (err: any) {
       setError(err.message || "Network error")
@@ -371,21 +412,115 @@ function NewCashSalePageContent() {
               ))}
             </div>
           )}
+
+          {!isEditMode && (
+            <div className="cs-card">
+              <label className="cs-label">Discount & Payment Received</label>
+              <div className="cs-two-col" style={{ marginBottom: discountAmount ? 10 : 0 }}>
+                <div>
+                  <label className="cs-label" style={{ fontWeight: 400 }}>Discount Amount</label>
+                  <input
+                    className="cs-input"
+                    type="number"
+                    min={0}
+                    value={discountAmount}
+                    onChange={e => setDiscountAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                    placeholder="0"
+                  />
+                </div>
+                {Number(discountAmount) > 0 && (
+                  <div>
+                    <label className="cs-label" style={{ fontWeight: 400 }}>Discount Account</label>
+                    <EntityPicker
+                      entityType="account"
+                      value={selectedDiscountAccount}
+                      onChange={(record: any) => {
+                        setDiscountAccountId(record ? Number(record.id) : null)
+                        setSelectedDiscountAccount(record)
+                      }}
+                      placeholder="Select GL account..."
+                      compact
+                      allowCreate={false}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: 14 }}>
+                <label className="cs-label" style={{ fontWeight: 400 }}>Amount Received (defaults to full net amount)</label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    className="cs-input"
+                    type="number"
+                    min={0}
+                    max={netTotal}
+                    value={receivedOverride === null ? netTotal : receivedOverride}
+                    onChange={e => setReceivedOverride(e.target.value === "" ? 0 : Number(e.target.value))}
+                  />
+                  {receivedOverride !== null && (
+                    <button type="button" className="cs-btn" onClick={() => setReceivedOverride(null)}>Full</button>
+                  )}
+                </div>
+              </div>
+
+              {dueAmount > 0 && (
+                <div style={{ marginTop: 10, padding: "8px 10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 6, color: "#F59E0B", fontSize: 12 }}>
+                  Balance of PKR {dueAmount.toLocaleString()} will remain due.
+                  {needsCustomer && " A customer must be selected to save a partial cash sale."}
+                </div>
+              )}
+            </div>
+          )}
+
+          {isEditMode && (editSaleDiscount > 0 || dueAmount > 0 || editSaleAmountReceived < totalAmount) && (
+            <div className="cs-card">
+              <label className="cs-label">Discount & Payment (fixed at creation — not editable here)</label>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.8 }}>
+                {editSaleDiscount > 0 && <div>Discount: PKR {editSaleDiscount.toLocaleString()}</div>}
+                <div>Received so far: PKR {editSaleAmountReceived.toLocaleString()}</div>
+                <div>Due after this edit: PKR {dueAmount.toLocaleString()}</div>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="cs-desktop-summary">
           <div className="cs-card">
             <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
               <span>Total</span>
               <span>PKR {totalAmount.toLocaleString()}</span>
             </div>
+            {!isEditMode && Number(discountAmount) > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>
+                <span>Discount</span>
+                <span>− PKR {Number(discountAmount).toLocaleString()}</span>
+              </div>
+            )}
+            {!isEditMode && (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600, marginTop: 4, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+                  <span>Net Total</span>
+                  <span>PKR {netTotal.toLocaleString()}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>
+                  <span>Received</span>
+                  <span>PKR {amountReceived.toLocaleString()}</span>
+                </div>
+                {dueAmount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#F59E0B", fontWeight: 600, marginTop: 4 }}>
+                    <span>Due</span>
+                    <span>PKR {dueAmount.toLocaleString()}</span>
+                  </div>
+                )}
+              </>
+            )}
             {hasStockErrors && (
               <div style={{ marginTop: 8, padding: "6px 10px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, color: "#EF4444", fontSize: 11 }}>Some items have insufficient stock</div>
             )}
           </div>
           <div className="cs-card">
-            <button className="cs-btn cs-btn-primary" onClick={handleSubmit} disabled={saving || loadingEdit || hasStockErrors || items.length === 0}>
+            <button className="cs-btn cs-btn-primary" onClick={handleSubmit} disabled={saving || loadingEdit || hasStockErrors || items.length === 0 || needsCustomer || needsDiscountAccount}>
               {saving ? (isEditMode ? "Updating..." : "Posting...") : (isEditMode ? "Update Cash Sale" : "Post Cash Sale")}
             </button>
           </div>
@@ -394,10 +529,12 @@ function NewCashSalePageContent() {
 
       <div className="cs-mobile-sticky">
         <div>
-          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Total</div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>PKR {totalAmount.toLocaleString()}</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{!isEditMode && dueAmount > 0 ? "Due" : "Total"}</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>
+            PKR {(!isEditMode && dueAmount > 0 ? dueAmount : (isEditMode ? totalAmount : netTotal)).toLocaleString()}
+          </div>
         </div>
-        <button className="cs-btn cs-btn-primary" style={{ width: "auto", padding: "0 20px" }} onClick={handleSubmit} disabled={saving || loadingEdit || hasStockErrors || items.length === 0}>
+        <button className="cs-btn cs-btn-primary" style={{ width: "auto", padding: "0 20px" }} onClick={handleSubmit} disabled={saving || loadingEdit || hasStockErrors || items.length === 0 || needsCustomer || needsDiscountAccount}>
           {saving ? "..." : (isEditMode ? "Update" : "Post")}
         </button>
       </div>
