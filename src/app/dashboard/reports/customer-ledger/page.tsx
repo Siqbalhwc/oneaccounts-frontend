@@ -186,7 +186,7 @@ export default function CustomerLedgerPage() {
             `)
             .eq("company_id", companyId)
             .eq("account_id", arAccount.id)
-            .eq("source_type", "cash_sale")
+            .in("source_type", ["cash_sale", "cash_sale_reversal"])
             .in("source_id", cashSaleIds)
             .order("entry_id", { ascending: true })
         : { data: [] as any[] }
@@ -316,13 +316,14 @@ export default function CustomerLedgerPage() {
         if (lineDate > endDate) continue
 
         const saleNo = cashSaleNoById.get(line.source_id) || "CS"
+        const isReversal = line.source_type === "cash_sale_reversal"
 
         periodLines.push({
           id: `cs-${line.id}`,
-          entry_no: `CS-${saleNo}`,
+          entry_no: isReversal ? `Rev-CS-${saleNo}` : `CS-${saleNo}`,
           date: lineDate,
           created_at: je?.created_at || `${lineDate}T00:00:00`,
-          description: `Cash Sale ${saleNo} (Due)`,
+          description: isReversal ? `Cash Sale ${saleNo} (Edit Reversal)` : `Cash Sale ${saleNo} (Due)`,
           debit,
           credit,
           running_balance: 0,
