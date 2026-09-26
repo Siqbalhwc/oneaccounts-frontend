@@ -167,6 +167,57 @@ export default function CustomerLedgerPage() {
             .eq("source_id", selectedCustomerId)
         : { data: [] as any[] }
 
+      // 4c. Cash sales for this customer that ever posted an AR debit (partial cash sales)
+      const { data: customerCashSales } = await supabase
+        .from("cash_sales")
+        .select("id, sale_no")
+        .eq("party_id", selectedCustomerId)
+        .eq("company_id", companyId)
+
+      const cashSaleIds = (customerCashSales || []).map(cs => cs.id)
+      const cashSaleNoById = new Map((customerCashSales || []).map(cs => [cs.id, cs.sale_no]))
+
+      const { data: cashSaleArLines } = arAccount && cashSaleIds.length
+        ? await supabase
+            .from("journal_lines")
+            .select(`
+              id, debit, credit, entry_id, source_type, source_id,
+              journal_entries ( date, description, entry_no, created_at )
+            `)
+            .eq("company_id", companyId)
+            .eq("account_id", arAccount.id)
+            .eq("source_type", "cash_sale")
+            .in("source_id", cashSaleIds)
+            .order("entry_id", { ascending: true })
+        : { data: [] as any[] }
+
+      // 4d. Balance payments received against this customer's cash sales (and their reversals)
+      const { data: customerCashSalePayments } = cashSaleIds.length
+        ? await supabase
+            .from("cash_sale_payments")
+            .select("id, cash_sale_id")
+            .in("cash_sale_id", cashSaleIds)
+        : { data: [] as any[] }
+
+      const csPaymentIds = (customerCashSalePayments || []).map(p => p.id)
+      const csSaleNoByPaymentId = new Map(
+        (customerCashSalePayments || []).map(p => [p.id, cashSaleNoById.get(p.cash_sale_id) || "CS"])
+      )
+
+      const { data: cashSaleBalanceLines } = arAccount && csPaymentIds.length
+        ? await supabase
+            .from("journal_lines")
+            .select(`
+              id, debit, credit, entry_id, source_type, source_id,
+              journal_entries ( date, description, entry_no, created_at )
+            `)
+            .eq("company_id", companyId)
+            .eq("account_id", arAccount.id)
+            .in("source_type", ["cash_sale_balance", "cash_sale_balance_reversal"])
+            .in("source_id", csPaymentIds)
+            .order("entry_id", { ascending: true })
+        : { data: [] as any[] }
+
       // 5. Walk every line once, bucketing into "opening" (before startDate) or
       //    "period" (within [startDate, endDate]). Anything after endDate is dropped.
       const periodLines: any[] = []
@@ -249,6 +300,65 @@ export default function CustomerLedgerPage() {
           running_balance: 0,
         })
       }
+      for (const line of cashSaleArLines || []) {
+        const je = (line as any).journal_entries
+        const lineDate: string | undefined = je?.date
+        if (!lineDate) continue
+
+        const debit = line.debit || 0
+        const credit = line.credit || 0
+
+        if (lineDate < startDate) {
+          openingDebit += debit
+          openingCredit += credit
+          continue
+        }
+        if (lineDate > endDate) continue
+
+        const saleNo = cashSaleNoById.get(line.source_id) || "CS"
+
+        periodLines.push({
+          id: `cs-${line.id}`,
+          entry_no: `CS-${saleNo}`,
+          date: lineDate,
+          created_at: je?.created_at || `${lineDate}T00:00:00`,
+          description: `Cash Sale ${saleNo} (Due)`,
+          debit,
+          credit,
+          running_balance: 0,
+        })
+      }
+
+      for (const line of cashSaleBalanceLines || []) {
+        const je = (line as any).journal_entries
+        const lineDate: string | undefined = je?.date
+        if (!lineDate) continue
+
+        const debit = line.debit || 0
+        const credit = line.credit || 0
+
+        if (lineDate < startDate) {
+          openingDebit += debit
+          openingCredit += credit
+          continue
+        }
+        if (lineDate > endDate) continue
+
+        const saleNo = csSaleNoByPaymentId.get(line.source_id) || "CS"
+        const isReversal = line.source_type === "cash_sale_balance_reversal"
+
+        periodLines.push({
+          id: `csbal-${line.id}`,
+          entry_no: isReversal ? `Rev-CSBAL-${saleNo}` : `CSBAL-${saleNo}`,
+          date: lineDate,
+          created_at: je?.created_at || `${lineDate}T00:00:00`,
+          description: isReversal ? `Cash Sale Balance Reversal - ${saleNo}` : `Cash Sale Balance Received - ${saleNo}`,
+          debit,
+          credit,
+          running_balance: 0,
+        })
+      }
+
       periodLines.sort((a, b) => {
         const dateCompare = a.date.localeCompare(b.date)
         if (dateCompare !== 0) return dateCompare
