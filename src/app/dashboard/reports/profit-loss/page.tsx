@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Download, Printer, Calendar, TrendingUp, TrendingDown } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -27,8 +27,7 @@ export default function ProfitLossPage() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
-  const [accounts, setAccounts] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [accounts, setAccounts] = useState<any[]>([])rn  const [loading, setLoading] = useState(true)rn  const hasLoadedOnce = useRef(false)
 
   const now = new Date()
   const [startDate, setStartDate] = useState(`${now.getFullYear()}-01-01`)
@@ -71,13 +70,7 @@ export default function ProfitLossPage() {
         category: row.category || getCategory({ code: row.code }),
         balance: Number(row.net),
       }))
-      setAccounts(mapped)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
-  }
+      setAccounts(mapped)rn    } catch (e) {rn      console.error(e)rn    } finally {rn      setLoading(false)rn      hasLoadedOnce.current = truern    }rn  }
 
   // ── Fetch projects (MUST include company_id for isolation) ──
   const fetchProjects = async () => {
@@ -326,7 +319,7 @@ export default function ProfitLossPage() {
     }
   }
 
-  if (loading) return (
+  if (loading && !hasLoadedOnce.current) return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--bg)", color: "var(--text-muted)", fontFamily: "'Inter', sans-serif", gap: 12 }}>
       <div style={{ width: 20, height: 20, border: "2px solid var(--primary)", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
       Loading financial data…

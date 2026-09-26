@@ -1,16 +1,23 @@
-$path = "src\app\dashboard\reports\page.tsx"
+$path = "src\app\dashboard\reports\profit-loss\page.tsx"
 $content = Get-Content -LiteralPath $path -Raw
 
-$old = '{ title: "Budget vs Actual",     desc: "Compare budget to actual by activity", icon: <ClipboardList size={24} />, href: "/dashboard/reports/budget-vs-actual", color: "#0F9D58" },'
-$new = @'
-{ title: "Budget vs Actual",     desc: "Compare budget to actual by activity", icon: <ClipboardList size={24} />, href: "/dashboard/reports/budget-vs-actual", color: "#0F9D58" },
-    { title: "P&L Analysis",         desc: "Profit & Loss by day, product or customer", icon: <Activity size={24} />,      href: "/dashboard/reports/pl-analysis",     color: "#EC4899" },
-'@
+$replacements = @(
+  @{ old = 'import { useState, useEffect } from "react"'; new = 'import { useState, useEffect, useRef } from "react"' },
+  @{ old = "  const [accounts, setAccounts] = useState<any[]>([])`r`n  const [loading, setLoading] = useState(true)"; new = "  const [accounts, setAccounts] = useState<any[]>([])`r`n  const [loading, setLoading] = useState(true)`r`n  const hasLoadedOnce = useRef(false)" },
+  @{ old = "      setAccounts(mapped)`r`n    } catch (e) {`r`n      console.error(e)`r`n    } finally {`r`n      setLoading(false)`r`n    }`r`n  }"; new = "      setAccounts(mapped)`r`n    } catch (e) {`r`n      console.error(e)`r`n    } finally {`r`n      setLoading(false)`r`n      hasLoadedOnce.current = true`r`n    }`r`n  }" },
+  @{ old = "  if (loading) return ("; new = "  if (loading && !hasLoadedOnce.current) return (" }
+)
 
-if ($content -notmatch [regex]::Escape($old)) { Write-Host "ANCHOR NOT FOUND - stopping, no changes made"; exit 1 }
+foreach ($r in $replacements) {
+  if ($content -notmatch [regex]::Escape($r.old)) {
+    Write-Host "ANCHOR NOT FOUND, stopping (no changes made): $($r.old)"
+    exit 1
+  }
+}
 
-$content = $content -replace [regex]::Escape($old), $new
-$content = $content -replace 'import \{ Scale, TrendingUp, BarChart3, BookOpen, Users, Truck, Calendar, FileText, ClipboardList, LineChart \} from "lucide-react"', 'import { Scale, TrendingUp, BarChart3, BookOpen, Users, Truck, Calendar, FileText, ClipboardList, LineChart, Activity } from "lucide-react"'
+foreach ($r in $replacements) {
+  $content = $content -replace [regex]::Escape($r.old), [System.Text.RegularExpressions.Regex]::Escape($r.new).Replace('\ ', ' ') -replace '\\(.)', '$1'
+}
 
 Set-Content -LiteralPath $path -Value $content -NoNewline
-Write-Host "Done - card and icon import added"
+Write-Host "Done - profit-loss date filter fix applied"
