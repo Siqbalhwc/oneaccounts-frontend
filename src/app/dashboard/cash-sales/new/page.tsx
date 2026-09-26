@@ -279,7 +279,7 @@ function NewCashSalePageContent() {
     <div className="cs-page">
       <style>{`
         .cs-page { padding: 20px 16px; overflow: visible; }
-        @media (max-width: 480px) { .cs-page { padding: 12px; padding-bottom: 90px; } }
+        @media (max-width: 480px) { .cs-page { padding: 12px; } }
 
         .cs-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
         .cs-label { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block; }
@@ -308,7 +308,7 @@ function NewCashSalePageContent() {
           .cs-item-row .cs-remove { justify-self: end; }
         }
 
-        .cs-mobile-sticky { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 10px 16px; align-items: center; justify-content: space-between; gap: 12px; z-index: 20; }
+        .cs-mobile-sticky { display: none; position: sticky; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 10px 16px; align-items: center; justify-content: space-between; gap: 12px; z-index: 50; margin-top: 16px; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -482,6 +482,18 @@ function NewCashSalePageContent() {
               </div>
             </div>
           )}
+
+          <div className="cs-mobile-sticky">
+            <div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{!isEditMode && dueAmount > 0 ? "Due" : "Total"}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>
+                PKR {(!isEditMode && dueAmount > 0 ? dueAmount : (isEditMode ? totalAmount : netTotal)).toLocaleString()}
+              </div>
+            </div>
+            <button className="cs-btn cs-btn-primary" style={{ width: "auto", padding: "0 20px" }} onClick={handleSubmit} disabled={saving || loadingEdit || hasStockErrors || items.length === 0 || needsCustomer || needsDiscountAccount}>
+              {saving ? "..." : (isEditMode ? "Update" : "Post")}
+            </button>
+          </div>
         </div>
 
         <div className="cs-desktop-summary">
@@ -525,18 +537,6 @@ function NewCashSalePageContent() {
             </button>
           </div>
         </div>
-      </div>
-
-      <div className="cs-mobile-sticky">
-        <div>
-          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{!isEditMode && dueAmount > 0 ? "Due" : "Total"}</div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>
-            PKR {(!isEditMode && dueAmount > 0 ? dueAmount : (isEditMode ? totalAmount : netTotal)).toLocaleString()}
-          </div>
-        </div>
-        <button className="cs-btn cs-btn-primary" style={{ width: "auto", padding: "0 20px" }} onClick={handleSubmit} disabled={saving || loadingEdit || hasStockErrors || items.length === 0 || needsCustomer || needsDiscountAccount}>
-          {saving ? "..." : (isEditMode ? "Update" : "Post")}
-        </button>
       </div>
 
     </div>
