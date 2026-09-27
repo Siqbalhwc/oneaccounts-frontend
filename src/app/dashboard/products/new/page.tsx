@@ -213,7 +213,7 @@ export default function ProductFormPage() {
   if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data...</div>
 
   return (
-    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div className="page-wrap" style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .card {
           background: var(--card); border: 1px solid var(--border); border-radius: 12px;
@@ -238,14 +238,32 @@ export default function ProductFormPage() {
         .inline-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .header-grid { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
 
-        /* Summary side will jump above form on mobile */
+        /* Mobile save bar: hidden on desktop, shown + sticky to bottom on mobile */
+        .mobile-save-bar { display: none; }
+
+        /* -- Mobile (<=900px): single column, form first, Save button moves to a
+           sticky bottom bar instead of sitting above the form (previously used
+           order: -1, which put Save before any fields were even visible) -- */
         @media (max-width: 900px) {
           .header-grid { grid-template-columns: 1fr; }
-          .summary-side { order: -1; }
+          .summary-side .desktop-save { display: none; }
+          .mobile-save-bar {
+            display: flex;
+            position: sticky;
+            bottom: 0;
+            background: var(--card);
+            border-top: 1px solid var(--border);
+            padding: 10px 0;
+            margin-top: 16px;
+            z-index: 50;
+          }
         }
         @media (max-width: 600px) {
           .inline-group { grid-template-columns: 1fr; }
           .page-wrap { padding: 12px !important; }
+          .mobile-save-bar { margin-left: -12px; margin-right: -12px; padding: 10px 12px; }
+          /* 16px stops iOS Safari auto-zooming the page when a field is tapped */
+          .input, .select { font-size: 16px; }
         }
       `}</style>
 
@@ -397,12 +415,20 @@ export default function ProductFormPage() {
                 <span style={{ color: "#F59E0B" }}>PKR {totalCost.toLocaleString()}</span>
               </div>
             </div>
-            <div className="card" style={{ padding: "16px" }}>
+            <div className="card desktop-save" style={{ padding: "16px" }}>
               <button className="btn btn-submit" type="submit" disabled={loading}>
                 {loading ? "Saving..." : editId ? <><Save size={16} /> Update Product</> : <><Plus size={16} /> Create Product</>}
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Mobile-only: Save stays reachable at the bottom of the screen while
+            scrolling through the form, instead of sitting above the fields. */}
+        <div className="mobile-save-bar">
+          <button className="btn btn-submit" type="submit" disabled={loading}>
+            {loading ? "Saving..." : editId ? <><Save size={16} /> Update Product</> : <><Plus size={16} /> Create Product</>}
+          </button>
         </div>
       </form>
     </div>
