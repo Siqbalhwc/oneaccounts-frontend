@@ -280,6 +280,46 @@ export default function SuppliersPage() {
     </th>
   )
 
+  // Shared "more actions" list (Link / Restore / Archive-Delete) used by both
+  // the desktop table row and the mobile card, so the two stay in sync.
+  const rowOverflowActions = (s: Supplier) => {
+    const isArchived = !!s.archived_at
+    return [
+      {
+        key: "link",
+        label: "Link",
+        icon: <></>,
+        hidden: !(canEdit && companyId),
+        render: () => (
+          <CustomerVendorLink
+            partyType="supplier"
+            party={s}
+            companyId={companyId!}
+            counterparts={customersForLink}
+            onUpdated={refreshLinkData}
+            asMenuItem
+          />
+        ),
+      },
+      {
+        key: "restore",
+        label: "Restore",
+        icon: <RotateCcw size={14} />,
+        color: "#10B981",
+        hidden: !(canEdit && isArchived),
+        onClick: () => restoreSupplier(s),
+      },
+      {
+        key: "archive",
+        label: checkingUsage === s.id ? "Checking..." : "Archive / Delete",
+        icon: <Trash2 size={14} />,
+        color: "#EF4444",
+        hidden: !(canEdit && !isArchived),
+        onClick: () => { if (checkingUsage === null) handleArchiveOrDelete(s) },
+      },
+    ]
+  }
+
   if (roleLoading || !role) {
     return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
   }
@@ -390,6 +430,28 @@ export default function SuppliersPage() {
           .header-row .actions { width: 100%; justify-content: space-between; }
           .search-section { max-width: 100%; }
         }
+
+        /* -- Mobile card list: hidden by default (desktop/tablet shows the table) -- */
+        .sup-cards { display: none; flex-direction: column; gap: 10px; }
+        .sup-card {
+          background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+          padding: 14px 16px; box-shadow: var(--shadow-sm);
+        }
+        .sup-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        .sup-card-name { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.3; }
+        .sup-card-code { font-size: 12px; font-weight: 600; color: var(--primary); margin-top: 2px; }
+        .sup-card-balance { font-size: 15px; font-weight: 800; white-space: nowrap; text-align: right; }
+        .sup-card-phone { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+        .sup-card-opening { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .sup-card-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+        .sup-card-badge { display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 700; color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; vertical-align: middle; }
+        .sup-card-empty { text-align: center; color: var(--text-muted); padding: 32px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+
+        /* -- Below 640px: switch from horizontal-scroll table to stacked cards -- */
+        @media (max-width: 640px) {
+          .desktop-table { display: none; }
+          .sup-cards { display: flex; }
+        }
       `}</style>
 
       <div className="header-row">
@@ -442,7 +504,7 @@ export default function SuppliersPage() {
         </label>
       </div>
 
-      <div className="card">
+      <div className="card desktop-table">
         <div className="table-scroll">
           <table className="sup-table">
             <colgroup>
@@ -497,40 +559,7 @@ export default function SuppliersPage() {
                           title: "Edit",
                           onClick: () => openEdit(s),
                         } : null}
-                        overflow={[
-                          {
-                            key: "link",
-                            label: "Link",
-                            icon: <></>,
-                            hidden: !(canEdit && companyId),
-                            render: () => (
-                              <CustomerVendorLink
-                                partyType="supplier"
-                                party={s}
-                                companyId={companyId!}
-                                counterparts={customersForLink}
-                                onUpdated={refreshLinkData}
-                                asMenuItem
-                              />
-                            ),
-                          },
-                          {
-                            key: "restore",
-                            label: "Restore",
-                            icon: <RotateCcw size={14} />,
-                            color: "#10B981",
-                            hidden: !(canEdit && isArchived),
-                            onClick: () => restoreSupplier(s),
-                          },
-                          {
-                            key: "archive",
-                            label: checkingUsage === s.id ? "Checking..." : "Archive / Delete",
-                            icon: <Trash2 size={14} />,
-                            color: "#EF4444",
-                            hidden: !(canEdit && !isArchived),
-                            onClick: () => { if (checkingUsage === null) handleArchiveOrDelete(s) },
-                          },
-                        ]}
+                        overflow={rowOverflowActions(s)}
                       />
                     </td>
                   </tr>
@@ -540,6 +569,57 @@ export default function SuppliersPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* -- MOBILE: card list, shown instead of the table below 640px -- */}
+      <div className="sup-cards">
+        {loading ? (
+          [1, 2, 3, 4].map(i => (
+            <div className="sup-card" key={i}>
+              <div style={{ width: "55%", height: 14, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite", marginBottom: 8 }} />
+              <div style={{ width: "35%", height: 12, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite" }} />
+            </div>
+          ))
+        ) : suppliers.length === 0 ? (
+          <div className="sup-card-empty">{search ? "No matching suppliers found." : "No suppliers yet. Add your first supplier."}</div>
+        ) : (
+          suppliers.map((s) => {
+            const isArchived = !!s.archived_at
+            return (
+              <div key={s.id} className="sup-card" style={isArchived ? { opacity: 0.5 } : {}}>
+                <div className="sup-card-top">
+                  <div>
+                    <div className="sup-card-name">
+                      {s.name}
+                      {isArchived && <span className="sup-card-badge">ARCHIVED</span>}
+                    </div>
+                    <div className="sup-card-code">{s.code}</div>
+                  </div>
+                  <div className="sup-card-balance" style={{ color: s.balance >= 0 ? "#10B981" : "#EF4444" }}>
+                    PKR {s.balance?.toLocaleString()}
+                  </div>
+                </div>
+                {s.phone && <div className="sup-card-phone">{s.phone}</div>}
+                {!!s.opening_balance && <div className="sup-card-opening">Opening balance: PKR {s.opening_balance.toLocaleString()}</div>}
+                <div className="sup-card-actions">
+                  <ActionSlots
+                    slot1={{
+                      icon: <Eye size={13} />,
+                      title: "View Ledger",
+                      onClick: () => router.push(`/dashboard/reports/vendor-ledger?supplierId=${s.id}`),
+                    }}
+                    slot2={canEdit ? {
+                      icon: <Edit size={13} />,
+                      title: "Edit",
+                      onClick: () => openEdit(s),
+                    } : null}
+                    overflow={rowOverflowActions(s)}
+                  />
+                </div>
+              </div>
+            )
+          })
+        )}
       </div>
 
       {importing && <div style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>Importing...</div>}
