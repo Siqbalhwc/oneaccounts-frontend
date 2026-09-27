@@ -15,6 +15,12 @@ import ActionSlots from "@/components/ActionSlots"
 type SortField = "code" | "name" | "phone" | "balance"
 type SortDir = "asc" | "desc"
 
+const WhatsAppIcon = (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+  </svg>
+)
+
 function SkeletonRow() {
   return (
     <tr>
@@ -306,6 +312,46 @@ export default function CustomersPage() {
     </th>
   )
 
+  // Shared "more actions" list (Link / Restore / Archive-Delete) used by both
+  // the desktop table row and the mobile card, so the two stay in sync.
+  const rowOverflowActions = (cust: any): RowAction[] => {
+    const isArchived = !!cust.archived_at
+    return [
+      {
+        key: "link",
+        label: "Link",
+        icon: <></>,
+        hidden: !(canEdit && companyId),
+        render: () => (
+          <CustomerVendorLink
+            partyType="customer"
+            party={cust}
+            companyId={companyId!}
+            counterparts={suppliersForLink}
+            onUpdated={refreshLinkData}
+            asMenuItem
+          />
+        ),
+      },
+      {
+        key: "restore",
+        label: "Restore",
+        icon: <RotateCcw size={14} />,
+        color: "#10B981",
+        hidden: !(canEdit && isArchived),
+        onClick: () => restoreCustomer(cust),
+      },
+      {
+        key: "archive",
+        label: checkingUsage === cust.id ? "Checking..." : "Archive / Delete",
+        icon: <Trash2 size={14} />,
+        color: "#EF4444",
+        hidden: !(canEdit && !isArchived),
+        onClick: () => { if (checkingUsage === null) handleArchiveOrDelete(cust) },
+      },
+    ]
+  }
+
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
@@ -428,6 +474,27 @@ export default function CustomersPage() {
               max-width: 100%;
             }
           }
+
+          /* -- Mobile card list: hidden by default (desktop/tablet shows the table) -- */
+          .cust-cards { display: none; flex-direction: column; gap: 10px; }
+          .cust-card {
+            background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+            padding: 14px 16px; box-shadow: var(--shadow-sm);
+          }
+          .cust-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+          .cust-card-name { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.3; }
+          .cust-card-code { font-size: 12px; font-weight: 600; color: var(--primary); margin-top: 2px; }
+          .cust-card-balance { font-size: 15px; font-weight: 800; white-space: nowrap; text-align: right; }
+          .cust-card-phone { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+          .cust-card-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+          .cust-card-badge { display: inline-block; margin-left: 8px; font-size: 10px; font-weight: 700; color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; vertical-align: middle; }
+          .cust-card-empty { text-align: center; color: var(--text-muted); padding: 32px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+
+          /* -- Below 640px: switch from horizontal-scroll table to stacked cards -- */
+          @media (max-width: 640px) {
+            .desktop-table { display: none; }
+            .cust-cards { display: flex; }
+          }
         `}</style>
 
         {/* -- HEADER ROW: title left, all buttons right -- */}
@@ -484,8 +551,8 @@ export default function CustomersPage() {
           </label>
         </div>
 
-        {/* -- Table -- */}
-        <div className="card">
+        {/* -- Table (desktop / tablet) -- */}
+        <div className="card desktop-table">
           <div className="table-scroll">
             <table className="cust-table">
               <colgroup>
@@ -543,49 +610,12 @@ export default function CustomersPage() {
                               onClick: () => router.push(`/dashboard/customers/new?id=${cust.id}`),
                             } : null}
                             slot3={(hasFeature("whatsapp_invoice") && cust.phone) ? {
-                              icon: (
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                                </svg>
-                              ),
+                              icon: WhatsAppIcon,
                               title: "Send WhatsApp",
                               color: "#25D366",
                               onClick: () => sendWhatsApp(cust),
                             } : null}
-                            overflow={[
-                              {
-                                key: "link",
-                                label: "Link",
-                                icon: <></>,
-                                hidden: !(canEdit && companyId),
-                                render: () => (
-                                  <CustomerVendorLink
-                                    partyType="customer"
-                                    party={cust}
-                                    companyId={companyId!}
-                                    counterparts={suppliersForLink}
-                                    onUpdated={refreshLinkData}
-                                    asMenuItem
-                                  />
-                                ),
-                              },
-                              {
-                                key: "restore",
-                                label: "Restore",
-                                icon: <RotateCcw size={14} />,
-                                color: "#10B981",
-                                hidden: !(canEdit && isArchived),
-                                onClick: () => restoreCustomer(cust),
-                              },
-                              {
-                                key: "archive",
-                                label: checkingUsage === cust.id ? "Checking..." : "Archive / Delete",
-                                icon: <Trash2 size={14} />,
-                                color: "#EF4444",
-                                hidden: !(canEdit && !isArchived),
-                                onClick: () => { if (checkingUsage === null) handleArchiveOrDelete(cust) },
-                              },
-                            ] as RowAction[]}
+                            overflow={rowOverflowActions(cust)}
                           />
                         </td>
                       </tr>
@@ -596,6 +626,64 @@ export default function CustomersPage() {
             </table>
           </div>
         </div>
+
+        {/* -- MOBILE: card list, shown instead of the table below 640px -- */}
+        <div className="cust-cards">
+          {loading ? (
+            [1, 2, 3, 4].map(i => (
+              <div className="cust-card" key={i}>
+                <div style={{ width: "55%", height: 14, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite", marginBottom: 8 }} />
+                <div style={{ width: "35%", height: 12, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite" }} />
+              </div>
+            ))
+          ) : sortedFiltered.length === 0 ? (
+            <div className="cust-card-empty">No customers found. {canEdit && "Add a customer to get started."}</div>
+          ) : (
+            sortedFiltered.map((cust) => {
+              const balance = cust.balance || 0
+              const isArchived = !!cust.archived_at
+              return (
+                <div key={cust.id} className="cust-card" style={isArchived ? { opacity: 0.5 } : {}}>
+                  <div className="cust-card-top">
+                    <div>
+                      <div className="cust-card-name">
+                        {cust.name}
+                        {isArchived && <span className="cust-card-badge">ARCHIVED</span>}
+                      </div>
+                      <div className="cust-card-code">{cust.code}</div>
+                    </div>
+                    <div className="cust-card-balance" style={{ color: balance >= 0 ? "#10B981" : "#EF4444" }}>
+                      PKR {balance.toLocaleString()}
+                    </div>
+                  </div>
+                  {cust.phone && <div className="cust-card-phone">{cust.phone}</div>}
+                  <div className="cust-card-actions">
+                    <ActionSlots
+                      slot1={{
+                        icon: <Eye size={13} />,
+                        title: "View Ledger",
+                        onClick: () => router.push(`/dashboard/reports/customer-ledger?customerId=${cust.id}`),
+                      }}
+                      slot2={canEdit ? {
+                        icon: <Edit size={13} />,
+                        title: "Edit",
+                        onClick: () => router.push(`/dashboard/customers/new?id=${cust.id}`),
+                      } : null}
+                      slot3={(hasFeature("whatsapp_invoice") && cust.phone) ? {
+                        icon: WhatsAppIcon,
+                        title: "Send WhatsApp",
+                        color: "#25D366",
+                        onClick: () => sendWhatsApp(cust),
+                      } : null}
+                      overflow={rowOverflowActions(cust)}
+                    />
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+
         {importing && <div style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>Importing...</div>}
 
         {confirmTarget && (
