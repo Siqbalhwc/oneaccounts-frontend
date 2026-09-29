@@ -337,6 +337,31 @@ export default function JournalPage() {
           padding: 6px 16px; font-size: 12px; border-bottom: 1px solid var(--border);
         }
         .line-item:last-child { border-bottom: none; }
+        /* -- Mobile card list: hidden by default (desktop/tablet shows the table) -- */
+        .je-cards { display: none; flex-direction: column; gap: 10px; }
+        .je-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow-sm); cursor: pointer; }
+        .je-card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+        .je-card-no { font-size: 13px; font-weight: 700; color: var(--primary); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .je-card-date { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+        .je-card-desc { font-size: 14px; color: var(--text); margin-top: 6px; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+        .je-card-meta { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; font-size: 12px; }
+        .je-card-source { color: var(--text-muted); }
+        .je-card-amt { display: flex; gap: 12px; font-weight: 700; }
+        .je-card-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+        .je-card-lines { margin: 10px 0 0; }
+        .je-card-lines .lines-header, .je-card-lines .line-item { grid-template-columns: 1fr 84px 84px; padding: 6px 10px; gap: 6px; }
+        .je-card-lines .line-item { font-size: 11px; }
+        .je-card-empty { text-align: center; color: var(--text-muted); padding: 32px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+
+        /* -- Below 640px: switch from horizontal-scroll table to stacked cards -- */
+        @media (max-width: 640px) {
+          .desktop-table { display: none; }
+          .je-cards { display: flex; }
+          .summary-grid { grid-template-columns: 1fr 1fr !important; }
+          .summary-item:first-child { grid-column: 1 / -1; }
+          .summary-item { padding: 12px; }
+          .summary-value { font-size: 16px; overflow-wrap: anywhere; }
+        }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
@@ -362,13 +387,13 @@ export default function JournalPage() {
         <input className="search-input" placeholder="Search by entry number, description, or source..." value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      <div className="card">
+      <div className="card desktop-table">
         <div className="table-scroll">
           <table className="journal-table">
             <colgroup>
               <col style={{ width: 30 }} />   {/* Chevron */}
               <col style={{ width: 100 }} />  {/* Date */}
-              <col style={{ width: 120 }} />  {/* Entry # */}
+              <col style={{ width: 190 }} />  {/* Entry # */}
               <col />                         {/* Description */}
               <col style={{ width: 130 }} />  {/* Source */}
               <col style={{ width: 110 }} />  {/* Debit */}
@@ -406,7 +431,7 @@ export default function JournalPage() {
                           {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </td>
                         <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{je.date}</td>
-                        <td style={{ ...tdStyle, fontWeight: 600, color: "var(--primary)" }}>{je.entry_no}</td>
+                        <td title={je.entry_no} style={{ ...tdStyle, fontWeight: 600, color: "var(--primary)", maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{je.entry_no}</td>
                         <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{je.description || "—"}</td>
                         <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{je.source || "—"}</td>
                         <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#EF4444", fontWeight: 600 }}>
@@ -462,6 +487,75 @@ export default function JournalPage() {
             </tbody>
           </table>
         </div>
+      </div>
+      {/* -- MOBILE: card list, shown instead of the table below 640px -- */}
+      <div className="je-cards">
+        {loading ? (
+          [1, 2, 3, 4].map(i => (
+            <div className="je-card" key={i}>
+              <div style={{ width: "55%", height: 14, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite", marginBottom: 8 }} />
+              <div style={{ width: "35%", height: 12, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite" }} />
+            </div>
+          ))
+        ) : sortedFiltered.length === 0 ? (
+          <div className="je-card-empty">No journal entries found.</div>
+        ) : (
+          sortedFiltered.map((je) => {
+            const isExpanded = expandedId === je.id
+            return (
+              <div key={je.id} className="je-card" onClick={() => toggleExpand(je.id)}>
+                <div className="je-card-top">
+                  <div className="je-card-no" title={je.entry_no}>{je.entry_no}</div>
+                  <div className="je-card-date">{je.date}</div>
+                </div>
+                <div className="je-card-desc">{je.description || "--"}</div>
+                <div className="je-card-meta">
+                  <span className="je-card-source">{je.source || "--"}</span>
+                  <span className="je-card-amt">
+                    <span style={{ color: "#EF4444" }}>Dr {(je.total_debit ?? 0) > 0 ? (je.total_debit ?? 0).toLocaleString() : "--"}</span>
+                    <span style={{ color: "#10B981" }}>Cr {(je.total_credit ?? 0) > 0 ? (je.total_credit ?? 0).toLocaleString() : "--"}</span>
+                  </span>
+                </div>
+                <div className="je-card-foot">
+                  <span>{isExpanded ? "Hide lines" : "Show lines"}</span>
+                  <button
+                    className="btn-icon"
+                    onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/journal/${je.id}`) }}
+                    title="View details"
+                  >
+                    <Eye size={13} />
+                  </button>
+                </div>
+                {isExpanded && (
+                  <div className="lines-container je-card-lines" onClick={(e) => e.stopPropagation()}>
+                    <div className="lines-header">
+                      <span>Account</span>
+                      <span style={{ textAlign: "right" }}>Debit (PKR)</span>
+                      <span style={{ textAlign: "right" }}>Credit (PKR)</span>
+                    </div>
+                    {loadingLines ? (
+                      <div className="line-item"><span style={{ color: "var(--text-muted)" }}>Loading...</span></div>
+                    ) : expandedLines.length === 0 ? (
+                      <div className="line-item"><span style={{ color: "var(--text-muted)" }}>No lines found.</span></div>
+                    ) : (
+                      expandedLines.map((l, idx) => (
+                        <div key={idx} className="line-item">
+                          <span style={{ color: "var(--text)" }}>{l.accounts?.code} - {l.accounts?.name}</span>
+                          <span style={{ textAlign: "right", color: l.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: l.debit > 0 ? 600 : 400 }}>
+                            {l.debit > 0 ? l.debit.toLocaleString() : "--"}
+                          </span>
+                          <span style={{ textAlign: "right", color: l.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: l.credit > 0 ? 600 : 400 }}>
+                            {l.credit > 0 ? l.credit.toLocaleString() : "--"}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })
+        )}
       </div>
     </div>
   )

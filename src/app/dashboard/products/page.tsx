@@ -311,6 +311,57 @@ export default function StockRegisterPage() {
     </th>
   )
 
+  // Shared "average cost working" panel content, used by both the desktop
+  // table's expandable row and the mobile card's expandable section.
+  const renderCostBreakdown = (prod: Product) => (
+    <>
+      {breakdownLoading[prod.id] ? (
+        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading...</div>
+      ) : (costBreakdown[prod.id] || []).length === 0 ? (
+        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>No opening balance or purchases recorded yet.</div>
+      ) : (
+        <table style={{ width: "100%", minWidth: 460, fontSize: 12, borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", padding: "4px 8px", color: "var(--text-muted)" }}>Step</th>
+              <th style={{ textAlign: "left", padding: "4px 8px", color: "var(--text-muted)" }}>Date</th>
+              <th style={{ textAlign: "right", padding: "4px 8px", color: "var(--text-muted)" }}>Qty</th>
+              <th style={{ textAlign: "right", padding: "4px 8px", color: "var(--text-muted)" }}>Price</th>
+              <th style={{ textAlign: "right", padding: "4px 8px", color: "var(--text-muted)" }}>Running Qty</th>
+              <th style={{ textAlign: "right", padding: "4px 8px", color: "var(--text-muted)" }}>Running Avg Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(costBreakdown[prod.id] || []).map((row: any, idx: number) => (
+              <tr key={idx}>
+                <td style={{ padding: "4px 8px" }}>{row.step_label}</td>
+                <td style={{ padding: "4px 8px" }}>{row.step_date ? new Date(row.step_date).toLocaleDateString() : "-"}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right" }}>{fmtQty(row.qty)}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right" }}>{fmtQty(row.unit_price)}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right" }}>{fmtQty(row.running_qty)}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{row.running_avg_cost}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {(costBreakdown[prod.id] || []).length > 0 && (() => {
+        const rows = costBreakdown[prod.id] || []
+        const totalQty = rows.reduce((s: number, r: any) => s + Number(r.qty || 0), 0)
+        const totalValue = rows.reduce((s: number, r: any) => s + Number(r.qty || 0) * Number(r.unit_price || 0), 0)
+        const finalAvg = totalQty > 0 ? totalValue / totalQty : 0
+        const formula = rows.map((r: any) => "(" + fmtQty(r.qty) + " x " + Number(r.unit_price).toFixed(2) + ")").join(" + ")
+        return (
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border)", fontSize: 12 }}>
+            <div>{formula} = {totalValue.toFixed(2)}</div>
+            <div>{totalValue.toFixed(2)} / {fmtQty(totalQty)} = <b>{finalAvg.toFixed(2)}</b></div>
+            <div style={{ marginTop: 4, color: "var(--text-muted)" }}>Current Average Cost (as of last recorded event, {fmtQty(totalQty)} units): <b>{finalAvg.toFixed(2)}</b></div>
+          </div>
+        )
+      })()}
+    </>
+  )
+
   if (roleLoading || !role) {
     return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
   }
@@ -460,6 +511,29 @@ export default function StockRegisterPage() {
             justify-content: flex-end;
           }
         }
+
+        /* -- Mobile card list: hidden by default (desktop/tablet shows the table) -- */
+        .prod-cards { display: none; flex-direction: column; gap: 10px; }
+        .prod-card {
+          background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+          padding: 14px 16px; box-shadow: var(--shadow-sm);
+        }
+        .prod-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        .prod-card-name { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.3; }
+        .prod-card-code { font-size: 12px; font-weight: 600; color: var(--primary); margin-top: 2px; }
+        .prod-card-closing { font-size: 15px; font-weight: 800; white-space: nowrap; text-align: right; }
+        .prod-card-prices { display: flex; gap: 14px; font-size: 13px; color: var(--text-muted); margin-top: 8px; }
+        .prod-card-prices b { color: var(--text); font-weight: 600; }
+        .prod-card-flow { display: flex; gap: 14px; font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+        .prod-card-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+        .prod-card-empty { text-align: center; color: var(--text-muted); padding: 32px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+        .prod-card-breakdown { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); font-size: 12px; overflow-x: auto; }
+
+        /* -- Below 640px: switch from horizontal-scroll table to stacked cards -- */
+        @media (max-width: 640px) {
+          .desktop-table { display: none; }
+          .prod-cards { display: flex; }
+        }
       `}</style>
 
       {/* Header: title left, Add Product right */}
@@ -515,186 +589,4 @@ export default function StockRegisterPage() {
       <div className="filter-row">
         <div className="search-group">
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-          <input className="search-input" placeholder={isConstruction ? "Search by unit name or code..." : "Search by name or code..."} value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={{ width: "100%" }} />
-        </div>
-        <div className="filter-group">
-          <select className="filter-select" value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(1) }} style={{ minWidth: 160 }}>
-            <option value="">All Categories</option>
-            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-          </select>
-          {categoryFilter && (
-            <button className="btn btn-outline" onClick={() => { setCategoryFilter(""); setPage(1); }} style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="card" style={{ overflowX: "auto" }}>
-        <div className="table-scroll">
-          <table className="stock-table" style={isConstruction ? { minWidth: 950 } : undefined}>
-            <colgroup>
-              <col style={{ minWidth: "150px" }} />
-              <col style={{ minWidth: "250px" }} />
-              <col style={{ minWidth: "100px" }} />
-              <col style={{ minWidth: "100px" }} />
-              <col style={{ minWidth: "90px" }} />
-              {!isConstruction && <col style={{ minWidth: "90px" }} />}
-              {!isConstruction && <col style={{ minWidth: "90px" }} />}
-              <col style={{ minWidth: "100px" }} />
-              <col style={{ minWidth: "60px" }} />
-              <col style={{ minWidth: "150px" }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <SortTh field="code">Code</SortTh>
-                <SortTh field="name" style={{ textAlign: "left" }}>Name</SortTh>
-                <SortTh field="cost_price" style={{ textAlign: "right" }}>Cost</SortTh>
-                <SortTh field="sale_price" style={{ textAlign: "right" }}>Sale</SortTh>
-                <SortTh field="opening_qty" style={{ textAlign: "right" }}>{isConstruction ? "Qty" : "Opening"}</SortTh>
-                {!isConstruction && <SortTh field="total_inflow" style={{ textAlign: "right" }}>Inflow</SortTh>}
-                {!isConstruction && <SortTh field="total_outflow" style={{ textAlign: "right" }}>Outflow</SortTh>}
-                <SortTh field="qty_on_hand" style={{ textAlign: "right" }}>{isConstruction ? "Available" : "Closing"}</SortTh>
-                <th style={{ ...thStyle, textAlign: "center" }}>Img</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} colCount={colCount} />)
-              ) : products.length === 0 ? (
-                <tr>
-                  <td colSpan={colCount} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
-                    {isConstruction ? "No units/plots found. " : "No products found. "}
-                    {canEdit && (isConstruction ? "Add a unit/plot to get started." : "Add a product to get started.")}
-                  </td>
-                </tr>
-              ) : (
-                products.map((prod) => {
-                  const inflow = prod.total_inflow
-                  const outflow = prod.total_outflow
-                  const closing = prod.qty_on_hand
-  const productUnit = prod.unit || "PCS"
-                  return (
-                    <>
-                    <tr key={prod.id}>
-                      <td style={tdStyle}><span style={{ fontWeight: 600, color: "var(--primary)" }}>{prod.code}</span></td>
-                      <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prod.name}</td>
-                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
-                        <span
-                          onClick={() => toggleCostBreakdown(prod.id)}
-                          style={{ cursor: "pointer", borderBottom: "1px dashed var(--text-muted)" }}
-                          title="Click to see average cost working"
-                        >
-                          PKR {prod.cost_price?.toLocaleString()}
-                        </span>
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>PKR {prod.sale_price?.toLocaleString()}</td>
-                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>{fmtQty(prod.opening_qty)}</td>
-                      {!isConstruction && <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#10B981" }}>{fmtQty(inflow)}</td>}
-                      {!isConstruction && <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#EF4444" }}>{fmtQty(outflow)}</td>}
-                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{fmtQty(closing)} {productUnit}</td>
-                      <td style={{ ...tdStyle, textAlign: "center" }}>
-                        {prod.image_path ? (
-                          <img src={prod.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
-                        ) : "-"}
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: "center" }}>
-                        <ActionSlots
-                          slot1={{
-                            icon: <Eye size={13} />,
-                            title: "View Ledger",
-                            onClick: () => router.push(`/dashboard/reports/product-ledger?productId=${prod.id}`),
-                          }}
-                          slot2={{
-                            icon: <Edit size={13} />,
-                            title: "Edit",
-                            onClick: () => router.push(`/dashboard/products/new?id=${prod.id}`),
-                          }}
-                          overflow={[
-                            {
-                              key: "delete",
-                              label: "Delete",
-                              icon: <Trash2 size={14} />,
-                              color: "#EF4444",
-                              onClick: () => handleDelete(prod.id),
-                            },
-                          ]}
-                        />
-                      </td>
-                    </tr>
-                    {expandedCostId === prod.id && (
-                      <tr key={"breakdown-" + prod.id}>
-                        <td colSpan={colCount} style={{ padding: "12px 20px", background: "var(--card)", borderTop: "1px solid var(--border)" }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
-                            Average Cost Working - {prod.name}
-                          </div>
-                          {breakdownLoading[prod.id] ? (
-                            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading...</div>
-                          ) : (costBreakdown[prod.id] || []).length === 0 ? (
-                            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>No opening balance or purchases recorded yet.</div>
-                          ) : (
-                            <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
-                              <thead>
-                                <tr>
-                                  <th style={{ textAlign: "left", padding: "4px 8px", color: "var(--text-muted)" }}>Step</th>
-                                  <th style={{ textAlign: "left", padding: "4px 8px", color: "var(--text-muted)" }}>Date</th>
-                                  <th style={{ textAlign: "right", padding: "4px 8px", color: "var(--text-muted)" }}>Qty</th>
-                                  <th style={{ textAlign: "right", padding: "4px 8px", color: "var(--text-muted)" }}>Price</th>
-                                  <th style={{ textAlign: "right", padding: "4px 8px", color: "var(--text-muted)" }}>Running Qty</th>
-                                  <th style={{ textAlign: "right", padding: "4px 8px", color: "var(--text-muted)" }}>Running Avg Cost</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(costBreakdown[prod.id] || []).map((row: any, idx: number) => (
-                                  <tr key={idx}>
-                                    <td style={{ padding: "4px 8px" }}>{row.step_label}</td>
-                                    <td style={{ padding: "4px 8px" }}>{row.step_date ? new Date(row.step_date).toLocaleDateString() : "-"}</td>
-                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{fmtQty(row.qty)}</td>
-                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{fmtQty(row.unit_price)}</td>
-                                    <td style={{ padding: "4px 8px", textAlign: "right" }}>{fmtQty(row.running_qty)}</td>
-                                    <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{row.running_avg_cost}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          )}
-                          {(costBreakdown[prod.id] || []).length > 0 && (() => {
-                            const rows = costBreakdown[prod.id] || []
-                            const totalQty = rows.reduce((s: number, r: any) => s + Number(r.qty || 0), 0)
-                            const totalValue = rows.reduce((s: number, r: any) => s + Number(r.qty || 0) * Number(r.unit_price || 0), 0)
-                            const finalAvg = totalQty > 0 ? totalValue / totalQty : 0
-                            const formula = rows.map((r: any) => "(" + fmtQty(r.qty) + " x " + Number(r.unit_price).toFixed(2) + ")").join(" + ")
-                            return (
-                              <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border)", fontSize: 12 }}>
-                                <div>{formula} = {totalValue.toFixed(2)}</div>
-                                <div>{totalValue.toFixed(2)} / {fmtQty(totalQty)} = <b>{finalAvg.toFixed(2)}</b></div>
-                                <div style={{ marginTop: 4, color: "var(--text-muted)" }}>Current Average Cost (as of last recorded event, {fmtQty(totalQty)} units): <b>{finalAvg.toFixed(2)}</b></div>
-                              </div>
-                            )
-                          })()}
-                        </td>
-                      </tr>
-                    )}
-                    </>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {total > pageSize && (
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
-          <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
-            <button className="btn btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+          <input className="search-input" placeholder={isConstruction ? "Search by
