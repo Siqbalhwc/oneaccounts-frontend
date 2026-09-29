@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { fmtQty } from "@/lib/format-number"
 import { useState, useEffect } from "react"
@@ -589,4 +589,223 @@ export default function StockRegisterPage() {
       <div className="filter-row">
         <div className="search-group">
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-          <input className="search-input" placeholder={isConstruction ? "Search by
+          <input className="search-input" placeholder={isConstruction ? "Search by unit name or code..." : "Search by name or code..."} value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} style={{ width: "100%" }} />
+        </div>
+        <div className="filter-group">
+          <select className="filter-select" value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(1) }} style={{ minWidth: 160 }}>
+            <option value="">All Categories</option>
+            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+          </select>
+          {categoryFilter && (
+            <button className="btn btn-outline" onClick={() => { setCategoryFilter(""); setPage(1); }} style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Table (desktop / tablet) */}
+      <div className="card desktop-table" style={{ overflowX: "auto" }}>
+        <div className="table-scroll">
+          <table className="stock-table" style={isConstruction ? { minWidth: 950 } : undefined}>
+            <colgroup>
+              <col style={{ minWidth: "150px" }} />
+              <col style={{ minWidth: "250px" }} />
+              <col style={{ minWidth: "100px" }} />
+              <col style={{ minWidth: "100px" }} />
+              <col style={{ minWidth: "90px" }} />
+              {!isConstruction && <col style={{ minWidth: "90px" }} />}
+              {!isConstruction && <col style={{ minWidth: "90px" }} />}
+              <col style={{ minWidth: "100px" }} />
+              <col style={{ minWidth: "60px" }} />
+              <col style={{ minWidth: "150px" }} />
+            </colgroup>
+            <thead>
+              <tr>
+                <SortTh field="code">Code</SortTh>
+                <SortTh field="name" style={{ textAlign: "left" }}>Name</SortTh>
+                <SortTh field="cost_price" style={{ textAlign: "right" }}>Cost</SortTh>
+                <SortTh field="sale_price" style={{ textAlign: "right" }}>Sale</SortTh>
+                <SortTh field="opening_qty" style={{ textAlign: "right" }}>{isConstruction ? "Qty" : "Opening"}</SortTh>
+                {!isConstruction && <SortTh field="total_inflow" style={{ textAlign: "right" }}>Inflow</SortTh>}
+                {!isConstruction && <SortTh field="total_outflow" style={{ textAlign: "right" }}>Outflow</SortTh>}
+                <SortTh field="qty_on_hand" style={{ textAlign: "right" }}>{isConstruction ? "Available" : "Closing"}</SortTh>
+                <th style={{ ...thStyle, textAlign: "center" }}>Img</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                [1, 2, 3, 4, 5].map(i => <SkeletonRow key={i} colCount={colCount} />)
+              ) : products.length === 0 ? (
+                <tr>
+                  <td colSpan={colCount} style={{ ...tdStyle, textAlign: "center", color: "var(--text-muted)", padding: 40 }}>
+                    {isConstruction ? "No units/plots found. " : "No products found. "}
+                    {canEdit && (isConstruction ? "Add a unit/plot to get started." : "Add a product to get started.")}
+                  </td>
+                </tr>
+              ) : (
+                products.map((prod) => {
+                  const inflow = prod.total_inflow
+                  const outflow = prod.total_outflow
+                  const closing = prod.qty_on_hand
+  const productUnit = prod.unit || "PCS"
+                  return (
+                    <>
+                    <tr key={prod.id}>
+                      <td style={tdStyle}><span style={{ fontWeight: 600, color: "var(--primary)" }}>{prod.code}</span></td>
+                      <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prod.name}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
+                        <span
+                          onClick={() => toggleCostBreakdown(prod.id)}
+                          style={{ cursor: "pointer", borderBottom: "1px dashed var(--text-muted)" }}
+                          title="Click to see average cost working"
+                        >
+                          PKR {prod.cost_price?.toLocaleString()}
+                        </span>
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>PKR {prod.sale_price?.toLocaleString()}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>{fmtQty(prod.opening_qty)}</td>
+                      {!isConstruction && <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#10B981" }}>{fmtQty(inflow)}</td>}
+                      {!isConstruction && <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: "#EF4444" }}>{fmtQty(outflow)}</td>}
+                      <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", fontWeight: 600 }}>{fmtQty(closing)} {productUnit}</td>
+                      <td style={{ ...tdStyle, textAlign: "center" }}>
+                        {prod.image_path ? (
+                          <img src={prod.image_path} alt="" style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 4 }} />
+                        ) : "-"}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "center" }}>
+                        <ActionSlots
+                          slot1={{
+                            icon: <Eye size={13} />,
+                            title: "View Ledger",
+                            onClick: () => router.push(`/dashboard/reports/product-ledger?productId=${prod.id}`),
+                          }}
+                          slot2={{
+                            icon: <Edit size={13} />,
+                            title: "Edit",
+                            onClick: () => router.push(`/dashboard/products/new?id=${prod.id}`),
+                          }}
+                          overflow={[
+                            {
+                              key: "delete",
+                              label: "Delete",
+                              icon: <Trash2 size={14} />,
+                              color: "#EF4444",
+                              onClick: () => handleDelete(prod.id),
+                            },
+                          ]}
+                        />
+                      </td>
+                    </tr>
+                    {expandedCostId === prod.id && (
+                      <tr key={"breakdown-" + prod.id}>
+                        <td colSpan={colCount} style={{ padding: "12px 20px", background: "var(--card)", borderTop: "1px solid var(--border)" }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+                            Average Cost Working - {prod.name}
+                          </div>
+                          {renderCostBreakdown(prod)}
+                        </td>
+                      </tr>
+                    )}
+                    </>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* -- MOBILE: card list, shown instead of the table below 640px -- */}
+      <div className="prod-cards">
+        {loading ? (
+          [1, 2, 3, 4].map(i => (
+            <div className="prod-card" key={i}>
+              <div style={{ width: "55%", height: 14, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite", marginBottom: 8 }} />
+              <div style={{ width: "35%", height: 12, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite" }} />
+            </div>
+          ))
+        ) : products.length === 0 ? (
+          <div className="prod-card-empty">
+            {isConstruction ? "No units/plots found. " : "No products found. "}
+            {canEdit && (isConstruction ? "Add a unit/plot to get started." : "Add a product to get started.")}
+          </div>
+        ) : (
+          products.map((prod) => {
+            const closing = prod.qty_on_hand
+            const productUnit = prod.unit || "PCS"
+            return (
+              <div key={prod.id} className="prod-card">
+                <div className="prod-card-top">
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    {prod.image_path && (
+                      <img src={prod.image_path} alt="" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
+                    )}
+                    <div>
+                      <div className="prod-card-name">{prod.name}</div>
+                      <div className="prod-card-code">{prod.code}</div>
+                    </div>
+                  </div>
+                  <div className="prod-card-closing">{fmtQty(closing)} {productUnit}</div>
+                </div>
+                <div className="prod-card-prices">
+                  <span onClick={() => toggleCostBreakdown(prod.id)} style={{ cursor: "pointer", borderBottom: "1px dashed var(--text-muted)" }} title="Tap to see average cost working">
+                    Cost: <b>PKR {prod.cost_price?.toLocaleString()}</b>
+                  </span>
+                  <span>Sale: <b>PKR {prod.sale_price?.toLocaleString()}</b></span>
+                </div>
+                {!isConstruction && (
+                  <div className="prod-card-flow">
+                    <span>Opening: {fmtQty(prod.opening_qty)}</span>
+                    <span style={{ color: "#10B981" }}>In: {fmtQty(prod.total_inflow)}</span>
+                    <span style={{ color: "#EF4444" }}>Out: {fmtQty(prod.total_outflow)}</span>
+                  </div>
+                )}
+                {expandedCostId === prod.id && (
+                  <div className="prod-card-breakdown">
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>Average Cost Working</div>
+                    {renderCostBreakdown(prod)}
+                  </div>
+                )}
+                <div className="prod-card-actions">
+                  <ActionSlots
+                    slot1={{
+                      icon: <Eye size={13} />,
+                      title: "View Ledger",
+                      onClick: () => router.push(`/dashboard/reports/product-ledger?productId=${prod.id}`),
+                    }}
+                    slot2={{
+                      icon: <Edit size={13} />,
+                      title: "Edit",
+                      onClick: () => router.push(`/dashboard/products/new?id=${prod.id}`),
+                    }}
+                    overflow={[
+                      {
+                        key: "delete",
+                        label: "Delete",
+                        icon: <Trash2 size={14} />,
+                        color: "#EF4444",
+                        onClick: () => handleDelete(prod.id),
+                      },
+                    ]}
+                  />
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {total > pageSize && (
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
+          <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+            <button className="btn btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
