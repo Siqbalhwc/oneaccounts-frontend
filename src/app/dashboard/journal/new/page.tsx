@@ -219,7 +219,7 @@ export default function NewJournalPage() {
   if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
 
   return (
-    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div className="page-wrap" style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .form-card {
           background: var(--card); border: 1px solid var(--border); border-radius: 12px;
@@ -262,6 +262,44 @@ export default function NewJournalPage() {
             grid-template-columns: 1fr 70px 70px 1fr 90px 90px 35px;
           }
         }
+        /* -- Field labels: hidden on desktop (the column header row shows them), shown on mobile -- */
+        .lf { min-width: 0; }
+        .lf-label { display: none; }
+        .lf-del { display: flex; }
+        .lf-del-text { display: none; }
+        .je-post-bar { display: none; }
+        .je-post-spacer { display: none; }
+
+        /* -- Mobile: each journal line becomes a stacked card, totals stay readable,
+           and the balance status + POST button stay pinned above the bottom menu -- */
+        @media (max-width: 640px) {
+          .page-wrap { padding: 12px !important; }
+          .form-card { padding: 16px; }
+          .je-head-grid { grid-template-columns: 1fr !important; }
+          .input, .select, .line-row .input, .line-row .select { font-size: 16px !important; }
+          .lines-header { display: none; }
+          .line-row {
+            grid-template-columns: 1fr 1fr; gap: 10px; align-items: start;
+            padding: 12px; margin-bottom: 0;
+            border: 1px solid var(--border); border-radius: 10px; background: var(--bg-soft);
+          }
+          .lf-account, .lf-narration, .lf-del { grid-column: 1 / -1; }
+          .lf-label { display: block; font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
+          .lf-del { justify-content: flex-end; }
+          .lf-del-text { display: inline; font-size: 12px; margin-left: 4px; }
+          .je-totals { grid-template-columns: 1fr auto auto !important; }
+          .je-totals > span:nth-child(n+4) { display: none; }
+          .je-post-desktop { display: none; }
+          .je-post-bar {
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            position: fixed; left: 0; right: 0; bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+            background: var(--card); border-top: 1px solid var(--border);
+            padding: 10px 16px; z-index: 49;
+          }
+          .je-post-bar .btn { padding: 10px 18px; white-space: nowrap; }
+          .je-post-status { font-size: 13px; font-weight: 700; }
+          .je-post-spacer { display: block; height: 72px; }
+        }
       `}</style>
 
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
@@ -278,7 +316,7 @@ export default function NewJournalPage() {
 
         {/* Header card */}
         <div className="form-card">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+          <div className="je-head-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
             <div>
               <label className="label">Entry No</label>
               <input className="input" value="Auto‑generated" disabled />
@@ -314,58 +352,76 @@ export default function NewJournalPage() {
           {lines.map((l, i) => (
             <div key={i} style={{ marginBottom: 8 }}>
               <div className="line-row">
-                <select
-                  className="select"
-                  value={l.account_id || ""}
-                  onChange={(e) => updateLine(i, "account_id", e.target.value)}
-                >
-                  <option value="">Select account...</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
-                  ))}
-                </select>
-                <input
-                  className="input"
-                  type="number"
-                  value={l.debit || ""}
-                  onChange={(e) => updateLine(i, "debit", e.target.value)}
-                  style={{ textAlign: "right" }}
-                />
-                <input
-                  className="input"
-                  type="number"
-                  value={l.credit || ""}
-                  onChange={(e) => updateLine(i, "credit", e.target.value)}
-                  style={{ textAlign: "right" }}
-                />
-                <input
-                  className="input"
-                  type="text"
-                  value={l.narration || ""}
-                  onChange={(e) => updateLine(i, "narration", e.target.value)}
-                  placeholder="Line narration"
-                />
-                <select
-                  className="select"
-                  value={l.location_id || ""}
-                  onChange={(e) => updateLine(i, "location_id", e.target.value ? Number(e.target.value) : null)}
-                  style={{ fontSize: 11 }}
-                >
-                  <option value="">—</option>
-                  {locations.map((loc) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
-                </select>
-                <select
-                  className="select"
-                  value={l.activity_id || ""}
-                  onChange={(e) => updateLine(i, "activity_id", e.target.value ? Number(e.target.value) : null)}
-                  style={{ fontSize: 11 }}
-                >
-                  <option value="">—</option>
-                  {activities.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-                <button onClick={() => removeLine(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", height: 38 }}>
-                  <Trash2 size={14} />
-                </button>
+                <div className="lf lf-account">
+                  <span className="lf-label">Account</span>
+                  <select
+                    className="select"
+                    value={l.account_id || ""}
+                    onChange={(e) => updateLine(i, "account_id", e.target.value)}
+                  >
+                    <option value="">Select account...</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="lf lf-debit">
+                  <span className="lf-label">Debit</span>
+                  <input
+                    className="input"
+                    type="number"
+                    value={l.debit || ""}
+                    onChange={(e) => updateLine(i, "debit", e.target.value)}
+                    style={{ textAlign: "right" }}
+                  />
+                </div>
+                <div className="lf lf-credit">
+                  <span className="lf-label">Credit</span>
+                  <input
+                    className="input"
+                    type="number"
+                    value={l.credit || ""}
+                    onChange={(e) => updateLine(i, "credit", e.target.value)}
+                    style={{ textAlign: "right" }}
+                  />
+                </div>
+                <div className="lf lf-narration">
+                  <span className="lf-label">Narration</span>
+                  <input
+                    className="input"
+                    type="text"
+                    value={l.narration || ""}
+                    onChange={(e) => updateLine(i, "narration", e.target.value)}
+                    placeholder="Line narration"
+                  />
+                </div>
+                <div className="lf lf-location">
+                  <span className="lf-label">Location</span>
+                  <select
+                    className="select"
+                    value={l.location_id || ""}
+                    onChange={(e) => updateLine(i, "location_id", e.target.value ? Number(e.target.value) : null)}
+                    style={{ fontSize: 11 }}
+                  >
+                    <option value="">--</option>
+                    {locations.map((loc) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                  </select>
+                </div>
+                <div className="lf lf-activity">
+                  <span className="lf-label">Activity</span>
+                  <select
+                    className="select"
+                    value={l.activity_id || ""}
+                    onChange={(e) => updateLine(i, "activity_id", e.target.value ? Number(e.target.value) : null)}
+                    style={{ fontSize: 11 }}
+                  >
+                    <option value="">--</option>
+                    {activities.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+                <div className="lf lf-del">
+                  <button onClick={() => removeLine(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", height: 38, display: "inline-flex", alignItems: "center" }}><Trash2 size={14} /><span className="lf-del-text">Remove line</span></button>
+                </div>
               </div>
               {l.activity_id && (
                 <div style={{ fontSize: 11, color: "var(--text-muted)", display: "flex", gap: 16, paddingLeft: 8, marginTop: 2 }}>
@@ -376,12 +432,7 @@ export default function NewJournalPage() {
             </div>
           ))}
 
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 90px 90px 1fr 110px 110px 40px",
-            gap: 8, marginTop: 12, paddingTop: 12, borderTop: "2px solid var(--border)",
-            fontWeight: 700, fontSize: 14
-          }}>
+          <div className="je-totals" style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 1fr 110px 110px 40px", gap: 8, marginTop: 12, paddingTop: 12, borderTop: "2px solid var(--border)", fontWeight: 700, fontSize: 14 }}>
             <span>Total</span>
             <span style={{ textAlign: "right" }}>PKR {totalDebit.toLocaleString()}</span>
             <span style={{ textAlign: "right" }}>PKR {totalCredit.toLocaleString()}</span>
@@ -401,8 +452,24 @@ export default function NewJournalPage() {
           )}
         </div>
 
+        <div className="je-post-bar">
+          <div
+            className="je-post-status"
+            style={{ color: isBalanced ? "#10B981" : (totalDebit > 0 || totalCredit > 0) ? "#EF4444" : "var(--text-muted)" }}
+          >
+            {isBalanced
+              ? "Balanced"
+              : (totalDebit > 0 || totalCredit > 0)
+                ? `Difference: PKR ${Math.abs(totalDebit - totalCredit).toLocaleString()}`
+                : "Debits must equal credits"}
+          </div>
+          <button className="btn btn-primary" onClick={handleSubmit} disabled={loading || !isBalanced}>
+            {loading ? "Posting..." : "POST ENTRY"}
+          </button>
+        </div>
+        <div className="je-post-spacer" />
         <button
-          className="btn btn-primary"
+          className="btn btn-primary je-post-desktop"
           style={{ width: "100%", justifyContent: "center", padding: 14 }}
           onClick={handleSubmit}
           disabled={loading || !isBalanced}
