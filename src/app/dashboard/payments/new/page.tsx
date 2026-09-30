@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -500,7 +500,7 @@ export default function NewPaymentPage() {
   if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
 
   return (
-    <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div className="page-wrap" style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .pay-shell { width: 100%; }
         .pay-title { font-size: 18px; font-weight: 700; color: var(--text); }
@@ -569,6 +569,25 @@ export default function NewPaymentPage() {
         .badge-full { font-size: 10px; font-weight: 700; color: #10B981; background: rgba(16,185,129,0.12); padding: 2px 6px; border-radius: 4px; }
         .badge-partial { font-size: 10px; font-weight: 700; color: #F59E0B; background: rgba(245,158,11,0.12); padding: 2px 6px; border-radius: 4px; }
         .derived-cell { font-size: 11px; color: var(--text-muted); }
+
+        /* Mobile save bar: hidden on desktop, shown + sticky to bottom on mobile */
+        .mobile-save-bar { display: none; }
+
+        @media (max-width: 640px) {
+          .page-wrap { padding: 12px !important; }
+          .pay-input, .pay-select, .alloc-input { font-size: 16px; }
+          .desktop-save { display: none; }
+          .mobile-save-bar {
+            display: flex;
+            position: sticky;
+            bottom: 0;
+            background: var(--card);
+            border-top: 1px solid var(--border);
+            padding: 10px 12px;
+            margin: 16px -12px -12px -12px;
+            z-index: 50;
+          }
+        }
       `}</style>
 
       <div className="pay-shell">
@@ -704,7 +723,7 @@ export default function NewPaymentPage() {
                 </>
               )}
             </div>
-            <div className="pay-card">
+            <div className="pay-card desktop-save">
               <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
                 {loading ? "Posting..." : editId ? "💾 Update Payment" : "💾 Save Payment"}
               </button>
@@ -858,6 +877,15 @@ export default function NewPaymentPage() {
                 )}
               </div>
             )}
+
+        {/* Mobile-only: Save stays reachable at the bottom of the screen while
+            scrolling through the form and the allocation table, instead of
+            being stranded above them. */}
+        <div className="mobile-save-bar">
+          <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
+            {loading ? "Posting..." : editId ? "💾 Update Payment" : "💾 Save Payment"}
+          </button>
+        </div>
       </div>
     </div>
   )

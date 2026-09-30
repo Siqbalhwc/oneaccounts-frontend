@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
@@ -11,6 +11,12 @@ import ActionSlots from "@/components/ActionSlots"
 
 type SortField = "payment_no" | "payment_date" | "supplier" | "amount" | "payment_method"
 type SortDir = "asc" | "desc"
+
+const WhatsAppIcon = (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+  </svg>
+)
 
 function SkeletonRow() {
   return (
@@ -181,6 +187,18 @@ export default function PaymentsPage() {
     </th>
   )
 
+  // Shared "more actions" list, used by both the desktop table row and the mobile card
+  const rowOverflowActions = (pay: any, isReversed: boolean) => [
+    {
+      key: "reverse",
+      label: "Reverse",
+      color: "#F59E0B",
+      hidden: !(canEdit && !isReversed),
+      icon: <Undo2 size={14} />,
+      onClick: () => handleReverse(pay.id),
+    },
+  ]
+
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
@@ -211,6 +229,23 @@ export default function PaymentsPage() {
         .badge-reversed { background: rgba(148,163,184,0.15); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3); }
         .badge-edited { background: rgba(59,130,246,0.15); color: #3b82f6; border: 1px solid rgba(59,130,246,0.3); }
         @media (max-width: 480px) { .page-wrap { padding: 12px !important; } .summary-grid { grid-template-columns: repeat(2, 1fr) !important; } }
+
+        /* -- Mobile card list: hidden by default (desktop/tablet shows the table) -- */
+        .pay-cards { display: none; flex-direction: column; gap: 10px; }
+        .pay-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow-sm); }
+        .pay-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        .pay-card-no { font-size: 13px; font-weight: 700; color: var(--primary); }
+        .pay-card-date { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .pay-card-amt { font-size: 15px; font-weight: 800; white-space: nowrap; text-align: right; }
+        .pay-card-name { font-size: 14px; color: var(--text); margin-top: 6px; }
+        .pay-card-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 12px; color: var(--text-muted); }
+        .pay-card-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+        .pay-card-empty { text-align: center; color: var(--text-muted); padding: 32px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+
+        @media (max-width: 640px) {
+          .desktop-table { display: none; }
+          .pay-cards { display: flex; }
+        }
       `}</style>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
@@ -243,7 +278,7 @@ export default function PaymentsPage() {
         <input className="search-input" placeholder="Search by payment # or supplier..." value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
-      <div className="card">
+      <div className="card desktop-table">
         <div className="table-scroll">
           <table className="pay-table">
             <colgroup>
@@ -295,25 +330,12 @@ export default function PaymentsPage() {
                               onClick: () => router.push(`/dashboard/payments/new?id=${pay.id}`),
                             } : null}
                             slot3={hasFeature("whatsapp_invoice") ? {
-                              icon: (
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                                </svg>
-                              ),
+                              icon: WhatsAppIcon,
                               title: "Send via WhatsApp",
                               color: "#25D366",
                               onClick: () => sendWhatsApp(pay),
                             } : null}
-                            overflow={[
-                              {
-                                key: "reverse",
-                                label: "Reverse",
-                                color: "#F59E0B",
-                                hidden: !(canEdit && !isReversed),
-                                icon: <Undo2 size={14} />,
-                                onClick: () => handleReverse(pay.id),
-                              },
-                            ]}
+                            overflow={rowOverflowActions(pay, isReversed)}
                           />
                           {isReversed && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Reversed</span>}
                         </div>
@@ -326,6 +348,70 @@ export default function PaymentsPage() {
           </table>
         </div>
       </div>
+
+      {/* -- MOBILE: card list, shown instead of the table below 640px -- */}
+      <div className="pay-cards">
+        {loading ? (
+          [1, 2, 3, 4].map(i => (
+            <div className="pay-card" key={i}>
+              <div style={{ width: "55%", height: 14, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite", marginBottom: 8 }} />
+              <div style={{ width: "35%", height: 12, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite" }} />
+            </div>
+          ))
+        ) : sortedFiltered.length === 0 ? (
+          <div className="pay-card-empty">No payments found.</div>
+        ) : (
+          sortedFiltered.map((pay) => {
+            const supp = supplierMap[pay.party_id]
+            const suppName = supp?.name || "-"
+            const isReversed = pay.status === 'reversed'
+            const isEdited = pay.status === 'edited'
+            return (
+              <div key={pay.id} className="pay-card" style={{ opacity: isReversed ? 0.6 : 1 }}>
+                <div className="pay-card-top">
+                  <div>
+                    <div className="pay-card-no">
+                      {pay.payment_no}
+                      {isReversed && <span className="badge badge-reversed" style={{ marginLeft: 6 }}>Reversed</span>}
+                      {isEdited && <span className="badge badge-edited" style={{ marginLeft: 6 }}>Edited</span>}
+                    </div>
+                    <div className="pay-card-date">{pay.payment_date}</div>
+                  </div>
+                  <div className="pay-card-amt" style={{ color: isReversed ? "var(--text-muted)" : "#10B981" }}>
+                    PKR {pay.amount?.toLocaleString()}
+                  </div>
+                </div>
+                <div className="pay-card-name">{suppName}</div>
+                <div className="pay-card-meta">
+                  <span>{pay.payment_method || "-"}</span>
+                </div>
+                <div className="pay-card-actions">
+                  <ActionSlots
+                    slot1={{
+                      icon: <Eye size={13} />,
+                      title: "View",
+                      onClick: () => router.push(`/dashboard/payments/${pay.id}`),
+                    }}
+                    slot2={(canEdit && !isReversed) ? {
+                      icon: <Edit size={13} />,
+                      title: "Edit",
+                      onClick: () => router.push(`/dashboard/payments/new?id=${pay.id}`),
+                    } : null}
+                    slot3={hasFeature("whatsapp_invoice") ? {
+                      icon: WhatsAppIcon,
+                      title: "Send via WhatsApp",
+                      color: "#25D366",
+                      onClick: () => sendWhatsApp(pay),
+                    } : null}
+                    overflow={rowOverflowActions(pay, isReversed)}
+                  />
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
       {reverseTarget && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => { if (!reversing) setReverseTarget(null) }}>
           <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, maxWidth: 440, width: "90%", boxShadow: "0 12px 32px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>

@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -475,7 +475,7 @@ export default function NewReceiptPage() {
   if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
 
   return (
-    <div style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div className="page-wrap" style={{ padding: "16px", background: "var(--bg)", minHeight: "100%", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .inv-shell { width: 100%; margin: 0; }
         .inv-title { font-size: 18px; font-weight: 700; color: var(--text); }
@@ -529,6 +529,27 @@ export default function NewReceiptPage() {
         th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
         td { padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
         input[type="date"].inv-input { color-scheme: ${isDark ? 'dark' : 'light'}; }
+
+        /* Mobile save bar: hidden on desktop, shown + sticky to bottom on mobile */
+        .mobile-save-bar { display: none; }
+
+        @media (max-width: 640px) {
+          .page-wrap { padding: 12px !important; }
+          .inv-input, .inv-select, .alloc-input { font-size: 16px; }
+          .desktop-save { display: none; }
+          .alloc-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          .alloc-scroll table { min-width: 480px; }
+          .mobile-save-bar {
+            display: flex;
+            position: sticky;
+            bottom: 0;
+            background: var(--card);
+            border-top: 1px solid var(--border);
+            padding: 10px 12px;
+            margin: 16px -12px -12px -12px;
+            z-index: 50;
+          }
+        }
       `}</style>
 
       <div className="inv-shell">
@@ -678,7 +699,7 @@ export default function NewReceiptPage() {
                 </>
               )}
             </div>
-            <div className="inv-card">
+            <div className="inv-card desktop-save">
               <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
                 {loading ? "Posting..." : editId ? "💾 Update Receipt" : "💾 Save Receipt"}
               </button>
@@ -725,6 +746,7 @@ export default function NewReceiptPage() {
             {customerId && !isDonation && (
               <div className="inv-card">
                 <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 12px 0" }}>Allocate to Invoices & Opening</h3>
+                <div className="alloc-scroll">
                 <table>
                   <thead>
                     <tr>
@@ -791,6 +813,7 @@ export default function NewReceiptPage() {
                     )}
                   </tbody>
                 </table>
+                </div>
                 {invoices.length === 0 && customerOpeningBalance === 0 && (
                   <div style={{ textAlign: "center", color: "var(--text-muted)" }}>
                     No unpaid invoices or opening balance for this customer. The full amount will be recorded as an advance.
@@ -798,6 +821,15 @@ export default function NewReceiptPage() {
                 )}
               </div>
             )}
+
+        {/* Mobile-only: Save stays reachable at the bottom of the screen while
+            scrolling through the form and the allocation table, instead of
+            being stranded above them. */}
+        <div className="mobile-save-bar">
+          <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
+            {loading ? "Posting..." : editId ? "💾 Update Receipt" : "💾 Save Receipt"}
+          </button>
+        </div>
       </div>
     </div>
   )
