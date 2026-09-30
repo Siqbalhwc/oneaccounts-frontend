@@ -6,6 +6,7 @@ import { ArrowLeft, Plus, Trash2, CheckCircle } from "lucide-react"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
 import { applyLineEdit, setLineLock, lineDisplay, getLock, type CalcLock } from "@/lib/line-calc"
 import LineCalcInput from "@/components/LineCalcInput"
+import { useCompany } from "@/contexts/CompanyContext"
 
 function NewCashSalePageContent() {
   const router = useRouter()
@@ -17,6 +18,7 @@ function NewCashSalePageContent() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  const { companyId: ctxCompanyId } = useCompany()
   const [companyId, setCompanyId] = useState("")
   const [loadingEdit, setLoadingEdit] = useState(isEditMode)
   const [editSaleNo, setEditSaleNo] = useState("")
@@ -50,7 +52,7 @@ function NewCashSalePageContent() {
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
-      const cid = (user?.app_metadata as any)?.company_id
+      const cid = ctxCompanyId || (user?.app_metadata as any)?.company_id
       if (!cid) return
       setCompanyId(cid)
       const { data: banks } = await supabase
@@ -309,10 +311,11 @@ function NewCashSalePageContent() {
         }
 
         .cs-mobile-sticky { display: none; position: sticky; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 10px 16px; align-items: center; justify-content: space-between; gap: 12px; z-index: 50; margin-top: 16px; }
+        @media (max-width: 768px) { .cs-mobile-sticky { bottom: calc(52px + max(8px, env(safe-area-inset-bottom, 0px))); } }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button className="cs-btn" onClick={() => router.push("/dashboard")}><ArrowLeft size={16} /></button>
+        <button className="cs-btn" onClick={() => router.push(isEditMode ? "/dashboard/cash-sales/" + editId : "/dashboard/cash-sales")}><ArrowLeft size={16} /></button>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: "var(--text)", margin: 0 }}>
             {isEditMode ? "Edit Cash Sale" + (editSaleNo ? " " + editSaleNo : "") : "New Cash Sale"}
