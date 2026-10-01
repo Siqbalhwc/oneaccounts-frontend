@@ -11,6 +11,8 @@ import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import { useCompany } from "@/contexts/CompanyContext"
 import ActionSlots from "@/components/ActionSlots"
 import CashSaleReturnModal from "@/components/CashSaleReturnModal"
+import { round2, fmtMoney, fmtRate } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 type SortField = "sale_no" | "date" | "customer" | "total"
 type SortDir = "asc" | "desc"
@@ -25,9 +27,9 @@ const isoDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad
 
 // Money figures for one cash sale. `total` is the gross (before discount).
 function saleFigures(sale: any) {
-  const net = (sale.total || 0) - (sale.discount_amount || 0)
-  const received = sale.amount_received ?? sale.total ?? 0
-  const due = Math.max(0, net - received)
+  const net = round2((sale.total || 0) - (sale.discount_amount || 0))
+  const received = round2(sale.amount_received ?? sale.total ?? 0)
+  const due = Math.max(0, round2(net - received))
   const returned = sale.status === "returned"
   const key: "paid" | "partial" | "returned" = returned ? "returned" : (due > 0 ? "partial" : "paid")
   return { net, received, due, key }
@@ -223,7 +225,7 @@ export default function CashSalesListPage() {
     const message = [
       `Dear ${cust.name},`,
       ``,
-      `Your cash sale ${sale.sale_no} of PKR ${sale.total?.toLocaleString()} has been recorded.`,
+      `Your cash sale ${sale.sale_no} of PKR ${fmtMoney(sale.total)} has been recorded.`,
       ``,
       `📄 View Online: ${link}`,
       `📅 Date: ${sale.date}`,
@@ -546,17 +548,17 @@ export default function CashSalesListPage() {
         </div>
         <div className="summary-item">
           <div className="summary-label">Net Sales</div>
-          <div className="summary-value" style={{ color: "#10B981" }}>PKR {netAmount.toLocaleString()}</div>
+          <div className="summary-value" style={{ color: "#10B981", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(netAmount)}</div>
           <div className="summary-sub">after discount</div>
         </div>
         <div className="summary-item">
           <div className="summary-label">Outstanding Due</div>
-          <div className="summary-value" style={{ color: totalDue > 0 ? "#F59E0B" : "var(--text)" }}>PKR {totalDue.toLocaleString()}</div>
+          <div className="summary-value" style={{ color: totalDue > 0 ? "#F59E0B" : "var(--text)", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(totalDue)}</div>
           <div className="summary-sub">partial sales</div>
         </div>
         <div className="summary-item">
           <div className="summary-label">Today</div>
-          <div className="summary-value" style={{ color: "#10B981" }}>PKR {todayStats.amount.toLocaleString()}</div>
+          <div className="summary-value" style={{ color: "#10B981", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(todayStats.amount)}</div>
           <div className="summary-sub">{todayStats.count} {todayStats.count === 1 ? "sale" : "sales"}</div>
         </div>
       </div>
@@ -605,7 +607,7 @@ export default function CashSalesListPage() {
                 <SortTh field="sale_no">Sale No</SortTh>
                 <SortTh field="date">Date</SortTh>
                 <SortTh field="customer" style={{ textAlign: "left" }}>Customer</SortTh>
-                <SortTh field="total" style={{ textAlign: "right" }}>Amount</SortTh>
+                <SortTh field="total" style={{ textAlign: "right" }}>Amount (PKR)</SortTh>
                 <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
               </tr>
             </thead>
@@ -633,13 +635,13 @@ export default function CashSalesListPage() {
                       <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {custName}
                       </td>
-                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
-                        PKR {f.net.toLocaleString()}
+                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                        {fmtMoney(f.net)}
                         {f.key === "partial" && (
-                          <div style={{ fontSize: 11, fontWeight: 600, color: "#F59E0B" }}>Due PKR {f.due.toLocaleString()}</div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: "#F59E0B" }}>Due {fmtMoney(f.due)}</div>
                         )}
                         {(sale.discount_amount || 0) > 0 && f.key !== "partial" && (
-                          <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>Disc PKR {(sale.discount_amount || 0).toLocaleString()}</div>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: "var(--text-muted)" }}>Disc {fmtMoney(sale.discount_amount || 0)}</div>
                         )}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
@@ -679,12 +681,12 @@ export default function CashSalesListPage() {
                     <div className="cs-card-date">{sale.date}</div>
                   </div>
                   <div>
-                    <div className="cs-card-amount">PKR {f.net.toLocaleString()}</div>
+                    <div className="cs-card-amount" style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}><CurrencyTag />{fmtMoney(f.net)}</div>
                     {f.key === "partial" && (
-                      <div className="cs-card-sub" style={{ color: "#F59E0B" }}>Due PKR {f.due.toLocaleString()}</div>
+                      <div className="cs-card-sub" style={{ color: "#F59E0B" }}>Due {fmtMoney(f.due)}</div>
                     )}
                     {(sale.discount_amount || 0) > 0 && f.key !== "partial" && (
-                      <div className="cs-card-sub" style={{ color: "var(--text-muted)", fontWeight: 500 }}>Disc PKR {(sale.discount_amount || 0).toLocaleString()}</div>
+                      <div className="cs-card-sub" style={{ color: "var(--text-muted)", fontWeight: 500 }}>Disc {fmtMoney(sale.discount_amount || 0)}</div>
                     )}
                   </div>
                 </div>

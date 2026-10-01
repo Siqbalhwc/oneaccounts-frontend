@@ -1,6 +1,8 @@
 "use client"
 
 import { fmtQty } from "@/lib/format-number"
+import { round2, fmtMoney, fmtRate } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
@@ -161,16 +163,16 @@ export default function CashSaleDetailPage() {
   }, [companyId, saleId, reloadKey])
 
   const isReturned = !!sale && sale.status === "returned"
-  const netTotal = sale ? (sale.total || 0) - (sale.discount_amount || 0) : 0
-  const amountReceived = sale ? (sale.amount_received ?? sale.total ?? 0) : 0
-  const dueAmount = Math.max(0, netTotal - amountReceived)
+  const netTotal = sale ? round2((sale.total || 0) - (sale.discount_amount || 0)) : 0
+  const amountReceived = sale ? round2(sale.amount_received ?? sale.total ?? 0) : 0
+  const dueAmount = Math.max(0, round2(netTotal - amountReceived))
   const isPartial = !isReturned && dueAmount > 0
   const activePayments = payments.filter(p => (p as any).status !== "reversed")
 
   const waLink = sale && sale.customer
     ? getWhatsAppLink(
         sale.customer.phone || "",
-        `Dear ${sale.customer.name},\n\nYour cash sale ${sale.sale_no} of PKR ${sale.total?.toLocaleString()} has been recorded.\n\n📄 View Online: https://app.oneaccountsbysiqbal.com/dashboard/cash-sales/${sale.id}\n📅 Date: ${sale.date}\n\nThank you for your business.\n— OneAccounts by Siqbal`
+        `Dear ${sale.customer.name},\n\nYour cash sale ${sale.sale_no} of PKR ${fmtMoney(sale.total)} has been recorded.\n\n📄 View Online: https://app.oneaccountsbysiqbal.com/dashboard/cash-sales/${sale.id}\n📅 Date: ${sale.date}\n\nThank you for your business.\n— OneAccounts by Siqbal`
       )
     : ""
 
@@ -302,36 +304,36 @@ export default function CashSaleDetailPage() {
           </div>
           <div>
             <div className="label">Total</div>
-            <div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#10B981" }}>PKR {sale.total?.toLocaleString()}</div>
+            <div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#10B981", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(sale.total)}</div>
           </div>
           {(sale.discount_amount || 0) > 0 && (
             <div>
               <div className="label">Discount</div>
-              <div className="value">PKR {(sale.discount_amount || 0).toLocaleString()}</div>
+              <div className="value" style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(sale.discount_amount || 0)}</div>
             </div>
           )}
           {isPartial && (
             <>
               <div>
                 <div className="label">Received</div>
-                <div className="value" style={{ fontWeight: 600 }}>PKR {amountReceived.toLocaleString()}</div>
+                <div className="value" style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(amountReceived)}</div>
               </div>
               <div>
                 <div className="label">Due</div>
-                <div className="value" style={{ fontWeight: 700, color: "#F59E0B" }}>PKR {dueAmount.toLocaleString()}</div>
+                <div className="value" style={{ fontWeight: 700, color: "#F59E0B", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(dueAmount)}</div>
               </div>
             </>
           )}
           {sale.total_cogs > 0 && (
             <div>
               <div className="label">Cost of Goods</div>
-              <div className="value">PKR {sale.total_cogs?.toLocaleString()}</div>
+              <div className="value" style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(sale.total_cogs)}</div>
             </div>
           )}
           <div>
             <div className="label">Gross Profit</div>
-            <div className="value" style={{ color: "#10B981", fontWeight: 600 }}>
-              PKR {((sale.total || 0) - (sale.total_cogs || 0)).toLocaleString()}
+            <div className="value" style={{ color: "#10B981", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+              {fmtMoney((sale.total || 0) - (sale.total_cogs || 0))}
             </div>
           </div>
           <div>
@@ -354,8 +356,8 @@ export default function CashSaleDetailPage() {
                   <th>Product</th>
                   <th>Description</th>
                   <th style={{ textAlign: "center" }}>Qty</th>
-                  <th style={{ textAlign: "right" }}>Unit Price</th>
-                  <th style={{ textAlign: "right" }}>Total</th>
+                  <th style={{ textAlign: "right" }}>Unit Price (PKR)</th>
+                  <th style={{ textAlign: "right" }}>Total (PKR)</th>
                 </tr>
               </thead>
               <tbody>
@@ -373,8 +375,8 @@ export default function CashSaleDetailPage() {
                     </td>
                     <td style={{ color: "var(--text-muted)" }}>{item.product_code ? item.description : ""}</td>
                     <td style={{ textAlign: "center" }}>{fmtQty(item.qty)}</td>
-                    <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
+                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtRate(item.unit_price)}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(item.total)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -391,7 +393,7 @@ export default function CashSaleDetailPage() {
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th style={{ textAlign: "right" }}>Amount</th>
+                  <th style={{ textAlign: "right" }}>Amount (PKR)</th>
                   <th>Reference</th>
                   <th>Status</th>
                   <th className="hide-mobile"></th>
@@ -401,7 +403,7 @@ export default function CashSaleDetailPage() {
                 {payments.map((p: any) => (
                   <tr key={p.id}>
                     <td>{p.payment_date}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {Number(p.amount).toLocaleString()}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(p.amount)}</td>
                     <td style={{ color: "var(--text-muted)" }}>{p.reference || "—"}</td>
                     <td>
                       {p.status === "reversed"

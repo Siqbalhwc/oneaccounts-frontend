@@ -7,6 +7,8 @@ import EntityPicker from "@/components/entity-picker/EntityPicker"
 import { applyLineEdit, setLineLock, lineDisplay, getLock, type CalcLock } from "@/lib/line-calc"
 import LineCalcInput from "@/components/LineCalcInput"
 import { useCompany } from "@/contexts/CompanyContext"
+import { round2, fmtMoney, fmtRate } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 function NewCashSalePageContent() {
   const router = useRouter()
@@ -194,16 +196,17 @@ function NewCashSalePageContent() {
 
   const removeItem = (idx: number) => setItems(items.filter((_, i) => i !== idx))
 
-  const totalAmount = items.reduce((s, i) => s + (i.total || 0), 0)
+  // Rounding policy: every line total is 2 decimals, so the form always agrees with the database
+  const totalAmount = round2(items.reduce((s, i) => s + round2(i.total || 0), 0))
   const hasStockErrors = Object.keys(stockErrors).length > 0
 
-  const netTotal = Math.max(0, totalAmount - (Number(discountAmount) || 0))
+  const netTotal = Math.max(0, round2(totalAmount - round2(Number(discountAmount) || 0)))
   const amountReceived = isEditMode
     ? editSaleAmountReceived
-    : (receivedOverride === null ? netTotal : Math.min(Math.max(0, receivedOverride), netTotal))
+    : (receivedOverride === null ? netTotal : round2(Math.min(Math.max(0, receivedOverride), netTotal)))
   const dueAmount = isEditMode
-    ? Math.max(0, netTotal - editSaleAmountReceived)
-    : Math.max(0, netTotal - amountReceived)
+    ? Math.max(0, round2(netTotal - editSaleAmountReceived))
+    : Math.max(0, round2(netTotal - amountReceived))
   const needsCustomer = !isEditMode && dueAmount > 0 && !customerId
   const needsDiscountAccount = !isEditMode && Number(discountAmount) > 0 && !discountAccountId
 
@@ -245,7 +248,7 @@ function NewCashSalePageContent() {
           p_reference: reference || "",
           p_notes: notes || "",
           p_user_email: "system",
-          p_discount_amount: Number(discountAmount) || 0,
+          p_discount_amount: round2(Number(discountAmount) || 0),
           p_discount_account_id: Number(discountAmount) > 0 ? discountAccountId : null,
           p_amount_received: amountReceived,
         })
@@ -426,6 +429,7 @@ function NewCashSalePageContent() {
                     className="cs-input"
                     type="number"
                     min={0}
+                    step="0.01"
                     value={discountAmount}
                     onChange={e => setDiscountAmount(e.target.value === "" ? "" : Number(e.target.value))}
                     placeholder="0"
@@ -456,6 +460,7 @@ function NewCashSalePageContent() {
                     className="cs-input"
                     type="number"
                     min={0}
+                    step="0.01"
                     max={netTotal}
                     value={receivedOverride === null ? netTotal : receivedOverride}
                     onChange={e => setReceivedOverride(e.target.value === "" ? 0 : Number(e.target.value))}
@@ -468,7 +473,7 @@ function NewCashSalePageContent() {
 
               {dueAmount > 0 && (
                 <div style={{ marginTop: 10, padding: "8px 10px", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 6, color: "#F59E0B", fontSize: 12 }}>
-                  Balance of PKR {dueAmount.toLocaleString()} will remain due.
+                  Balance of PKR {fmtMoney(dueAmount)} will remain due.
                   {needsCustomer && " A customer must be selected to save a partial cash sale."}
                 </div>
               )}
@@ -477,11 +482,11 @@ function NewCashSalePageContent() {
 
           {isEditMode && (editSaleDiscount > 0 || dueAmount > 0 || editSaleAmountReceived < totalAmount) && (
             <div className="cs-card">
-              <label className="cs-label">Discount & Payment (fixed at creation — not editable here)</label>
+              <label className="cs-label">Discount & Payment (fixed at creation — not editable here) <span style={{ fontWeight: 500 }}>· amounts in PKR</span></label>
               <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.8 }}>
-                {editSaleDiscount > 0 && <div>Discount: PKR {editSaleDiscount.toLocaleString()}</div>}
-                <div>Received so far: PKR {editSaleAmountReceived.toLocaleString()}</div>
-                <div>Due after this edit: PKR {dueAmount.toLocaleString()}</div>
+                {editSaleDiscount > 0 && <div>Discount: {fmtMoney(editSaleDiscount)}</div>}
+                <div>Received so far: {fmtMoney(editSaleAmountReceived)}</div>
+                <div>Due after this edit: {fmtMoney(dueAmount)}</div>
               </div>
             </div>
           )}
@@ -489,8 +494,8 @@ function NewCashSalePageContent() {
           <div className="cs-mobile-sticky">
             <div>
               <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{!isEditMode && dueAmount > 0 ? "Due" : "Total"}</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>
-                PKR {(!isEditMode && dueAmount > 0 ? dueAmount : (isEditMode ? totalAmount : netTotal)).toLocaleString()}
+              <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                <CurrencyTag />{fmtMoney(!isEditMode && dueAmount > 0 ? dueAmount : (isEditMode ? totalAmount : netTotal))}
               </div>
             </div>
             <button className="cs-btn cs-btn-primary" style={{ width: "auto", padding: "0 20px" }} onClick={handleSubmit} disabled={saving || loadingEdit || hasStockErrors || items.length === 0 || needsCustomer || needsDiscountAccount}>
@@ -501,31 +506,34 @@ function NewCashSalePageContent() {
 
         <div className="cs-desktop-summary">
           <div className="cs-card">
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "0 0 10px" }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: 0 }}>Summary</h3>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: 0.4 }}>PKR</span>
+            </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
               <span>Total</span>
-              <span>PKR {totalAmount.toLocaleString()}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(totalAmount)}</span>
             </div>
             {!isEditMode && Number(discountAmount) > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>
                 <span>Discount</span>
-                <span>− PKR {Number(discountAmount).toLocaleString()}</span>
+                <span style={{ fontVariantNumeric: "tabular-nums" }}>− {fmtMoney(discountAmount)}</span>
               </div>
             )}
             {!isEditMode && (
               <>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600, marginTop: 4, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
                   <span>Net Total</span>
-                  <span>PKR {netTotal.toLocaleString()}</span>
+                  <span style={{ fontSize: 16, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(netTotal)}</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>
                   <span>Received</span>
-                  <span>PKR {amountReceived.toLocaleString()}</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(amountReceived)}</span>
                 </div>
                 {dueAmount > 0 && (
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#F59E0B", fontWeight: 600, marginTop: 4 }}>
                     <span>Due</span>
-                    <span>PKR {dueAmount.toLocaleString()}</span>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(dueAmount)}</span>
                   </div>
                 )}
               </>
