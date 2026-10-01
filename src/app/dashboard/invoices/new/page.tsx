@@ -15,6 +15,12 @@ import EntityPicker from "@/components/entity-picker/EntityPicker"
 import { applyLineEdit, setLineLock, lineDisplay, getLock, type CalcLock } from "@/lib/line-calc"
 import LineCalcInput from "@/components/LineCalcInput"
 import { useTheme } from "@/contexts/ThemeContext"
+import { round2, fmtMoney, fmtRate } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
+
+// Rounding policy: tax is per line, from the rounded line total, 2 decimals (same maths as the database)
+const lineTaxOf = (qty: any, price: any, rate: any) =>
+  round2(round2(Number(qty || 0) * Number(price || 0)) * Number(rate || 0) / 100)
 
 function getCreditDays(term?: string | null): number {
   if (!term) return 30
@@ -335,7 +341,7 @@ function NewInvoicePageContent() {
     if (field === "qty" || field === "unit_price" || field === "total") {
       updated[idx] = applyLineEdit(updated[idx], field, value)
       if (updated[idx].tax_rate > 0) {
-        updated[idx].tax_amount = (Number(updated[idx].qty || 0) * Number(updated[idx].unit_price || 0) * updated[idx].tax_rate) / 100
+        updated[idx].tax_amount = lineTaxOf(updated[idx].qty, updated[idx].unit_price, updated[idx].tax_rate)
       } else {
         updated[idx].tax_amount = 0
       }
@@ -356,7 +362,7 @@ function NewInvoicePageContent() {
     const updated = [...items]
     updated[idx] = setLineLock(updated[idx], lock)
     if (updated[idx].tax_rate > 0) {
-      updated[idx].tax_amount = (Number(updated[idx].qty || 0) * Number(updated[idx].unit_price || 0) * updated[idx].tax_rate) / 100
+      updated[idx].tax_amount = lineTaxOf(updated[idx].qty, updated[idx].unit_price, updated[idx].tax_rate)
     }
     setItems(updated)
   }
@@ -367,7 +373,7 @@ function NewInvoicePageContent() {
       const taxCode = taxCodes.find((t: any) => String(t.id) === codeId)
       if (taxCode) {
         const taxRate = taxCode.rate
-        const taxAmt = (updated[idx].qty * updated[idx].unit_price * taxRate) / 100
+        const taxAmt = lineTaxOf(updated[idx].qty, updated[idx].unit_price, taxRate)
         updated[idx] = {
           ...updated[idx],
           tax_code_id: codeId,
@@ -417,8 +423,9 @@ function NewInvoicePageContent() {
     setShowHistory(true)
   }
 
-  const totalAmount = items.reduce((s, i) => s + i.total, 0)
-  const totalTaxAmount = items.reduce((s, i) => s + (i.tax_amount || 0), 0)
+  const totalAmount = round2(items.reduce((s, i) => s + round2(i.total || 0), 0))
+  const totalTaxAmount = round2(items.reduce((s, i) => s + round2(i.tax_amount || 0), 0))
+  const grandTotal = round2(totalAmount + totalTaxAmount)
 
   const hasStockErrors = Object.keys(stockErrors).length > 0
 
@@ -493,7 +500,7 @@ function NewInvoicePageContent() {
           donor_id: i.donor_id || null,
           tax_code_id: taxEnabled ? (i.tax_code_id || null) : null,
           tax_rate: taxEnabled ? (i.tax_rate || 0) : 0,
-          tax_amount: taxEnabled ? (i.tax_amount || 0) : 0,
+          tax_amount: taxEnabled ? round2(i.tax_amount || 0) : 0,
         }))
         const { data, error: rpcError } = await supabase.rpc('update_invoice_transaction', {
           p_invoice_id: Number(editId),
@@ -552,7 +559,7 @@ function NewInvoicePageContent() {
         donor_id: i.donor_id || null,
         tax_code_id: taxEnabled ? (i.tax_code_id || null) : null,
         tax_rate: taxEnabled ? (i.tax_rate || 0) : 0,
-        tax_amount: taxEnabled ? (i.tax_amount || 0) : 0,
+        tax_amount: taxEnabled ? round2(i.tax_amount || 0) : 0,
       }))
       const { data, error: rpcError } = await supabase.rpc('create_invoice_transaction', {
         p_company_id: companyId,
@@ -608,7 +615,7 @@ function NewInvoicePageContent() {
     const msg = [
       `Dear ${customerDisplayName},`,
       ``,
-      `Your invoice of PKR ${totalAmount.toLocaleString()} has been generated.`,
+      `Your invoice of PKR ${fmtMoney(totalAmount)} has been generated.`,
       invoiceLink ? `` : `(Save the invoice first to get a link.)`,
       invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
       `📅 Date: ${invoiceDate}`,
@@ -658,10 +665,10 @@ function NewInvoicePageContent() {
         tax_amount: i.tax_amount || 0,
       })),
       subtotal: totalAmount,
-      total: totalAmount + totalTaxAmount,
+      total: grandTotal,
       status: "Unpaid",
       paid: 0,
-      balanceDue: totalAmount + totalTaxAmount,
+      balanceDue: grandTotal,
       bankAccounts: bankAccounts.map((b: any) => ({
         bankName: b.bank_name,
         accountTitle: b.bank_name,
@@ -700,7 +707,7 @@ function NewInvoicePageContent() {
         const msg = [
           `Dear ${customerDisplayName},`,
           ``,
-          `Your invoice of PKR ${(totalAmount + totalTaxAmount).toLocaleString()} has been generated.`,
+          `Your invoice of PKR ${fmtMoney(grandTotal)} has been generated.`,
           invoiceLink ? `📄 View Online: ${invoiceLink}` : "",
           `📎 Download PDF: ${pdfLink}`,
           `📅 Date: ${invoiceDate}`,
@@ -747,10 +754,10 @@ function NewInvoicePageContent() {
         tax_amount: i.tax_amount || 0,
       })),
       subtotal: totalAmount,
-      total: totalAmount + totalTaxAmount,
+      total: grandTotal,
       status: "Unpaid",
       paid: 0,
-      balanceDue: totalAmount + totalTaxAmount,
+      balanceDue: grandTotal,
       bankAccounts: bankAccounts.map((b: any) => ({
         bankName: b.bank_name,
         accountTitle: b.bank_name,
@@ -971,7 +978,7 @@ function NewInvoicePageContent() {
                       <button style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)" }} onClick={() => setShowHistory(false)}><X size={14} /></button>
                     </div>
                     {priceHistory.length > 0 ? priceHistory.map((h: any, i: number) => (
-                      <div key={i} className="price-history-item"><span>{h.invoice_no} - {h.date}</span><span style={{ fontWeight: 600 }}>PKR {h.unit_price.toLocaleString()}</span></div>
+                      <div key={i} className="price-history-item"><span>{h.invoice_no} - {h.date}</span><span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtRate(h.unit_price)}</span></div>
                     )) : <div style={{ color: "var(--text-muted)", fontSize: 12 }}>No previous sales to this customer</div>}
                   </div>
                 )}
@@ -980,9 +987,9 @@ function NewInvoicePageContent() {
 
             <div className="desktop-summary">
               <div className="inv-card">
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}><span>Total</span><span>PKR {(totalAmount + totalTaxAmount).toLocaleString()}</span></div>
-                {taxEnabled && totalTaxAmount > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}><span>Tax</span><span>PKR {totalTaxAmount.toLocaleString()}</span></div>}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "0 0 10px" }}><h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: 0 }}>Summary</h3><span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: 0.4 }}>PKR</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, fontWeight: 700 }}><span>Total</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(grandTotal)}</span></div>
+                {taxEnabled && totalTaxAmount > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}><span>Tax</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(totalTaxAmount)}</span></div>}
                 {hasStockErrors && (
                   <div style={{ marginTop: 8, padding: "6px 10px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, color: "#EF4444", fontSize: 11 }}>⚠️ Some items have insufficient stock</div>
                 )}
@@ -1117,12 +1124,12 @@ function NewInvoicePageContent() {
 
                           {taxEnabled && (
                             <div className="inv-cell inv-cell-tax">
-                              {item.tax_amount > 0 ? `PKR ${item.tax_amount.toLocaleString()}` : "—"}
+                              {item.tax_amount > 0 ? fmtMoney(item.tax_amount) : "—"}
                             </div>
                           )}
 
                           <div className="inv-cell inv-cell-cost">
-                            {item.product_id ? `PKR ${(item.cost_price * item.qty).toLocaleString()}` : "—"}
+                            {item.product_id ? fmtMoney(item.cost_price * item.qty) : "—"}
                           </div>
 
                           <button className="delete-btn" onClick={() => removeItem(idx)}><Trash2 size={14} /></button>
@@ -1151,8 +1158,8 @@ function NewInvoicePageContent() {
           <div className="mobile-sticky-summary">
             <div className="total-left">
               <div className="total-label">Total</div>
-              <div className="total-amount">PKR {(totalAmount + totalTaxAmount).toLocaleString()}</div>
-              {taxEnabled && totalTaxAmount > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>incl. tax PKR {totalTaxAmount.toLocaleString()}</div>}
+              <div className="total-amount" style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}><CurrencyTag />{fmtMoney(grandTotal)}</div>
+              {taxEnabled && totalTaxAmount > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>incl. tax {fmtMoney(totalTaxAmount)}</div>}
               {hasStockErrors && <div style={{ fontSize: 10, color: "#EF4444" }}>⚠️ Stock issues</div>}
             </div>
             <button className="inv-btn post-btn" onClick={handleSubmit} disabled={saving || hasStockErrors}>

@@ -1,6 +1,7 @@
 "use client"
 
 import { fmtQty } from "@/lib/format-number"
+import { fmtMoney, fmtRate } from "@/lib/money"
 import { useEffect, useState } from "react"
 
 export default function InvoiceViewerClient({ id }: { id: string }) {
@@ -105,8 +106,8 @@ export default function InvoiceViewerClient({ id }: { id: string }) {
                 <tr style={{ borderBottom: "2px solid #f1f5f9" }}>
                   <th style={{ textAlign: "left", padding: "6px 4px 10px", color: "#64748b", fontWeight: 600, fontSize: 11 }}>Description</th>
                   <th style={{ textAlign: "center", padding: "6px 4px 10px", color: "#64748b", fontWeight: 600, fontSize: 11, width: 55 }}>Qty</th>
-                  <th style={{ textAlign: "right", padding: "6px 4px 10px", color: "#64748b", fontWeight: 600, fontSize: 11, width: 110 }}>Unit Price</th>
-                  <th style={{ textAlign: "right", padding: "6px 4px 10px", color: "#64748b", fontWeight: 600, fontSize: 11, width: 110 }}>Total</th>
+                  <th style={{ textAlign: "right", padding: "6px 4px 10px", color: "#64748b", fontWeight: 600, fontSize: 11, width: 110 }}>Unit Price (PKR)</th>
+                  <th style={{ textAlign: "right", padding: "6px 4px 10px", color: "#64748b", fontWeight: 600, fontSize: 11, width: 110 }}>Total (PKR)</th>
                 </tr>
               </thead>
               <tbody>
@@ -117,10 +118,10 @@ export default function InvoiceViewerClient({ id }: { id: string }) {
                     </td>
                     <td style={{ padding: "10px 4px", textAlign: "center", color: "#475569" }}>{fmtQty(item.qty)}</td>
                     <td style={{ padding: "10px 4px", textAlign: "right", color: "#475569" }}>
-                      PKR {Number(item.unit_price).toLocaleString()}
+                      {fmtRate(item.unit_price)}
                     </td>
                     <td style={{ padding: "10px 4px", textAlign: "right", fontWeight: 600, color: "#0f172a" }}>
-                      PKR {Number(item.total).toLocaleString()}
+                      {fmtMoney(item.total)}
                     </td>
                   </tr>
                 ))}
@@ -135,7 +136,7 @@ export default function InvoiceViewerClient({ id }: { id: string }) {
               <TotalRow label="Amount Paid" value={invoice.paid} color="#10b981" />
             )}
             <div style={{ height: 1, background: "#f1f5f9", margin: "8px 0" }} />
-            <TotalRow label="Balance Due" value={balanceDue} bold color={balanceDue > 0 ? "#ef4444" : "#10b981"} />
+            <TotalRow label="Balance Due" value={balanceDue} bold showCurrency color={balanceDue > 0 ? "#ef4444" : "#10b981"} />
           </div>
         </div>
 
@@ -143,7 +144,8 @@ export default function InvoiceViewerClient({ id }: { id: string }) {
         {data.balance_summary && (() => {
           const bs = data.balance_summary
           const isCust = bs.party_type === "customer"
-          const money = (n: number) => n < 0 ? "(PKR " + Math.abs(Number(n)).toLocaleString() + ")" : "PKR " + Number(n).toLocaleString()
+          const money = (n: number) => n < 0 ? "(" + fmtMoney(Math.abs(Number(n))) + ")" : fmtMoney(Number(n))
+          const moneyPkr = (n: number) => "PKR " + money(n)
           return (
             <div style={{ background: "white", borderRadius: 16, padding: "18px 22px", marginBottom: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}>
               <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", letterSpacing: "0.06em", marginBottom: 12 }}>Account Summary</div>
@@ -158,7 +160,7 @@ export default function InvoiceViewerClient({ id }: { id: string }) {
               <div style={{ height: 1, background: "#f1f5f9", margin: "8px 0" }} />
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15 }}>
                 <span style={{ color: "#64748b", fontWeight: 700 }}>{isCust ? "Total Receivable" : "Total Payable"}</span>
-                <span style={{ fontWeight: 800, color: "#1740c8" }}>{money(bs.total)}</span>
+                <span style={{ fontWeight: 800, color: "#1740c8" }}>{moneyPkr(bs.total)}</span>
               </div>
             </div>
           )
@@ -191,14 +193,14 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function TotalRow({ label, value, bold, color }: {
-  label: string; value: number; bold?: boolean; color?: string
+function TotalRow({ label, value, bold, color, showCurrency }: {
+  label: string; value: number; bold?: boolean; color?: string; showCurrency?: boolean
 }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7, fontSize: bold ? 15 : 13 }}>
       <span style={{ color: "#64748b", fontWeight: bold ? 700 : 400 }}>{label}</span>
       <span style={{ fontWeight: bold ? 800 : 600, color: color || "#0f172a" }}>
-        PKR {Number(value || 0).toLocaleString()}
+        {showCurrency ? "PKR " : ""}{fmtMoney(value)}
       </span>
     </div>
   )

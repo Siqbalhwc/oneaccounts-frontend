@@ -9,6 +9,8 @@ import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 import ActionSlots from "@/components/ActionSlots"
 import SalesReturnModal from "@/components/SalesReturnModal"
+import { round2, fmtMoney, fmtRate } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 type SortField = "invoice_no" | "date" | "customer" | "total" | "status"
 type SortDir = "asc" | "desc"
@@ -154,7 +156,7 @@ export default function InvoicesPage() {
     const message = [
       `Dear ${cust.name},`,
       ``,
-      `Your invoice ${inv.invoice_no} of PKR ${inv.total?.toLocaleString()} has been generated.`,
+      `Your invoice ${inv.invoice_no} of PKR ${fmtMoney(inv.total)} has been generated.`,
       ``,
       `📄 View Online: ${invoiceLink}`,
       `📅 Date: ${inv.date}`,
@@ -174,7 +176,7 @@ export default function InvoicesPage() {
     const message = [
       `Dear ${cust.name},`,
       ``,
-      `Friendly reminder: Your invoice ${inv.invoice_no} for PKR ${inv.total?.toLocaleString()} is overdue.`,
+      `Friendly reminder: Your invoice ${inv.invoice_no} for PKR ${fmtMoney(inv.total)} is overdue.`,
       ``,
       `📄 View & Pay: ${invoiceLink}`,
       ``,
@@ -314,9 +316,9 @@ export default function InvoicesPage() {
       {/* ── Summary cards ── */}
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Invoices</div><div className="summary-value">{totalInvoices}</div></div>
-        <div className="summary-item"><div className="summary-label">Total Amount</div><div className="summary-value" style={{ color: "#F59E0B" }}>PKR {totalAmount.toLocaleString()}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Amount</div><div className="summary-value" style={{ color: "#F59E0B", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(totalAmount)}</div></div>
         <div className="summary-item"><div className="summary-label">Unpaid</div><div className="summary-value" style={{ color: "#EF4444" }}>{unpaidCount}</div></div>
-        <div className="summary-item"><div className="summary-label">Unpaid Amount</div><div className="summary-value" style={{ color: "#EF4444" }}>PKR {unpaidAmount.toLocaleString()}</div></div>
+        <div className="summary-item"><div className="summary-label">Unpaid Amount</div><div className="summary-value" style={{ color: "#EF4444", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(unpaidAmount)}</div></div>
       </div>
 
       {/* ── Search ── */}
@@ -344,7 +346,7 @@ export default function InvoicesPage() {
                 <SortTh field="invoice_no">Invoice #</SortTh>
                 <SortTh field="date">Date</SortTh>
                 <SortTh field="customer" style={{ textAlign: "left" }}>Customer</SortTh>
-                <SortTh field="total" style={{ textAlign: "right" }}>Total</SortTh>
+                <SortTh field="total" style={{ textAlign: "right" }}>Total (PKR)</SortTh>
                 <SortTh field="status" style={{ textAlign: "center" }}>Status</SortTh>
                 {/* Plain th — not sortable */}
                 <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
@@ -378,7 +380,7 @@ export default function InvoicesPage() {
                         {custName}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
-                        PKR {inv.total?.toLocaleString()}
+                        {fmtMoney(inv.total)}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, color: statusColor, whiteSpace: "nowrap" }}>
                         {inv.status}

@@ -12,6 +12,8 @@ import { useCompany } from "@/contexts/CompanyContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 import { useRole } from "@/contexts/RoleContext"
 import SalesReturnModal from "@/components/SalesReturnModal"
+import { round2, fmtMoney, fmtRate } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 interface InvoiceItem {
   id: number
@@ -179,11 +181,11 @@ export default function InvoiceDetailPage() {
   }, [companyId, invoiceId])
 
   const waLink = invoice && invoice.customer
-    ? getWhatsAppLink(invoice.customer.phone || "", `Dear ${invoice.customer.name},\n\nYour invoice ${invoice.invoice_no} of PKR ${invoice.total?.toLocaleString()} has been generated.\n\n📄 View Online: https://app.oneaccountsbysiqbal.com/invoice/${invoice.id}\n📅 Date: ${invoice.date}\n📆 Due: ${invoice.due_date}\n\nThank you for your business.\n— OneAccounts by Siqbal`)
+    ? getWhatsAppLink(invoice.customer.phone || "", `Dear ${invoice.customer.name},\n\nYour invoice ${invoice.invoice_no} of PKR ${fmtMoney(invoice.total)} has been generated.\n\n📄 View Online: https://app.oneaccountsbysiqbal.com/invoice/${invoice.id}\n📅 Date: ${invoice.date}\n📆 Due: ${invoice.due_date}\n\nThank you for your business.\n— OneAccounts by Siqbal`)
     : ""
 
   const reminderLink = invoice && invoice.customer
-    ? getWhatsAppLink(invoice.customer.phone || "", `Dear ${invoice.customer.name},\n\nFriendly reminder: Your invoice ${invoice.invoice_no} for PKR ${invoice.total?.toLocaleString()} is overdue.\n\n📄 View & Pay: https://app.oneaccountsbysiqbal.com/invoice/${invoice.id}\n\nThank you.\n— OneAccounts by Siqbal`)
+    ? getWhatsAppLink(invoice.customer.phone || "", `Dear ${invoice.customer.name},\n\nFriendly reminder: Your invoice ${invoice.invoice_no} for PKR ${fmtMoney(invoice.total)} is overdue.\n\n📄 View & Pay: https://app.oneaccountsbysiqbal.com/invoice/${invoice.id}\n\nThank you.\n— OneAccounts by Siqbal`)
     : ""
 
   const handlePrintPDF = async () => {
@@ -305,21 +307,21 @@ export default function InvoiceDetailPage() {
           </div>
           <div>
             <div className="label">Total</div>
-            <div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {invoice.total?.toLocaleString()}</div>
+            <div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(invoice.total)}</div>
           </div>
           {taxEnabled && invoice.total_tax > 0 && (
             <div>
               <div className="label">Tax</div>
-              <div className="value">PKR {invoice.total_tax?.toLocaleString()}</div>
+              <div className="value" style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(invoice.total_tax)}</div>
             </div>
           )}
           <div>
             <div className="label">Paid</div>
-            <div className="value">PKR {invoice.paid?.toLocaleString()}</div>
+            <div className="value" style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(invoice.paid)}</div>
           </div>
           <div>
             <div className="label">Due</div>
-            <div className="value" style={{ color: balanceDue > 0 ? "#EF4444" : "#10B981", fontWeight: 600 }}>PKR {balanceDue.toLocaleString()}</div>
+            <div className="value" style={{ color: balanceDue > 0 ? "#EF4444" : "#10B981", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(balanceDue)}</div>
           </div>
           <div>
             <div className="label">Status</div>
@@ -363,10 +365,10 @@ export default function InvoiceDetailPage() {
                     </td>
                     <td style={{ color: "var(--text-muted)" }}>{item.product_code ? item.description : ""}</td>
                     <td style={{ textAlign: "center" }}>{fmtQty(item.qty)}</td>
-                    <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
+                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtRate(item.unit_price)}</td>
                     {taxEnabled && <td style={{ textAlign: "right", color: "var(--text-muted)" }}>{(item.tax_rate ?? 0) > 0 ? `${item.tax_rate}%` : "—"}</td>}
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
-                    {taxEnabled && <td style={{ textAlign: "right", color: (item.tax_amount ?? 0) > 0 ? "#EF4444" : "var(--text-muted)" }}>{(item.tax_amount ?? 0) > 0 ? `PKR ${(item.tax_amount ?? 0).toLocaleString()}` : "—"}</td>}
+                    <td style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(item.total)}</td>
+                    {taxEnabled && <td style={{ textAlign: "right", color: (item.tax_amount ?? 0) > 0 ? "#EF4444" : "var(--text-muted)" }}>{(item.tax_amount ?? 0) > 0 ? fmtMoney(item.tax_amount ?? 0) : "—"}</td>}
                   </tr>
                 ))}
               </tbody>
@@ -374,7 +376,7 @@ export default function InvoiceDetailPage() {
                 <tfoot>
                   <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
                     <td colSpan={taxEnabled ? 6 : 4} style={{ textAlign: "right" }}>Total Tax</td>
-                    <td style={{ textAlign: "right", color: "#EF4444" }}>PKR {invoice.total_tax.toLocaleString()}</td>
+                    <td style={{ textAlign: "right", color: "#EF4444", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(invoice.total_tax)}</td>
                   </tr>
                 </tfoot>
               )}
@@ -399,16 +401,16 @@ export default function InvoiceDetailPage() {
                 {journalLines.map((line, idx) => (
                   <tr key={idx}>
                     <td>{line.account_code} – {line.account_name}</td>
-                    <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "var(--text-muted)" }}>{line.debit > 0 ? line.debit.toLocaleString() : "–"}</td>
-                    <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>{line.credit > 0 ? line.credit.toLocaleString() : "–"}</td>
+                    <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "var(--text-muted)" }}>{line.debit > 0 ? fmtMoney(line.debit) : "–"}</td>
+                    <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>{line.credit > 0 ? fmtMoney(line.credit) : "–"}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
                   <td>Total</td>
-                  <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
-                  <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
+                  <td style={{ textAlign: "right", color: "#F87171" }}>{fmtMoney(totalDebit)}</td>
+                  <td style={{ textAlign: "right", color: "#2DD4BF" }}>{fmtMoney(totalCredit)}</td>
                 </tr>
               </tfoot>
             </table>

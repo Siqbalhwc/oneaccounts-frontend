@@ -1,4 +1,5 @@
 import { fmtQty } from "../format-number"
+import { fmtMoney, fmtRate } from "../money"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -28,8 +29,9 @@ async function loadImage(url: string): Promise<string | null> {
   }
 }
 
-const pkr = (n: number) =>
-  "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// "PKR" is used once, on headline totals. Table cells and minor lines use plain numbers.
+const pkr = (n: number) => "PKR " + fmtMoney(n)
+const num = (n: number) => fmtMoney(n)
 
 function filledRect(
   doc: jsPDF,
@@ -290,9 +292,9 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.text("#",          numCenterX, headerTextY, { align: "center" })
   doc.text("Description", descLeftX,  headerTextY, { align: "left" })
   doc.text("Qty",        qtyCenterX, headerTextY, { align: "center" })
-  doc.text("Unit Price", priceCenterX, headerTextY, { align: "center" })
-  if (hasTax) doc.text("Tax", taxCenterX, headerTextY, { align: "center" })
-  doc.text("Amount",     amtCenterX, headerTextY, { align: "center" })
+  doc.text("Price (PKR)", priceCenterX, headerTextY, { align: "center" })
+  if (hasTax) doc.text("Tax (PKR)", taxCenterX, headerTextY, { align: "center" })
+  doc.text("Amount (PKR)", amtCenterX, headerTextY, { align: "center" })
 
   // ── TABLE BODY ───────────────────────────────────────────────────
   const bodyStartY = tableY + HEADER_ROW_H
@@ -332,12 +334,12 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
       i + 1,
       desc,
       fmtQty(item.qty),
-      pkr(item.unit_price),
+      fmtRate(item.unit_price),
     ]
     if (hasTax) {
-      row.push(item.tax_amount && item.tax_amount > 0 ? pkr(item.tax_amount) : "—")
+      row.push(item.tax_amount && item.tax_amount > 0 ? num(item.tax_amount) : "—")
     }
-    row.push(pkr(item.total))
+    row.push(num(item.total))
     return row
   })
 
@@ -406,7 +408,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setTextColor(...MUTED)
   doc.text("Subtotal", labelX, SY)
   doc.setTextColor(...DARK)
-  doc.text(pkr(data.subtotal), amtRightX, SY, { align: "right" })
+  doc.text(num(data.subtotal), amtRightX, SY, { align: "right" })
   SY += 5.5
 
   // Tax label with rate if available
@@ -429,7 +431,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   doc.setTextColor(...MUTED)
   doc.text(taxLabel, labelX, SY)
   doc.setTextColor(...DARK)
-  doc.text(pkr(data.totalTax || 0), amtRightX, SY, { align: "right" })
+  doc.text(num(data.totalTax || 0), amtRightX, SY, { align: "right" })
   SY += 5.5
 
   // Total box
@@ -450,7 +452,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     doc.setTextColor(...MUTED)
     doc.text("Amount Paid", labelX, SY)
     doc.setTextColor(16, 185, 129)
-    doc.text("- " + pkr(data.paid), amtRightX, SY, { align: "right" })
+    doc.text("- " + num(data.paid), amtRightX, SY, { align: "right" })
     SY += 5.5
 
     doc.setFont("helvetica", "bold")
@@ -464,7 +466,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
   if (data.balanceSummary) {
     const bs = data.balanceSummary
     const isCust = bs.partyType === "customer"
-    const money = (n: number) => (n < 0 ? "(" + pkr(Math.abs(n)) + ")" : pkr(n))
+    const money = (n: number) => (n < 0 ? "(" + num(Math.abs(n)) + ")" : num(n))
     const boxH = 24
     SY += 6
     if (SY + boxH > PH - 20) { doc.addPage(); SY = 20 }
@@ -489,7 +491,7 @@ export async function generateInvoicePDF(data: InvoicePDFData): Promise<jsPDF> {
     doc.setFont("helvetica", "bold")
     doc.setTextColor(...NAVY)
     doc.text(isCust ? "Total Receivable" : "Total Payable", tx, SY + 16)
-    doc.text(money(bs.total), vx, SY + 16, { align: "right" })
+    doc.text(bs.total < 0 ? "(" + pkr(Math.abs(bs.total)) + ")" : pkr(bs.total), vx, SY + 16, { align: "right" })
     SY += boxH - 4
   }
 
