@@ -6,6 +6,8 @@ import { createBrowserClient } from "@supabase/ssr"
 import { Eye, Search, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
+import { fmtMoney, fmtRate } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 type SortField = "invoice_no" | "date" | "customer" | "total" | "status"
 type SortDir = "asc" | "desc"
@@ -226,7 +228,7 @@ export default function SalesReturnsPage() {
 
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Returns</div><div className="summary-value">{filtered.length}</div></div>
-        <div className="summary-item"><div className="summary-label">Total Amount</div><div className="summary-value" style={{ color: "#F59E0B" }}>PKR {filtered.reduce((s, i) => s + (i.total || 0), 0).toLocaleString()}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Amount</div><div className="summary-value" style={{ color: "#F59E0B", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(filtered.reduce((s, i) => s + (i.total || 0), 0))}</div></div>
       </div>
 
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
@@ -264,7 +266,7 @@ export default function SalesReturnsPage() {
                 </th>
                 <th style={{ ...thStyle, textAlign: "right" }}>
                   <button onClick={() => handleSort("total")} style={{ background: "none", border: "none", cursor: "pointer", font: "inherit", color: "inherit", display: "inline-flex", alignItems: "center", gap: 4, justifyContent: "flex-end", width: "100%" }}>
-                    Total {getSortIcon("total")}
+                    Total (PKR) {getSortIcon("total")}
                   </button>
                 </th>
                 <th style={{ ...thStyle, textAlign: "center" }}>
@@ -295,7 +297,7 @@ export default function SalesReturnsPage() {
                       </td>
                       <td style={tdStyle}>{ret.date}</td>
                       <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{custName}</td>
-                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600 }}>PKR {ret.total?.toLocaleString()}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(ret.total)}</td>
                       <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, color: "#3B82F6" }}>Returned</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         <button className="btn-icon" onClick={() => router.push(`/dashboard/sales-returns/${ret.id}`)} title="View">

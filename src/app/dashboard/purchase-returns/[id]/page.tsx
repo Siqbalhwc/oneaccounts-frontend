@@ -6,6 +6,8 @@ import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Printer } from "lucide-react"
 import RecordHistory from "@/components/RecordHistory"
+import { fmtMoney, fmtRate } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 interface ReturnItem {
   id: number
@@ -205,7 +207,7 @@ export default function PurchaseReturnDetailPage() {
         <h3 style={{ marginTop: 0, fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>Return Details</h3>
         <div className="row"><span className="label">Date</span><span className="value">{ret.date}</span></div>
         <div className="row"><span className="label">Supplier</span><span className="value">{ret.supplier?.code} – {ret.supplier?.name}</span></div>
-        <div className="row"><span className="label">Total</span><span className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {ret.total?.toLocaleString()}</span></div>
+        <div className="row"><span className="label">Total</span><span className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(ret.total)}</span></div>
         <div className="row">
           <span className="label">Status</span>
           <span className="badge badge-return">↩️ Returned to supplier</span>
@@ -232,8 +234,8 @@ export default function PurchaseReturnDetailPage() {
                 <tr>
                   <th>Product / Description</th>
                   <th style={{ textAlign: "center" }}>Qty</th>
-                  <th style={{ textAlign: "right" }}>Unit Price</th>
-                  <th style={{ textAlign: "right" }}>Total</th>
+                  <th style={{ textAlign: "right" }}>Unit Price (PKR)</th>
+                  <th style={{ textAlign: "right" }}>Total (PKR)</th>
                 </tr>
               </thead>
               <tbody>
@@ -243,8 +245,8 @@ export default function PurchaseReturnDetailPage() {
                       {item.product_code ? `${item.product_code} – ${item.product_name || ""}` : item.description}
                     </td>
                     <td style={{ textAlign: "center" }}>{fmtQty(item.qty)}</td>
-                    <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
+                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtRate(item.unit_price)}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(item.total)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -270,10 +272,10 @@ export default function PurchaseReturnDetailPage() {
                   <tr key={idx}>
                     <td>{line.account_code} – {line.account_name}</td>
                     <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "var(--text-muted)" }}>
-                      {line.debit > 0 ? line.debit.toLocaleString() : "–"}
+                      {line.debit > 0 ? fmtMoney(line.debit) : "–"}
                     </td>
                     <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>
-                      {line.credit > 0 ? line.credit.toLocaleString() : "–"}
+                      {line.credit > 0 ? fmtMoney(line.credit) : "–"}
                     </td>
                   </tr>
                 ))}
@@ -281,8 +283,8 @@ export default function PurchaseReturnDetailPage() {
               <tfoot>
                 <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
                   <td>Total</td>
-                  <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
-                  <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
+                  <td style={{ textAlign: "right", color: "#F87171" }}>{fmtMoney(totalDebit)}</td>
+                  <td style={{ textAlign: "right", color: "#2DD4BF" }}>{fmtMoney(totalCredit)}</td>
                 </tr>
               </tfoot>
             </table>

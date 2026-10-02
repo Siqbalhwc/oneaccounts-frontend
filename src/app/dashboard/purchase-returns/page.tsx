@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { Eye, Search, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
+import { fmtMoney, fmtRate } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 type SortField = "invoice_no" | "date" | "supplier" | "total" | "reference"
 type SortDir = "asc" | "desc"
@@ -230,7 +232,7 @@ export default function PurchaseReturnsPage() {
 
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Returns</div><div className="summary-value">{filtered.length}</div></div>
-        <div className="summary-item"><div className="summary-label">Total Amount</div><div className="summary-value" style={{ color: "#F59E0B" }}>PKR {filtered.reduce((s, i) => s + (i.total || 0), 0).toLocaleString()}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Amount</div><div className="summary-value" style={{ color: "#F59E0B", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(filtered.reduce((s, i) => s + (i.total || 0), 0))}</div></div>
       </div>
 
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
@@ -256,7 +258,7 @@ export default function PurchaseReturnsPage() {
                 <th style={thStyle}><button onClick={() => handleSort("supplier")} style={sortBtn}>Supplier {getSortIcon("supplier")}</button></th>
                 <th style={thStyle}><button onClick={() => handleSort("reference")} style={sortBtn}>Original Bill {getSortIcon("reference")}</button></th>
                 <th style={{ ...thStyle, textAlign: "right" }}>
-                  <button onClick={() => handleSort("total")} style={{ ...sortBtn, justifyContent: "flex-end", width: "100%" }}>Total {getSortIcon("total")}</button>
+                  <button onClick={() => handleSort("total")} style={{ ...sortBtn, justifyContent: "flex-end", width: "100%" }}>Total (PKR) {getSortIcon("total")}</button>
                 </th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
               </tr>
@@ -285,7 +287,7 @@ export default function PurchaseReturnsPage() {
                         <a href={`/dashboard/bills/${ret.original_invoice_id}`} style={{ color: "var(--primary)" }}>{ret.reference || `Bill #${ret.original_invoice_id}`}</a>
                       ) : (ret.reference || "—")}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>PKR {ret.total?.toLocaleString()}</td>
+                    <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(ret.total)}</td>
                     <td style={{ ...tdStyle, textAlign: "center" }}>
                       <button className="btn-icon" onClick={() => router.push(`/dashboard/purchase-returns/${ret.id}`)} title="View">
                         <Eye size={13} />

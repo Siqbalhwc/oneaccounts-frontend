@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { X, AlertTriangle } from "lucide-react"
+import { fmtMoney } from "@/lib/money"
 
 /**
  * Confirmation dialog for fully returning (reversing) a purchase bill.
@@ -105,7 +106,7 @@ export default function PurchaseReturnModal({ bill, onClose, onDone }: Props) {
           <div>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Return Purchase Bill</h2>
             <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-muted)" }}>
-              {bill.invoice_no} &middot; PKR {Number(bill.total || 0).toLocaleString()}
+              {bill.invoice_no} &middot; PKR {fmtMoney(bill.total || 0)}
             </p>
           </div>
           <button

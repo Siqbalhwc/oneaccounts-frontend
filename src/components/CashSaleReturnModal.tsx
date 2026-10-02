@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { X, AlertTriangle } from "lucide-react"
+import { fmtMoney } from "@/lib/money"
 
 /**
  * Confirmation dialog for fully returning (reversing) a cash sale.
@@ -102,7 +103,7 @@ export default function CashSaleReturnModal({ sale, onClose, onDone }: Props) {
           <div>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Return Cash Sale</h2>
             <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-muted)" }}>
-              {sale.sale_no} &middot; PKR {Number(sale.total || 0).toLocaleString()}
+              {sale.sale_no} &middot; PKR {fmtMoney(sale.total || 0)}
             </p>
           </div>
           <button

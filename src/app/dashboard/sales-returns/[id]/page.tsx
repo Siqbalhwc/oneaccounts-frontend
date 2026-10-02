@@ -8,6 +8,8 @@ import { ArrowLeft, Printer } from "lucide-react"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import { useCompany } from "@/contexts/CompanyContext"
+import { fmtMoney, fmtRate } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 interface ReturnItem {
   id: number
@@ -231,9 +233,9 @@ export default function SalesReturnDetailPage() {
         <div className="row"><span className="label">Date</span><span className="value">{ret.date}</span></div>
         <div className="row"><span className="label">Due Date</span><span className="value">{ret.due_date}</span></div>
         <div className="row"><span className="label">Customer</span><span className="value">{ret.customer?.code} – {ret.customer?.name}</span></div>
-        <div className="row"><span className="label">Total</span><span className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {ret.total?.toLocaleString()}</span></div>
-        <div className="row"><span className="label">Paid</span><span className="value">PKR {ret.paid?.toLocaleString()}</span></div>
-        <div className="row"><span className="label">Due</span><span className="value" style={{ color: balanceDue > 0 ? "#EF4444" : "#10B981", fontWeight: 600 }}>PKR {balanceDue.toLocaleString()}</span></div>
+        <div className="row"><span className="label">Total</span><span className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(ret.total)}</span></div>
+        <div className="row"><span className="label">Paid</span><span className="value" style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(ret.paid)}</span></div>
+        <div className="row"><span className="label">Due</span><span className="value" style={{ color: balanceDue > 0 ? "#EF4444" : "#10B981", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(balanceDue)}</span></div>
         <div className="row">
           <span className="label">Status</span>
           <span className={`badge badge-return`}>{ret.status}</span>
@@ -261,8 +263,8 @@ export default function SalesReturnDetailPage() {
                 <th>Product</th>
                 <th>Description</th>
                 <th style={{ textAlign: "center" }}>Qty</th>
-                <th style={{ textAlign: "right" }}>Unit Price</th>
-                <th style={{ textAlign: "right" }}>Total</th>
+                <th style={{ textAlign: "right" }}>Unit Price (PKR)</th>
+                <th style={{ textAlign: "right" }}>Total (PKR)</th>
               </tr>
             </thead>
             <tbody>
@@ -278,8 +280,8 @@ export default function SalesReturnDetailPage() {
                   </td>
                   <td style={{ color: "var(--text-muted)" }}>{item.product_code ? item.description : ""}</td>
                   <td style={{ textAlign: "center" }}>{fmtQty(item.qty)}</td>
-                  <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
-                  <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
+                  <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtRate(item.unit_price)}</td>
+                  <td style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(item.total)}</td>
                 </tr>
               ))}
             </tbody>
@@ -303,10 +305,10 @@ export default function SalesReturnDetailPage() {
                 <tr key={idx}>
                   <td>{line.account_code} – {line.account_name}</td>
                   <td style={{ textAlign: "right", color: line.debit  > 0 ? "#F87171" : "var(--text-muted)" }}>
-                    {line.debit  > 0 ? line.debit.toLocaleString()  : "–"}
+                    {line.debit  > 0 ? fmtMoney(line.debit)  : "–"}
                   </td>
                   <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>
-                    {line.credit > 0 ? line.credit.toLocaleString() : "–"}
+                    {line.credit > 0 ? fmtMoney(line.credit) : "–"}
                   </td>
                 </tr>
               ))}
@@ -314,8 +316,8 @@ export default function SalesReturnDetailPage() {
             <tfoot>
               <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
                 <td>Total</td>
-                <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
-                <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
+                <td style={{ textAlign: "right", color: "#F87171" }}>{fmtMoney(totalDebit)}</td>
+                <td style={{ textAlign: "right", color: "#2DD4BF" }}>{fmtMoney(totalCredit)}</td>
               </tr>
             </tfoot>
           </table>

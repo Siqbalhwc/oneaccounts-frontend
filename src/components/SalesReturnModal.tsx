@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { X, AlertTriangle } from "lucide-react"
+import { fmtMoney } from "@/lib/money"
 
 /**
  * Confirmation dialog for fully returning (reversing) a sales invoice.
@@ -105,7 +106,7 @@ export default function SalesReturnModal({ invoice, onClose, onDone }: Props) {
           <div>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Return Sales Invoice</h2>
             <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-muted)" }}>
-              {invoice.invoice_no} &middot; PKR {Number(invoice.total || 0).toLocaleString()}
+              {invoice.invoice_no} &middot; PKR {fmtMoney(invoice.total || 0)}
             </p>
           </div>
           <button
