@@ -9,6 +9,8 @@ import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 import ActionSlots from "@/components/ActionSlots"
 import PurchaseReturnModal from "@/components/PurchaseReturnModal"
+import { round2, fmtMoney, fmtRate } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 type SortField = "invoice_no" | "date" | "supplier" | "total" | "status"
 type SortDir = "asc" | "desc"
@@ -151,7 +153,7 @@ export default function BillsPage() {
   const sendWhatsApp = (bill: any) => {
     const supp = supplierMap[bill.party_id]
     if (!supp?.phone) { alert("No phone number for this supplier."); return }
-    const message = `Dear ${supp.name}, Your bill ${bill.invoice_no} of PKR ${bill.total?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/bill/${bill.id}\nDate: ${bill.date}   Due: ${bill.due_date}\nThank you for your business.\n- OneAccounts by Siqbal`
+    const message = `Dear ${supp.name}, Your bill ${bill.invoice_no} of PKR ${fmtMoney(bill.total)} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/bill/${bill.id}\nDate: ${bill.date}   Due: ${bill.due_date}\nThank you for your business.\n- OneAccounts by Siqbal`
     const link = getWhatsAppLink(supp.phone, message)
     if (link) window.open(link, "_blank")
   }
@@ -159,7 +161,7 @@ export default function BillsPage() {
   const sendReminder = (bill: any) => {
     const supp = supplierMap[bill.party_id]
     if (!supp?.phone) { alert("No phone number for this supplier."); return }
-    const message = `Reminder: Your bill ${bill.invoice_no} for PKR ${bill.total?.toLocaleString()} is overdue. Please make payment at your earliest convenience.`
+    const message = `Reminder: Your bill ${bill.invoice_no} for PKR ${fmtMoney(bill.total)} is overdue. Please make payment at your earliest convenience.`
     const link = getWhatsAppLink(supp.phone, message)
     if (link) window.open(link, "_blank")
   }
@@ -291,9 +293,9 @@ export default function BillsPage() {
 
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Bills</div><div className="summary-value">{totalBills}</div></div>
-        <div className="summary-item"><div className="summary-label">Total Amount</div><div className="summary-value" style={{ color: "#F59E0B" }}>PKR {totalAmount.toLocaleString()}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Amount</div><div className="summary-value" style={{ color: "#F59E0B", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(totalAmount)}</div></div>
         <div className="summary-item"><div className="summary-label">Unpaid Bills</div><div className="summary-value" style={{ color: "#EF4444" }}>{unpaidCount}</div></div>
-        <div className="summary-item"><div className="summary-label">Unpaid Amount</div><div className="summary-value" style={{ color: "#EF4444" }}>PKR {unpaidAmount.toLocaleString()}</div></div>
+        <div className="summary-item"><div className="summary-label">Unpaid Amount</div><div className="summary-value" style={{ color: "#EF4444", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(unpaidAmount)}</div></div>
       </div>
 
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
@@ -317,7 +319,7 @@ export default function BillsPage() {
                 <SortTh field="invoice_no">Bill #</SortTh>
                 <SortTh field="date">Date</SortTh>
                 <SortTh field="supplier" style={{ textAlign: "left" }}>Supplier</SortTh>
-                <SortTh field="total" style={{ textAlign: "right" }}>Total</SortTh>
+                <SortTh field="total" style={{ textAlign: "right" }}>Total (PKR)</SortTh>
                 <SortTh field="status" style={{ textAlign: "center" }}>Status</SortTh>
                 <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
               </tr>
@@ -345,7 +347,7 @@ export default function BillsPage() {
                         {suppName}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
-                        PKR {bill.total?.toLocaleString()}
+                        {fmtMoney(bill.total)}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, whiteSpace: "nowrap", color: bill.status === "Paid" ? "#10B981" : bill.status === "Unpaid" ? "#EF4444" : bill.status === "Returned" ? "#3B82F6" : "#F59E0B" }}>
                         {bill.status}

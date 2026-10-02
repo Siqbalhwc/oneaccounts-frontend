@@ -15,6 +15,12 @@ import { applyLineEdit, setLineLock, lineDisplay, getLock, type CalcLock } from 
 import LineCalcInput from "@/components/LineCalcInput"
 import { getLabel, type BusinessType } from "@/lib/labels"
 import { getWhatsAppLink } from "@/lib/whatsapp"
+import { round2, fmtMoney, fmtRate } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
+
+// Rounding policy: tax is per line, from the rounded line total, 2 decimals (same maths as the database)
+const lineTaxOf = (qty: any, price: any, rate: any) =>
+  round2(round2(Number(qty || 0) * Number(price || 0)) * Number(rate || 0) / 100)
 
 export default function NewBillPage() {
   const router = useRouter()
@@ -116,7 +122,7 @@ export default function NewBillPage() {
       if (item.activity_id && item.account_id) {
         const locId = item.location_id ? Number(item.location_id) : null
         const key = budgetKey(Number(item.activity_id), locId, Number(item.account_id))
-        const total = (item.qty || 0) * (item.unit_price || 0)
+        const total = round2((item.qty || 0) * (item.unit_price || 0))
         map[key] = (map[key] || 0) + total
       }
     })
@@ -578,7 +584,7 @@ export default function NewBillPage() {
     if (!bdata) return null
     const key = budgetKey(Number(item.activity_id), item.location_id ? Number(item.location_id) : null, Number(item.account_id))
     const totalPending = pendingByKey[key] || 0
-    const lineTotal = (item.qty || 0) * (item.unit_price || 0)
+    const lineTotal = round2((item.qty || 0) * (item.unit_price || 0))
     return bdata.available - (totalPending - lineTotal)
   }
 
@@ -602,7 +608,7 @@ export default function NewBillPage() {
     const updated = [...items]
     updated[idx] = setLineLock(updated[idx], lock)
     if (updated[idx].tax_rate > 0) {
-      updated[idx].tax_amount = (Number(updated[idx].qty || 0) * Number(updated[idx].unit_price || 0) * updated[idx].tax_rate) / 100
+      updated[idx].tax_amount = lineTaxOf(updated[idx].qty, updated[idx].unit_price, updated[idx].tax_rate)
     }
     setItems(updated)
   }
@@ -613,7 +619,7 @@ export default function NewBillPage() {
       const taxCode = inputTaxCodes.find((t: any) => String(t.id) === codeId)
       if (taxCode) {
         const taxRate = taxCode.rate
-        const taxAmt = (updated[idx].qty * updated[idx].unit_price * taxRate) / 100
+        const taxAmt = lineTaxOf(updated[idx].qty, updated[idx].unit_price, taxRate)
         updated[idx] = {
           ...updated[idx],
           tax_code_id: codeId,
@@ -642,7 +648,7 @@ export default function NewBillPage() {
         const tc = inputTaxCodes.find(t => t.id === updated[idx].tax_code_id)
         if (tc) {
           updated[idx].tax_rate = tc.rate
-          updated[idx].tax_amount = (updated[idx].qty * updated[idx].unit_price) * tc.rate / 100
+          updated[idx].tax_amount = lineTaxOf(updated[idx].qty, updated[idx].unit_price, tc.rate)
         }
       }
     }
@@ -693,13 +699,13 @@ export default function NewBillPage() {
     checkBudgetOverrun()
   }, [items, budgetInfo, pendingByKey])
 
-  const netTotal = items.reduce((s, i) => s + i.total, 0)
-  const totalTaxAmount = items.reduce((s, i) => s + (i.tax_amount || 0), 0)
-  const grossTotal = netTotal + totalTaxAmount
+  const netTotal = round2(items.reduce((s, i) => s + round2(i.total || 0), 0))
+  const totalTaxAmount = round2(items.reduce((s, i) => s + round2(i.tax_amount || 0), 0))
+  const grossTotal = round2(netTotal + totalTaxAmount)
 
   useEffect(() => {
     if (taxEnabled && whtRate > 0) {
-      setWhtAmount(grossTotal * (whtRate / 100))
+      setWhtAmount(round2(grossTotal * (whtRate / 100)))
     }
   }, [grossTotal, whtRate, taxEnabled])
 
@@ -781,7 +787,7 @@ export default function NewBillPage() {
         donor_id: i.donor_id || null,
         tax_code_id: taxEnabled ? (i.tax_code_id || null) : null,
         tax_rate: taxEnabled ? (i.tax_rate || 0) : 0,
-        tax_amount: taxEnabled ? (i.tax_amount || 0) : 0,
+        tax_amount: taxEnabled ? round2(i.tax_amount || 0) : 0,
         is_recoverable: true,
       }))
 
@@ -798,7 +804,7 @@ export default function NewBillPage() {
           p_po_id: poId || null,
           p_wht_tax_code_id: taxEnabled ? (selectedWhtTaxCodeId || null) : null,
           p_wht_rate: taxEnabled ? whtRate : 0,
-          p_wht_amount: taxEnabled ? whtAmount : 0,
+          p_wht_amount: taxEnabled ? round2(whtAmount) : 0,
           p_business_type: businessType,
           p_tax_enabled: taxEnabled,
         })
@@ -854,7 +860,7 @@ export default function NewBillPage() {
       donor_id: i.donor_id || null,              // ← added
       tax_code_id: taxEnabled ? (i.tax_code_id || null) : null,
       tax_rate: taxEnabled ? (i.tax_rate || 0) : 0,
-      tax_amount: taxEnabled ? (i.tax_amount || 0) : 0,
+      tax_amount: taxEnabled ? round2(i.tax_amount || 0) : 0,
       is_recoverable: true,
     }))
 
@@ -870,7 +876,7 @@ export default function NewBillPage() {
         p_po_id: poId || null,
         p_wht_tax_code_id: taxEnabled ? (selectedWhtTaxCodeId || null) : null,
         p_wht_rate: taxEnabled ? whtRate : 0,
-        p_wht_amount: taxEnabled ? whtAmount : 0,
+        p_wht_amount: taxEnabled ? round2(whtAmount) : 0,
         p_business_type: businessType,
         p_tax_enabled: taxEnabled,
       })
@@ -1164,7 +1170,7 @@ export default function NewBillPage() {
               <button
                 className="inv-btn"
                 onClick={() => {
-                  const msg = `Dear ${selectedSupplier.name}, Your bill ${savedBillNo} of PKR ${grossTotal.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/bill/${savedBillId}\nDate: ${billDate}   Due: ${dueDate}\nThank you for your business.\n- OneAccounts by Siqbal`
+                  const msg = `Dear ${selectedSupplier.name}, Your bill ${savedBillNo} of PKR ${fmtMoney(grossTotal)} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/bill/${savedBillId}\nDate: ${billDate}   Due: ${dueDate}\nThank you for your business.\n- OneAccounts by Siqbal`
                   window.open(getWhatsAppLink(selectedSupplier.phone, msg), "_blank")
                 }}
               >
@@ -1203,13 +1209,13 @@ export default function NewBillPage() {
                     <select className="inv-select" value={poId ?? ""} onChange={(e) => handleSelectPO(e.target.value ? Number(e.target.value) : null)}>
                       <option value="">— None —</option>
                       {openPOs.map(po => (
-                        <option key={po.id} value={po.id}>{po.po_no} — Remaining: PKR {po.remaining.toLocaleString()}</option>
+                        <option key={po.id} value={po.id}>{po.po_no} — Remaining: {fmtMoney(po.remaining)}</option>
                       ))}
                     </select>
                     {poId && poRemaining > 0 && (
                       <div className="po-banner">
                         <span>Linked: <span className="po-no">{openPOs.find(p => p.id === poId)?.po_no}</span></span>
-                        <span className="po-remaining">Remaining balance: <strong>PKR {poRemaining.toLocaleString()}</strong></span>
+                        <span className="po-remaining">Remaining balance: <strong>PKR {fmtMoney(poRemaining)}</strong></span>
                       </div>
                     )}
                   </div>
@@ -1316,6 +1322,7 @@ export default function NewBillPage() {
                       <input
                         className="inv-input"
                         type="number"
+                        step="0.01"
                         value={whtAmount}
                         onChange={e => setWhtAmount(Number(e.target.value))}
                         style={{ textAlign: "right", fontWeight: 600 }}
@@ -1325,7 +1332,7 @@ export default function NewBillPage() {
                   {whtAmount > 0 && (
                     <div className="wht-result-row">
                       <span style={{ color: "var(--text-muted)" }}>Net payable after WHT</span>
-                      <strong>PKR {(grossTotal - whtAmount).toLocaleString()}</strong>
+                      <strong>PKR {fmtMoney(round2(grossTotal - whtAmount))}</strong>
                     </div>
                   )}
                 </div>
@@ -1335,31 +1342,31 @@ export default function NewBillPage() {
 
             <div className="desktop-summary">
               <div className="inv-card">
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px 0" }}>Summary</h3>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "0 0 10px 0" }}><h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: 0 }}>Summary</h3><span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: 0.4 }}>PKR</span></div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600 }}>
                   <span>Total (Net)</span>
-                  <span>PKR {netTotal.toLocaleString()}</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(netTotal)}</span>
                 </div>
                 {taxEnabled && totalTaxAmount > 0 && (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
                     <span>Input Tax</span>
-                    <span>PKR {totalTaxAmount.toLocaleString()}</span>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(totalTaxAmount)}</span>
                   </div>
                 )}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600, marginTop: 4 }}>
                   <span>Gross Total</span>
-                  <span>PKR {grossTotal.toLocaleString()}</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(grossTotal)}</span>
                 </div>
                 {whtAmount > 0 && (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
                     <span>WHT</span>
-                    <span>-PKR {whtAmount.toLocaleString()}</span>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>- {fmtMoney(whtAmount)}</span>
                   </div>
                 )}
                 {whtAmount > 0 && (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, fontWeight: 600, marginTop: 4, borderTop: "1px dashed var(--border)", paddingTop: 6 }}>
                     <span>Net Payable</span>
-                    <span>PKR {(grossTotal - whtAmount).toLocaleString()}</span>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(round2(grossTotal - whtAmount))}</span>
                   </div>
                 )}
                 {budgetError && (
@@ -1606,13 +1613,13 @@ export default function NewBillPage() {
                             )}
                             {budgetData && budgetData.hasBudget && (
                               <>
-                                <span className="line-info-chip">Budget: PKR {budgetData.budget.toLocaleString()}</span>
-                                <span className="line-info-chip">Spent: PKR {budgetData.spent.toLocaleString()}</span>
+                                <span className="line-info-chip">Budget: {fmtMoney(budgetData.budget)}</span>
+                                <span className="line-info-chip">Spent: {fmtMoney(budgetData.spent)}</span>
                                 {getLineDisplayAvailable(item, budgetData) !== null && (
                                   <span className={`line-info-chip ${overBudget ? "over-budget-chip" : "ok-budget-chip"}`}>
                                     {overBudget
-                                      ? "⚠️ Over by PKR " + (item.total - getLineDisplayAvailable(item, budgetData)!).toLocaleString()
-                                      : "✓ Available: PKR " + getLineDisplayAvailable(item, budgetData)!.toLocaleString()}
+                                      ? "⚠️ Over by " + fmtMoney(item.total - getLineDisplayAvailable(item, budgetData)!)
+                                      : "✓ Available: " + fmtMoney(getLineDisplayAvailable(item, budgetData)!)}
                                   </span>
                                 )}
                               </>
@@ -1636,8 +1643,8 @@ export default function NewBillPage() {
           <div className="mobile-sticky-summary">
             <div className="total-left">
               <div className="total-label">Total</div>
-              <div className="total-amount">PKR {(netTotal + totalTaxAmount).toLocaleString()}</div>
-              {taxEnabled && totalTaxAmount > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>incl. tax PKR {totalTaxAmount.toLocaleString()}</div>}
+              <div className="total-amount" style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}><CurrencyTag />{fmtMoney(grossTotal)}</div>
+              {taxEnabled && totalTaxAmount > 0 && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>incl. tax {fmtMoney(totalTaxAmount)}</div>}
               {budgetError && <div style={{ fontSize: 10, color: "#EF4444" }}>⚠️ Budget overrun</div>}
             </div>
             <button

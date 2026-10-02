@@ -12,6 +12,8 @@ import { useCompany } from "@/contexts/CompanyContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 import { useRole } from "@/contexts/RoleContext"
 import PurchaseReturnModal from "@/components/PurchaseReturnModal"
+import { round2, fmtMoney, fmtRate } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 interface BillItem {
   id: number
@@ -177,7 +179,7 @@ export default function BillDetailPage() {
   const waLink = bill && bill.supplier
     ? getWhatsAppLink(
         bill.supplier.phone || "",
-        `Dear ${bill.supplier.name}, Your bill ${bill.invoice_no} of PKR ${bill.total?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/bill/${bill.id}\nDate: ${bill.date}   Due: ${bill.due_date}\nThank you for your business.\n- OneAccounts`
+        `Dear ${bill.supplier.name}, Your bill ${bill.invoice_no} of PKR ${fmtMoney(bill.total)} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/bill/${bill.id}\nDate: ${bill.date}   Due: ${bill.due_date}\nThank you for your business.\n- OneAccounts`
       )
     : ""
 
@@ -325,10 +327,10 @@ export default function BillDetailPage() {
           <div><div className="label">Date</div><div className="value">{bill.date}</div></div>
           <div><div className="label">Due Date</div><div className="value">{bill.due_date}</div></div>
           <div><div className="label">Supplier</div><div className="value">{bill.supplier?.code} – {bill.supplier?.name || "Unknown"}</div></div>
-          <div><div className="label">Total</div><div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {bill.total?.toLocaleString()}</div></div>
-          {taxEnabled && bill.total_tax > 0 && <div><div className="label">Input Tax</div><div className="value">PKR {bill.total_tax?.toLocaleString()}</div></div>}
-          <div><div className="label">Paid</div><div className="value">PKR {bill.paid?.toLocaleString()}</div></div>
-          <div><div className="label">Due</div><div className="value" style={{ color: balanceDue > 0 ? "#EF4444" : "#10B981", fontWeight: 600 }}>PKR {balanceDue.toLocaleString()}</div></div>
+          <div><div className="label">Total</div><div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(bill.total)}</div></div>
+          {taxEnabled && bill.total_tax > 0 && <div><div className="label">Input Tax</div><div className="value" style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(bill.total_tax)}</div></div>}
+          <div><div className="label">Paid</div><div className="value" style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(bill.paid)}</div></div>
+          <div><div className="label">Due</div><div className="value" style={{ color: balanceDue > 0 ? "#EF4444" : "#10B981", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(balanceDue)}</div></div>
           <div>
             <div className="label">Status</div>
             <span style={{ padding: "2px 10px", borderRadius: 12, fontSize: 12, fontWeight: 700, background: bill.status === "Paid" ? "#065F46" : isReturned ? "#1D4ED8" : "#7C2D12", color: bill.status === "Paid" ? "#6EE7B7" : isReturned ? "#DBEAFE" : "#FCA5A5" }}>{bill.status}</span>
@@ -352,8 +354,8 @@ export default function BillDetailPage() {
             <div className="label" style={{ marginBottom: 8, color: "#EF4444" }}>Withholding Tax (WHT)</div>
             <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
               <div><div className="label">Rate</div><div className="value" style={{ color: "#EF4444", fontWeight: 600 }}>{whtData.wht_rate}%</div></div>
-              <div><div className="label">Amount</div><div className="value" style={{ color: "#EF4444", fontWeight: 600 }}>PKR {whtData.wht_amount.toLocaleString()}</div></div>
-              <div><div className="label">Net Payable</div><div className="value" style={{ color: "#10B981", fontWeight: 600 }}>PKR {(bill.total - whtData.wht_amount).toLocaleString()}</div></div>
+              <div><div className="label">Amount</div><div className="value" style={{ color: "#EF4444", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(whtData.wht_amount)}</div></div>
+              <div><div className="label">Net Payable</div><div className="value" style={{ color: "#10B981", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(round2(bill.total - whtData.wht_amount))}</div></div>
             </div>
           </div>
         )}
@@ -369,10 +371,10 @@ export default function BillDetailPage() {
                 <tr>
                   <th>Description</th>
                   <th style={{ textAlign: "center" }}>Qty</th>
-                  <th style={{ textAlign: "right" }}>Unit Price</th>
+                  <th style={{ textAlign: "right" }}>Unit Price (PKR)</th>
                   {taxEnabled && <th style={{ textAlign: "right" }}>Tax Rate</th>}
-                  <th style={{ textAlign: "right" }}>Total</th>
-                  {taxEnabled && <th style={{ textAlign: "right" }}>Tax</th>}
+                  <th style={{ textAlign: "right" }}>Total (PKR)</th>
+                  {taxEnabled && <th style={{ textAlign: "right" }}>Tax (PKR)</th>}
                   {assetEnabled && <th style={{ textAlign: "center", width: 80 }}>Asset</th>}
                 </tr>
               </thead>
@@ -381,16 +383,16 @@ export default function BillDetailPage() {
                   <tr key={item.id}>
                     <td>{item.description}</td>
                     <td style={{ textAlign: "center" }}>{fmtQty(item.qty)}</td>
-                    <td style={{ textAlign: "right" }}>PKR {item.unit_price?.toLocaleString()}</td>
+                    <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtRate(item.unit_price)}</td>
                     {taxEnabled && (
                       <td style={{ textAlign: "right", color: "var(--text-muted)" }}>
                         {(item.tax_rate ?? 0) > 0 ? `${item.tax_rate}%` : "—"}
                       </td>
                     )}
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {item.total?.toLocaleString()}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(item.total)}</td>
                     {taxEnabled && (
                       <td style={{ textAlign: "right", color: (item.tax_amount ?? 0) > 0 ? "#EF4444" : "var(--text-muted)" }}>
-                        {(item.tax_amount ?? 0) > 0 ? `PKR ${(item.tax_amount ?? 0).toLocaleString()}` : "—"}
+                        {(item.tax_amount ?? 0) > 0 ? fmtMoney(item.tax_amount ?? 0) : "—"}
                       </td>
                     )}
                     {assetEnabled && (
@@ -421,7 +423,7 @@ export default function BillDetailPage() {
                 <tfoot>
                   <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
                     <td colSpan={taxEnabled ? 5 : 3} style={{ textAlign: "right" }}>Total Tax</td>
-                    <td style={{ textAlign: "right", color: "#EF4444" }}>PKR {bill.total_tax.toLocaleString()}</td>
+                    <td style={{ textAlign: "right", color: "#EF4444", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(bill.total_tax)}</td>
                   </tr>
                 </tfoot>
               )}
