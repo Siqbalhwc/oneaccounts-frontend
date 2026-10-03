@@ -1,5 +1,6 @@
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import { fmtMoney } from "../money"
 
 // ─── Brand colours ────────────────────────────────────────────────
 const NAVY   = [7,8,91]  as [number,number,number]
@@ -25,8 +26,8 @@ async function loadImage(url: string): Promise<string | null> {
   }
 }
 
-const pkr = (n: number) =>
-  "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// plain number: the column headers say (PKR)
+const pkr = (n: number) => fmtMoney(n)
 
 export interface TrialBalanceRow {
   code: string
@@ -137,8 +138,8 @@ export async function generateTrialBalancePDF(data: TrialBalancePDFData): Promis
   doc.text("Account Name", nameX + 3, headerTextY, { align: "left" })
   doc.text("Type", typeX, headerTextY, { align: "center" })
   doc.text("Category", catX, headerTextY, { align: "center" })
-  doc.text("Debit", debitX, headerTextY, { align: "center" })
-  doc.text("Credit", creditX, headerTextY, { align: "center" })
+  doc.text("Debit (PKR)", debitX, headerTextY, { align: "center" })
+  doc.text("Credit (PKR)", creditX, headerTextY, { align: "center" })
 
   const tableStartY = Y + HEADER_ROW_H
 

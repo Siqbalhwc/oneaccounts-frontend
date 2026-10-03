@@ -8,6 +8,8 @@ import * as XLSX from "xlsx"
 import { generateBalanceSheetPDF } from "@/lib/pdf/balanceSheetPDF"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useTheme } from "@/contexts/ThemeContext"
+import { round2 } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 // ── helpers ────────────────────────────────────────────────────────
 function getCategory(account: any): string {
@@ -47,8 +49,8 @@ function AccountRow({ account, value, onClick }: {
   value: number
   onClick: (id: number) => void
 }) {
-  const rounded = Math.round(value)
-  const display = `${sign(rounded)}PKR ${fmt(rounded)}`
+  const rounded = round2(value)
+  const display = `${sign(rounded)}${fmt(rounded)}`
   return (
     <div className="acc-row" onClick={() => onClick(account.id)}>
       <span style={{ fontSize: 11, color: "var(--text-muted)", minWidth: 50 }}>{account.code}</span>
@@ -63,8 +65,8 @@ function CategoryHeader({ cat, total, onClick }: {
   total: number
   onClick: () => void
 }) {
-  const rounded = Math.round(total)
-  const display = `${sign(rounded)}PKR ${fmt(rounded)}`
+  const rounded = round2(total)
+  const display = `${sign(rounded)}${fmt(rounded)}`
   return (
     <div className="cat-header" onClick={onClick}>
       <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", flex: 1 }}>{cat}</span>
@@ -74,8 +76,8 @@ function CategoryHeader({ cat, total, onClick }: {
 }
 
 function SubtotalBand({ label, value }: { label: string; value: number }) {
-  const rounded = Math.round(value)
-  const display = `${sign(rounded)}PKR ${fmt(rounded)}`
+  const rounded = round2(value)
+  const display = `${sign(rounded)}${fmt(rounded)}`
   return (
     <div className="subtotal-band">
       <span>{label}</span>
@@ -85,8 +87,8 @@ function SubtotalBand({ label, value }: { label: string; value: number }) {
 }
 
 function TotalBand({ label, value }: { label: string; value: number }) {
-  const rounded = Math.round(value)
-  const display = `${sign(rounded)}PKR ${fmt(rounded)}`
+  const rounded = round2(value)
+  const display = `${sign(rounded)}${fmt(rounded)}`
   return (
     <div className="total-band">
       <span>{label}</span>
@@ -300,7 +302,7 @@ function BalanceSheetContent() {
     const wb = XLSX.utils.book_new()
     const sheetData: any[][] = [
       ["Balance Sheet", "", ""],
-      ["As at", asOfDate, ""],
+      ["As at", asOfDate, "Amounts in PKR"],
       ["", "", ""],
       ["ASSETS", "", ""],
     ]
@@ -310,10 +312,10 @@ function BalanceSheetContent() {
         const items = grouped[cat] || []
         if (items.length === 0) continue
         const total = items.reduce((s, a) => s + getValue(a), 0)
-        sheetData.push([`  ${cat}`, "", `${sign(total)}PKR ${fmt(total)}`])
+        sheetData.push([`  ${cat}`, "", `${sign(total)}${fmt(total)}`])
         for (const a of items) {
           const val = getValue(a)
-          sheetData.push([`    ${a.code} - ${a.name}`, "", `${sign(val)}PKR ${fmt(val)}`])
+          sheetData.push([`    ${a.code} - ${a.name}`, "", `${sign(val)}${fmt(val)}`])
         }
       }
     }
@@ -322,15 +324,15 @@ function BalanceSheetContent() {
       sheetData.push(["Other Assets", "", ""])
       otherAssetAccounts.forEach(a => {
         const val = getDisplayValue(a)
-        sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(val)}PKR ${fmt(val)}`])
+        sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(val)}${fmt(val)}`])
       })
     }
-    sheetData.push(["Total Current Assets", "", `${sign(totalCurrentAssets)}PKR ${fmt(totalCurrentAssets)}`])
+    sheetData.push(["Total Current Assets", "", `${sign(totalCurrentAssets)}${fmt(totalCurrentAssets)}`])
     sheetData.push(["", "", ""])
     addSection("Fixed Assets", FIXED_ASSET_CATS, getDisplayValue)
-    sheetData.push(["Total Fixed Assets", "", `${sign(totalFixedAssets)}PKR ${fmt(totalFixedAssets)}`])
+    sheetData.push(["Total Fixed Assets", "", `${sign(totalFixedAssets)}${fmt(totalFixedAssets)}`])
     sheetData.push(["", "", ""])
-    sheetData.push(["TOTAL ASSETS", "", `${sign(totalAssets)}PKR ${fmt(totalAssets)}`])
+    sheetData.push(["TOTAL ASSETS", "", `${sign(totalAssets)}${fmt(totalAssets)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["LIABILITIES & EQUITY", "", ""])
     // Liabilities
@@ -338,30 +340,30 @@ function BalanceSheetContent() {
       const items = grouped[cat] || []
       if (items.length === 0) continue
       const total = items.reduce((s, a) => s + getDisplayValue(a), 0)
-      sheetData.push([`  ${cat}`, "", `${sign(total)}PKR ${fmt(total)}`])
+      sheetData.push([`  ${cat}`, "", `${sign(total)}${fmt(total)}`])
       for (const a of items) {
         const val = getDisplayValue(a)
-        sheetData.push([`    ${a.code} - ${a.name}`, "", `${sign(val)}PKR ${fmt(val)}`])
+        sheetData.push([`    ${a.code} - ${a.name}`, "", `${sign(val)}${fmt(val)}`])
       }
     }
     if (otherLiabilityAccounts.length > 0) {
       sheetData.push(["Other Liabilities", "", ""])
       otherLiabilityAccounts.forEach(a => {
         const val = getDisplayValue(a)
-        sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(val)}PKR ${fmt(val)}`])
+        sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(val)}${fmt(val)}`])
       })
     }
-    sheetData.push(["Total Liabilities", "", `${sign(totalLiabilities)}PKR ${fmt(totalLiabilities)}`])
+    sheetData.push(["Total Liabilities", "", `${sign(totalLiabilities)}${fmt(totalLiabilities)}`])
     sheetData.push(["", "", ""])
     sheetData.push(["Equity", "", ""])
     otherEquityAccounts.forEach(a => {
       const val = getDisplayValue(a)
-      sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(val)}PKR ${fmt(val)}`])
+      sheetData.push([`  ${a.code} - ${a.name}`, "", `${sign(val)}${fmt(val)}`])
     })
-    sheetData.push([retainedEarningsAccount ? `  ${retainedEarningsAccount.code} - ${retainedEarningsAccount.name}` : "  Retained Earnings (Net P&L)", "", `${sign(netProfit)}PKR ${fmt(netProfit)}`])
-    sheetData.push(["Total Equity", "", `${sign(totalEquity)}PKR ${fmt(totalEquity)}`])
+    sheetData.push([retainedEarningsAccount ? `  ${retainedEarningsAccount.code} - ${retainedEarningsAccount.name}` : "  Retained Earnings (Net P&L)", "", `${sign(netProfit)}${fmt(netProfit)}`])
+    sheetData.push(["Total Equity", "", `${sign(totalEquity)}${fmt(totalEquity)}`])
     sheetData.push(["", "", ""])
-    sheetData.push(["TOTAL LIABILITIES + EQUITY", "", `${sign(totalLiabEquity)}PKR ${fmt(totalLiabEquity)}`])
+    sheetData.push(["TOTAL LIABILITIES + EQUITY", "", `${sign(totalLiabEquity)}${fmt(totalLiabEquity)}`])
 
     const ws = XLSX.utils.aoa_to_sheet(sheetData)
     ws["!cols"] = [{ wch: 40 }, { wch: 5 }, { wch: 20 }]
@@ -478,7 +480,7 @@ function BalanceSheetContent() {
         {retainedEarningsAccount ? retainedEarningsAccount.name : "Retained Earnings (Net P&L)"}
       </span>
       <span style={{ fontSize: 12, color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-        {sign(netProfit)}PKR {fmt(netProfit)}
+        {sign(netProfit)}{fmt(netProfit)}
       </span>
     </div>
   )
@@ -700,7 +702,7 @@ function BalanceSheetContent() {
         </div>
         <div className="report-header-right">
           <div className="report-title" style={{ color: reportTextColor }}>Balance Sheet</div>
-          <div className="report-period" style={{ color: reportMutedColor }}>As at {now.toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })}</div>
+          <div className="report-period" style={{ color: reportMutedColor }}>As at {now.toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" })} · Amounts in PKR</div>
         </div>
       </div>
 

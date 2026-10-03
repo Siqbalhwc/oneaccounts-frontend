@@ -1,4 +1,5 @@
 import jsPDF from "jspdf"
+import { fmtMoney } from "../money"
 
 // ─── Brand colours ────────────────────────────────────────────────
 const NAVY    = [7,   8,  91]  as [number,number,number]
@@ -25,8 +26,9 @@ async function loadImage(url: string): Promise<string | null> {
   }
 }
 
-const pkr = (n: number) =>
-  "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// "PKR" only on the two grand totals; rows are plain numbers (column headers say (PKR))
+const pkr = (n: number) => "PKR " + fmtMoney(n)
+const num = (n: number) => fmtMoney(n)
 
 export interface SectionRow {
   text: string
@@ -132,9 +134,9 @@ export async function generateBalanceSheetPDF(data: BalanceSheetPDFData): Promis
   doc.setFontSize(8.5)
   doc.setTextColor(...WHITE)
   doc.text("ASSETS",                   LEFT_X  + 3, Y + COL_HDR_H / 2 + 1.8)
-  doc.text("Amount",                   LEFT_X  + colW - 3, Y + COL_HDR_H / 2 + 1.8, { align: "right" })
+  doc.text("Amount (PKR)",             LEFT_X  + colW - 3, Y + COL_HDR_H / 2 + 1.8, { align: "right" })
   doc.text("LIABILITIES & EQUITY",     RIGHT_X + 3, Y + COL_HDR_H / 2 + 1.8)
-  doc.text("Amount",                   RIGHT_X + colW - 3, Y + COL_HDR_H / 2 + 1.8, { align: "right" })
+  doc.text("Amount (PKR)",             RIGHT_X + colW - 3, Y + COL_HDR_H / 2 + 1.8, { align: "right" })
 
   Y += COL_HDR_H + 1
 
@@ -158,7 +160,7 @@ export async function generateBalanceSheetPDF(data: BalanceSheetPDFData): Promis
     doc.setFontSize(8)
     doc.setTextColor(...NAVY)
     doc.text(label,       x + 3,       cy + ROW_H / 2 + 1.5)
-    doc.text(pkr(amount), x + colW - 3, cy + ROW_H / 2 + 1.5, { align: "right" })
+    doc.text(num(amount), x + colW - 3, cy + ROW_H / 2 + 1.5, { align: "right" })
     cy += ROW_H
 
     // Account rows
@@ -171,7 +173,7 @@ export async function generateBalanceSheetPDF(data: BalanceSheetPDFData): Promis
       doc.setFontSize(7.5)
       doc.setTextColor(...DARK)
       doc.text(row.text,      x + (row.indent ?? 10), cy + ROW_H / 2 + 1.5)
-      doc.text(pkr(row.amount), x + colW - 3,         cy + ROW_H / 2 + 1.5, { align: "right" })
+      doc.text(num(row.amount), x + colW - 3,         cy + ROW_H / 2 + 1.5, { align: "right" })
       cy += ROW_H
     })
 
@@ -196,7 +198,7 @@ export async function generateBalanceSheetPDF(data: BalanceSheetPDFData): Promis
     doc.setFontSize(8)
     doc.setTextColor(...NAVY)
     doc.text(label,       x + 3,       startY + ROW_H / 2 + 1.5)
-    doc.text(pkr(amount), x + colW - 3, startY + ROW_H / 2 + 1.5, { align: "right" })
+    doc.text(num(amount), x + colW - 3, startY + ROW_H / 2 + 1.5, { align: "right" })
 
     return startY + ROW_H + 2
   }

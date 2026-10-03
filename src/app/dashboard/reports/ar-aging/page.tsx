@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 import { useCompany } from "@/contexts/CompanyContext"
+import { fmtMoney } from "@/lib/money"
 
 interface InvoiceRow {
   invoiceNo: string
@@ -44,7 +45,7 @@ interface ARInvoice {
   customer_id: number
 }
 
-const fmt = (n: number) => (n ? n.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "–")
+const fmt = (n: number) => (n ? fmtMoney(n) : "–")
 
 // ── Components ──
 function SummaryCard({

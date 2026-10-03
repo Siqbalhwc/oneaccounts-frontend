@@ -8,6 +8,7 @@ import * as XLSX from "xlsx"
 import { generateProfitLossPDF } from "@/lib/pdf/profitLossPDF"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useTheme } from "@/contexts/ThemeContext"
+import CurrencyTag from "@/components/CurrencyTag"
 
 function getCategory(account: any): string {
   if (account.category) return account.category
@@ -421,7 +422,7 @@ export default function ProfitLossPage() {
         </div>
         <div className="report-header-right">
           <div className="report-title" style={{ color: reportTextColor }}>Profit &amp; Loss</div>
-          <div className="report-period" style={{ color: reportMutedColor }}>From {startDate} to {endDate}{loading && hasLoadedOnce.current && <span style={{ marginLeft: 8, fontStyle: "italic" }}>Updating...</span>}</div>
+          <div className="report-period" style={{ color: reportMutedColor }}>From {startDate} to {endDate} · Amounts in PKR{loading && hasLoadedOnce.current && <span style={{ marginLeft: 8, fontStyle: "italic" }}>Updating...</span>}</div>
         </div>
       </div>
 
@@ -429,16 +430,16 @@ export default function ProfitLossPage() {
       <div className="kpi-row">
         <div className="kpi-card">
           <div className="kpi-label">Total Income</div>
-          <div className="kpi-value" style={{ color: "#10B981" }}>PKR {fmt(totalRevenue)}</div>
+          <div className="kpi-value" style={{ color: "#10B981" }}><CurrencyTag size={12} />{fmt(totalRevenue)}</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Total Expenses</div>
-          <div className="kpi-value" style={{ color: "#EF4444" }}>PKR {fmt(totalExpenses)}</div>
+          <div className="kpi-value" style={{ color: "#EF4444" }}><CurrencyTag size={12} />{fmt(totalExpenses)}</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Net Profit / Loss</div>
           <div className="kpi-value" style={{ color: netProfit >= 0 ? "#10B981" : "#EF4444" }}>
-            {netProfit < 0 ? "-" : ""}PKR {fmt(netProfit)}
+            {netProfit < 0 ? "-" : ""}<CurrencyTag size={12} />{fmt(netProfit)}
           </div>
         </div>
       </div>
@@ -475,12 +476,12 @@ export default function ProfitLossPage() {
               <div key={a.id} className="account-row" style={{ background: i % 2 === 0 ? rowLight : rowDark, color: isOneAccounts ? "#1E293B" : "inherit" }} onClick={() => openTrialForAccount(a)}>
                 <span style={{ fontSize: 12, color: textMuted, minWidth: 50 }}>{a.code}</span>
                 <span style={{ fontSize: 13, flex: 1, paddingLeft: 8 }}>{a.name}</span>
-                <span style={{ fontSize: 13, fontWeight: 500, color: "#10B981" }}>PKR {fmt(a.balance || 0)}</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: "#10B981" }}>{fmt(a.balance || 0)}</span>
               </div>
             ))}
             <div className="subtotal-row" style={{ background: headerBg, color: "white" }}>
               <span>Total Revenue</span>
-              <span>PKR {fmt(totalRevenue)}</span>
+              <span>{fmt(totalRevenue)}</span>
             </div>
           </div>
 
@@ -494,19 +495,19 @@ export default function ProfitLossPage() {
                 <div key={a.id} className="account-row" style={{ background: i % 2 === 0 ? rowLight : rowDark, color: isOneAccounts ? "#1E293B" : "inherit" }} onClick={() => openTrialForAccount(a)}>
                   <span style={{ fontSize: 12, color: textMuted, minWidth: 50 }}>{a.code}</span>
                   <span style={{ fontSize: 13, flex: 1, paddingLeft: 8 }}>{a.name}</span>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: "#EF4444" }}>PKR {fmt(a.balance || 0)}</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: "#EF4444" }}>{fmt(a.balance || 0)}</span>
                 </div>
               ))}
               <div className="subtotal-row" style={{ background: headerBg, color: "white" }}>
                 <span>Total Direct Expenses</span>
-                <span>PKR {fmt(totalDirect)}</span>
+                <span>{fmt(totalDirect)}</span>
               </div>
             </div>
           )}
 
           <div style={{ margin: "0 32px 16px", display: "flex", justifyContent: "space-between", padding: "14px 12px", background: headerBg, color: "white", borderRadius: 8, fontWeight: 700 }}>
             <span>Gross Profit</span>
-            <span>{grossProfit < 0 ? "-" : ""}PKR {fmt(grossProfit)}</span>
+            <span>{grossProfit < 0 ? "-" : ""}{fmt(grossProfit)}</span>
           </div>
 
           {operatingExpenses.length > 0 && (
@@ -519,12 +520,12 @@ export default function ProfitLossPage() {
                 <div key={a.id} className="account-row" style={{ background: i % 2 === 0 ? rowLight : rowDark, color: isOneAccounts ? "#1E293B" : "inherit" }} onClick={() => openTrialForAccount(a)}>
                   <span style={{ fontSize: 12, color: textMuted, minWidth: 50 }}>{a.code}</span>
                   <span style={{ fontSize: 13, flex: 1, paddingLeft: 8 }}>{a.name}</span>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: "#F59E0B" }}>PKR {fmt(a.balance || 0)}</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: "#F59E0B" }}>{fmt(a.balance || 0)}</span>
                 </div>
               ))}
               <div className="subtotal-row" style={{ background: headerBg, color: "white" }}>
                 <span>Total Operating Expenses</span>
-                <span>PKR {fmt(totalOpEx)}</span>
+                <span>{fmt(totalOpEx)}</span>
               </div>
             </div>
           )}
@@ -539,12 +540,12 @@ export default function ProfitLossPage() {
                 <div key={a.id} className="account-row" style={{ background: i % 2 === 0 ? rowLight : rowDark, color: isOneAccounts ? "#1E293B" : "inherit" }} onClick={() => openTrialForAccount(a)}>
                   <span style={{ fontSize: 12, color: textMuted, minWidth: 50 }}>{a.code}</span>
                   <span style={{ fontSize: 13, flex: 1, paddingLeft: 8 }}>{a.name}</span>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: "#8B5CF6" }}>PKR {fmt(a.balance || 0)}</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: "#8B5CF6" }}>{fmt(a.balance || 0)}</span>
                 </div>
               ))}
               <div className="subtotal-row" style={{ background: headerBg, color: "white" }}>
                 <span>Total Other Expenses</span>
-                <span>PKR {fmt(totalOther)}</span>
+                <span>{fmt(totalOther)}</span>
               </div>
             </div>
           )}
@@ -555,7 +556,7 @@ export default function ProfitLossPage() {
               <div style={{ fontSize: 12, opacity: 0.8 }}>Margin: {margin}%</div>
             </div>
             <div style={{ fontSize: 28, fontWeight: 800 }}>
-              {netProfit < 0 ? "-" : ""}PKR {fmt(netProfit)}
+              {netProfit < 0 ? "-" : ""}<CurrencyTag size={14} />{fmt(netProfit)}
             </div>
           </div>
         </>

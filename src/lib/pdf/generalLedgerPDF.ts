@@ -1,5 +1,6 @@
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import { fmtMoney } from "../money"
 
 const NAVY   = [7, 8, 91] as [number,number,number]
 const DARK   = [17,24,39] as [number,number,number]
@@ -8,7 +9,8 @@ const BORDER = [229,231,235] as [number,number,number]
 const WHITE  = [255,255,255] as [number,number,number]
 const ROW_ALT = [248,249,252] as [number,number,number]
 
-const pkr = (n: number) => "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// plain number: the column headers say (PKR)
+const pkr = (n: number) => fmtMoney(n)
 
 async function loadImage(url: string): Promise<string | null> {
   try {
@@ -105,7 +107,7 @@ export async function generateGeneralLedgerPDF(data: GeneralLedgerPDFData): Prom
   }
 
   // Build table rows
-  const headers = ["Date", "Entry #", "Description", "Debit", "Credit", "Balance"]
+  const headers = ["Date", "Entry #", "Description", "Debit (PKR)", "Credit (PKR)", "Balance (PKR)"]
   const rows: any[] = data.ledgerLines.map(line => [
     line.isOpening ? "" : line.date,
     line.entry_no,

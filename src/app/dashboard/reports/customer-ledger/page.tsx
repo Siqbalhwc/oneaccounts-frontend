@@ -7,6 +7,8 @@ import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Printer } from "lucide-reac
 import { useRole } from "@/contexts/RoleContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { generateCustomerLedgerPDF } from "@/lib/pdf/customerLedgerPDF"
+import { round2, fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 type SortField = "date" | "entry_no" | "description" | "debit" | "credit" | "running_balance"
 type SortDir = "asc" | "desc"
@@ -600,16 +602,16 @@ export default function CustomerLedgerPage() {
           <div className="summary-grid">
             <div className="summary-item">
               <div className="summary-label">Total Debits</div>
-              <div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalDebit.toLocaleString()}</div>
+              <div className="summary-value" style={{ color: "#EF4444", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(totalDebit)}</div>
             </div>
             <div className="summary-item">
               <div className="summary-label">Total Credits</div>
-              <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalCredit.toLocaleString()}</div>
+              <div className="summary-value" style={{ color: "#10B981", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(totalCredit)}</div>
             </div>
             <div className="summary-item">
               <div className="summary-label">Closing Balance</div>
               <div className="summary-value" style={{ color: closingBalance >= 0 ? "#10B981" : "#EF4444" }}>
-                PKR {closingBalance.toLocaleString()}
+                <CurrencyTag size={12} />{fmtMoney(closingBalance)}
               </div>
             </div>
           </div>
@@ -626,9 +628,9 @@ export default function CustomerLedgerPage() {
                 <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
                 <button className="sort-btn" onClick={() => handleSort("entry_no")}>Entry # {getSortIcon("entry_no")}</button>
                 <button className="sort-btn" onClick={() => handleSort("description")} style={{ justifyContent: "flex-start" }}>Description {getSortIcon("description")}</button>
-                <button className="sort-btn" onClick={() => handleSort("debit")} style={{ justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
-                <button className="sort-btn" onClick={() => handleSort("credit")} style={{ justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
-                <span className="sort-btn" style={{ justifyContent: "flex-end", cursor: "default" }}>Balance</span>
+                <button className="sort-btn" onClick={() => handleSort("debit")} style={{ justifyContent: "flex-end" }}>Debit (PKR) {getSortIcon("debit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("credit")} style={{ justifyContent: "flex-end" }}>Credit (PKR) {getSortIcon("credit")}</button>
+                <span className="sort-btn" style={{ justifyContent: "flex-end", cursor: "default" }}>Balance (PKR)</span>
               </div>
               {sortedLines.map((line, idx) => (
                 <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
@@ -640,13 +642,13 @@ export default function CustomerLedgerPage() {
                     {line.description}
                   </span>
                   <span style={{ textAlign: "right", color: line.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit > 0 ? 600 : 400 }}>
-                    {line.debit > 0 ? `PKR ${line.debit.toLocaleString()}` : "—"}
+                    {line.debit > 0 ? fmtMoney(line.debit) : "—"}
                   </span>
                   <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>
-                    {line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}
+                    {line.credit > 0 ? fmtMoney(line.credit) : "—"}
                   </span>
                   <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
-                    PKR {line.running_balance.toLocaleString()}
+                    {fmtMoney(line.running_balance)}
                   </span>
                 </div>
               ))}

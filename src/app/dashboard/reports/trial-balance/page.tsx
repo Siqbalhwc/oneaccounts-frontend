@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { generateTrialBalancePDF } from "@/lib/pdf/trialBalancePDF"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useTheme } from "@/contexts/ThemeContext"
+import CurrencyTag from "@/components/CurrencyTag"
 
 type SortField = "code" | "name" | "type" | "debit" | "credit"
 type SortDir = "asc" | "desc"
@@ -317,8 +318,8 @@ export default function TrialBalancePage() {
 
       {/* Summary Cards */}
       <div className="summary-grid">
-        <div className="summary-item"><div className="summary-label">Total Debits</div><div className="summary-value" style={{ color: "#EF4444" }}>PKR {fmt(totalDebit)}</div></div>
-        <div className="summary-item"><div className="summary-label">Total Credits</div><div className="summary-value" style={{ color: "#10B981" }}>PKR {fmt(totalCredit)}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Debits</div><div className="summary-value" style={{ color: "#EF4444" }}><CurrencyTag size={12} />{fmt(totalDebit)}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Credits</div><div className="summary-value" style={{ color: "#10B981" }}><CurrencyTag size={12} />{fmt(totalCredit)}</div></div>
         <div className="summary-item"><div className="summary-label">Status</div><div className="summary-value" style={{ color: isBalanced ? "#10B981" : "#EF4444", fontSize: 20 }}>{isBalanced ? "✓ Balanced" : "✗ Imbalance"}</div></div>
       </div>
 
@@ -354,8 +355,8 @@ export default function TrialBalancePage() {
                 <SortTh field="name" style={{ textAlign: "left" }}>Name</SortTh>
                 <SortTh field="type" style={{ textAlign: "center" }}>Type</SortTh>
                 <th style={{ ...thStyle, textAlign: "center" }}>Category</th>
-                <SortTh field="debit" style={{ textAlign: "right" }}>Debit</SortTh>
-                <SortTh field="credit" style={{ textAlign: "right" }}>Credit</SortTh>
+                <SortTh field="debit" style={{ textAlign: "right" }}>Debit (PKR)</SortTh>
+                <SortTh field="credit" style={{ textAlign: "right" }}>Credit (PKR)</SortTh>
               </tr>
             </thead>
             <tbody>
@@ -375,10 +376,10 @@ export default function TrialBalancePage() {
                     <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{a.type}</td>
                     <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap", color: "var(--text-muted)" }}>{a.category || "—"}</td>
                     <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: a.debit > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: a.debit > 0 ? 600 : 400 }}>
-                      {a.debit > 0 ? `PKR ${fmt(a.debit)}` : "—"}
+                      {a.debit > 0 ? fmt(a.debit) : "—"}
                     </td>
                     <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap", color: a.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: a.credit > 0 ? 600 : 400 }}>
-                      {a.credit > 0 ? `PKR ${fmt(a.credit)}` : "—"}
+                      {a.credit > 0 ? fmt(a.credit) : "—"}
                     </td>
                   </tr>
                 ))
@@ -387,8 +388,8 @@ export default function TrialBalancePage() {
             <tfoot>
               <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
                 <td colSpan={4} style={{ ...tdStyle, textAlign: "right" }}>Total</td>
-                <td style={{ ...tdStyle, textAlign: "right", color: "#EF4444" }}>PKR {fmt(totalDebit)}</td>
-                <td style={{ ...tdStyle, textAlign: "right", color: "#10B981" }}>PKR {fmt(totalCredit)}</td>
+                <td style={{ ...tdStyle, textAlign: "right", color: "#EF4444" }}>{fmt(totalDebit)}</td>
+                <td style={{ ...tdStyle, textAlign: "right", color: "#10B981" }}>{fmt(totalCredit)}</td>
               </tr>
             </tfoot>
           </table>

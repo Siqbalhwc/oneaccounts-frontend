@@ -7,6 +7,8 @@ import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Printer, ChevronLeft, Chevr
 import { useRole } from "@/contexts/RoleContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { generateGeneralLedgerPDF } from "@/lib/pdf/generalLedgerPDF"
+import { round2, fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 type SortField = "date" | "description" | "debit" | "credit" | "running_balance"
 type SortDir   = "asc" | "desc"
@@ -311,16 +313,16 @@ export default function GeneralLedgerPage() {
           <div className="summary-grid">
             <div className="summary-item">
               <div className="summary-label">Total Debits</div>
-              <div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalDebit.toLocaleString("en-PK")}</div>
+              <div className="summary-value" style={{ color: "#EF4444", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(totalDebit)}</div>
             </div>
             <div className="summary-item">
               <div className="summary-label">Total Credits</div>
-              <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalCredit.toLocaleString("en-PK")}</div>
+              <div className="summary-value" style={{ color: "#10B981", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(totalCredit)}</div>
             </div>
             <div className="summary-item">
               <div className="summary-label">Closing Balance</div>
               <div className="summary-value" style={{ color: closingBalance >= 0 ? "#10B981" : "#EF4444" }}>
-                PKR {Math.abs(closingBalance).toLocaleString("en-PK")}
+                <CurrencyTag size={12} />{fmtMoney(Math.abs(closingBalance))}
                 <span style={{ fontSize: 12, fontWeight: 400, marginLeft: 4 }}>{closingBalance >= 0 ? "Dr" : "Cr"}</span>
               </div>
             </div>
@@ -338,19 +340,19 @@ export default function GeneralLedgerPage() {
                   <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
                   <button className="sort-btn" onClick={() => handleSort("description")}>Entry #{getSortIcon("description")}</button>
                   <span>Description</span>
-                  <button className="sort-btn" onClick={() => handleSort("debit")}            style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
-                  <button className="sort-btn" onClick={() => handleSort("credit")}           style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
-                  <span className="sort-btn" style={{ textAlign: "right", justifyContent: "flex-end", cursor: "default" }}>Balance</span>
+                  <button className="sort-btn" onClick={() => handleSort("debit")}            style={{ textAlign: "right", justifyContent: "flex-end" }}>Debit (PKR) {getSortIcon("debit")}</button>
+                  <button className="sort-btn" onClick={() => handleSort("credit")}           style={{ textAlign: "right", justifyContent: "flex-end" }}>Credit (PKR) {getSortIcon("credit")}</button>
+                  <span className="sort-btn" style={{ textAlign: "right", justifyContent: "flex-end", cursor: "default" }}>Balance (PKR)</span>
                 </div>
                 {paginatedLines.map((line, idx) => (
                   <div key={line.id || idx} className={`ledger-row ${line.isOpening ? "opening-row" : ""}`}>
                     <span style={{ fontSize: 12 }}>{line.isOpening ? "" : line.date}</span>
                     <span style={{ color: "var(--primary)", fontSize: 12 }}>{line.entry_no}</span>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.description}</span>
-                    <span style={{ textAlign: "right", color: line.debit  > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit  > 0 ? 600 : 400 }}>{line.debit  > 0 ? `PKR ${line.debit.toLocaleString("en-PK")}`  : "—"}</span>
-                    <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>{line.credit > 0 ? `PKR ${line.credit.toLocaleString("en-PK")}` : "—"}</span>
+                    <span style={{ textAlign: "right", color: line.debit  > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit  > 0 ? 600 : 400 }}>{line.debit  > 0 ? fmtMoney(line.debit)  : "—"}</span>
+                    <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>{line.credit > 0 ? fmtMoney(line.credit) : "—"}</span>
                     <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
-                      PKR {Math.abs(line.running_balance).toLocaleString("en-PK")}
+                      {fmtMoney(Math.abs(line.running_balance))}
                       <span style={{ fontSize: 10, marginLeft: 2 }}>{line.running_balance >= 0 ? "Dr" : "Cr"}</span>
                     </span>
                   </div>

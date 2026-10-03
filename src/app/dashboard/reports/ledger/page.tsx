@@ -7,6 +7,8 @@ import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Printer } from "lucide-reac
 import { useRole } from "@/contexts/RoleContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { generateGeneralLedgerPDF } from "@/lib/pdf/generalLedgerPDF"
+import { round2, fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 type SortField = "date" | "entry_no" | "description" | "debit" | "credit" | "running_balance"
 type SortDir   = "asc" | "desc"
@@ -215,16 +217,16 @@ export default function LedgerPage() {
           <div className="summary-grid">
             <div className="summary-item">
               <div className="summary-label">Total Debits</div>
-              <div className="summary-value" style={{ color: "#EF4444" }}>PKR {totalDebit.toLocaleString()}</div>
+              <div className="summary-value" style={{ color: "#EF4444", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(totalDebit)}</div>
             </div>
             <div className="summary-item">
               <div className="summary-label">Total Credits</div>
-              <div className="summary-value" style={{ color: "#10B981" }}>PKR {totalCredit.toLocaleString()}</div>
+              <div className="summary-value" style={{ color: "#10B981", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(totalCredit)}</div>
             </div>
             <div className="summary-item">
               <div className="summary-label">Closing Balance</div>
               <div className="summary-value" style={{ color: closingBalance >= 0 ? "#10B981" : "#EF4444" }}>
-                PKR {Math.abs(closingBalance).toLocaleString()}
+                <CurrencyTag size={12} />{fmtMoney(Math.abs(closingBalance))}
                 <span style={{ fontSize: 13, fontWeight: 500, marginLeft: 4 }}>{closingBalance >= 0 ? "Dr" : "Cr"}</span>
               </div>
             </div>
@@ -241,9 +243,9 @@ export default function LedgerPage() {
                 <button className="sort-btn" onClick={() => handleSort("date")}>Date {getSortIcon("date")}</button>
                 <button className="sort-btn" onClick={() => handleSort("entry_no")}>Entry # {getSortIcon("entry_no")}</button>
                 <button className="sort-btn" onClick={() => handleSort("description")}>Description {getSortIcon("description")}</button>
-                <button className="sort-btn" onClick={() => handleSort("debit")}           style={{ justifyContent: "flex-end" }}>Debit {getSortIcon("debit")}</button>
-                <button className="sort-btn" onClick={() => handleSort("credit")}          style={{ justifyContent: "flex-end" }}>Credit {getSortIcon("credit")}</button>
-                <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ justifyContent: "flex-end" }}>Balance {getSortIcon("running_balance")}</button>
+                <button className="sort-btn" onClick={() => handleSort("debit")}           style={{ justifyContent: "flex-end" }}>Debit (PKR) {getSortIcon("debit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("credit")}          style={{ justifyContent: "flex-end" }}>Credit (PKR) {getSortIcon("credit")}</button>
+                <button className="sort-btn" onClick={() => handleSort("running_balance")} style={{ justifyContent: "flex-end" }}>Balance (PKR) {getSortIcon("running_balance")}</button>
               </div>
               {sortedLines.map((line, idx) => (
                 <div
@@ -255,10 +257,10 @@ export default function LedgerPage() {
                   <span style={{ fontSize: 12 }}>{line.isOpening ? "" : line.date}</span>
                   <span style={{ color: "var(--primary)", fontSize: 12 }}>{line.entry_no}</span>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.description}</span>
-                  <span style={{ textAlign: "right", color: line.debit  > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit  > 0 ? 600 : 400 }}>{line.debit  > 0 ? `PKR ${line.debit.toLocaleString()}`  : "—"}</span>
-                  <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>{line.credit > 0 ? `PKR ${line.credit.toLocaleString()}` : "—"}</span>
+                  <span style={{ textAlign: "right", color: line.debit  > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.debit  > 0 ? 600 : 400 }}>{line.debit  > 0 ? fmtMoney(line.debit)  : "—"}</span>
+                  <span style={{ textAlign: "right", color: line.credit > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.credit > 0 ? 600 : 400 }}>{line.credit > 0 ? fmtMoney(line.credit) : "—"}</span>
                   <span style={{ textAlign: "right", fontWeight: 600, color: line.running_balance >= 0 ? "#10B981" : "#EF4444" }}>
-                    PKR {Math.abs(line.running_balance).toLocaleString()}
+                    {fmtMoney(Math.abs(line.running_balance))}
                     <span style={{ fontSize: 10, marginLeft: 2 }}>{line.running_balance >= 0 ? "Dr" : "Cr"}</span>
                   </span>
                 </div>

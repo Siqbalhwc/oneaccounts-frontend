@@ -285,13 +285,13 @@ export default function ProductLedgerPage() {
                 {line.ref || "Opening Balance"}
               </span>
               <span style={{ textAlign: "right", color: line.qty_in > 0 ? "#10B981" : "var(--text-muted)", fontWeight: line.qty_in > 0 ? 600 : 400 }}>
-                {line.qty_in > 0 ? line.qty_in.toLocaleString() : "—"}
+                {line.qty_in > 0 ? fmtQty(line.qty_in) : "—"}
               </span>
               <span style={{ textAlign: "right", color: line.qty_out > 0 ? "#EF4444" : "var(--text-muted)", fontWeight: line.qty_out > 0 ? 600 : 400 }}>
-                {line.qty_out > 0 ? line.qty_out.toLocaleString() : "—"}
+                {line.qty_out > 0 ? fmtQty(line.qty_out) : "—"}
               </span>
               <span style={{ textAlign: "right", fontWeight: 600, color: line.balance >= 0 ? "#10B981" : "#EF4444" }}>
-                {line.balance.toLocaleString()} {product?.unit || "PCS"}
+                {fmtQty(line.balance)} {product?.unit || "PCS"}
               </span>
             </div>
           ))}

@@ -1,5 +1,6 @@
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import { fmtMoney } from "../money"
 
 const NAVY   = [7,8,91] as [number,number,number]
 const DARK   = [17,24,39] as [number,number,number]
@@ -8,7 +9,8 @@ const BORDER = [229,231,235] as [number,number,number]
 const WHITE  = [255,255,255] as [number,number,number]
 const ROW_ALT = [248,249,252] as [number,number,number]
 
-const pkr = (n:number) => "PKR " + n.toLocaleString("en-PK",{minimumFractionDigits:2,maximumFractionDigits:2})
+// plain number: the column headers say (PKR)
+const pkr = (n:number) => fmtMoney(n)
 async function loadImage(url:string):Promise<string|null>{ try{const r=await fetch(url);if(!r.ok)return null;const b=await r.blob();return new Promise(res=>{const reader=new FileReader();reader.onload=()=>res(reader.result as string);reader.onerror=()=>res("");reader.readAsDataURL(b)})}catch{return null} }
 
 export interface LedgerLine{ date:string; entry_no:string; description:string; debit:number; credit:number; running_balance:number; isOpening?:boolean }
@@ -34,7 +36,7 @@ export async function generateVendorLedgerPDF(data:VendorLedgerPDFData):Promise<
   const HEADER_BOTTOM=LOGO_Y+LOGO_SIZE+5
   doc.setDrawColor(...NAVY).setLineWidth(0.6).line(ML,HEADER_BOTTOM,PW-MR,HEADER_BOTTOM)
   let Y=HEADER_BOTTOM+6
-  const headers=["Date","Entry #","Description","Debit","Credit","Balance"]
+  const headers=["Date","Entry #","Description","Debit (PKR)","Credit (PKR)","Balance (PKR)"]
   const rows:any[]=data.ledgerLines.map(l=>[l.isOpening?"":l.date,l.entry_no,l.description,l.debit>0?pkr(l.debit):"–",l.credit>0?pkr(l.credit):"–",pkr(l.running_balance)+(l.running_balance>=0?" Dr":" Cr")])
   rows.push(["","","Total",pkr(data.totalDebit),pkr(data.totalCredit),pkr(data.closingBalance)])
   autoTable(doc,{

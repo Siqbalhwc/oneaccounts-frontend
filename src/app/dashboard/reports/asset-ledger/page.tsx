@@ -7,6 +7,8 @@ import { Search, Download, ArrowLeft } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import { round2, fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 interface LedgerLine {
   date: string
@@ -144,9 +146,9 @@ export default function AssetLedgerPage() {
     const body = ledger.map(line => [
       line.date,
       line.description,
-      line.debit > 0 ? line.debit.toLocaleString() : "",
-      line.credit > 0 ? line.credit.toLocaleString() : "",
-      line.runningNBV.toLocaleString(),
+      line.debit > 0 ? fmtMoney(line.debit) : "",
+      line.credit > 0 ? fmtMoney(line.credit) : "",
+      fmtMoney(line.runningNBV),
     ])
     autoTable(doc, { head, body, startY: 30, styles: { fontSize: 9 } })
     doc.save(`asset_ledger_${selectedAsset.asset_no}.pdf`)
@@ -203,7 +205,7 @@ export default function AssetLedgerPage() {
         <>
           <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, padding:16, marginBottom:16 }}>
             <div style={{ fontWeight:700, fontSize:16, color:"var(--text)" }}>{selectedAsset?.name} ({selectedAsset?.asset_no})</div>
-            <div style={{ fontSize:13, color:"var(--text-muted)" }}>Cost: PKR {selectedAsset?.cost_price?.toLocaleString()} • Status: {selectedAsset?.status}</div>
+            <div style={{ fontSize:13, color:"var(--text-muted)" }}>Cost: PKR {fmtMoney(selectedAsset?.cost_price)} • Status: {selectedAsset?.status}</div>
           </div>
           <div style={{ overflowX:"auto" }}>
             <table>
@@ -211,9 +213,9 @@ export default function AssetLedgerPage() {
                 <tr>
                   <th>Date</th>
                   <th>Description</th>
-                  <th className="text-right">Debit</th>
-                  <th className="text-right">Credit</th>
-                  <th className="text-right">Running NBV</th>
+                  <th className="text-right">Debit (PKR)</th>
+                  <th className="text-right">Credit (PKR)</th>
+                  <th className="text-right">Running NBV (PKR)</th>
                 </tr>
               </thead>
               <tbody>
@@ -221,9 +223,9 @@ export default function AssetLedgerPage() {
                   <tr key={idx}>
                     <td>{line.date}</td>
                     <td>{line.description}</td>
-                    <td className="text-right">{line.debit > 0 ? line.debit.toLocaleString() : ""}</td>
-                    <td className="text-right">{line.credit > 0 ? line.credit.toLocaleString() : ""}</td>
-                    <td className="text-right" style={{ fontWeight:600 }}>{line.runningNBV.toLocaleString()}</td>
+                    <td className="text-right">{line.debit > 0 ? fmtMoney(line.debit) : ""}</td>
+                    <td className="text-right">{line.credit > 0 ? fmtMoney(line.credit) : ""}</td>
+                    <td className="text-right" style={{ fontWeight:600 }}>{fmtMoney(line.runningNBV)}</td>
                   </tr>
                 ))}
               </tbody>

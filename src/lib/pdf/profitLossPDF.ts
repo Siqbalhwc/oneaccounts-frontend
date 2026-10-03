@@ -1,5 +1,6 @@
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import { fmtMoney } from "../money"
 
 // ─── Brand colours (matching Trial Balance) ──────────────────────
 const NAVY   = [7,   8,  91]  as [number,number,number]
@@ -25,8 +26,9 @@ async function loadImage(url: string): Promise<string | null> {
   }
 }
 
-const pkr = (n: number) =>
-  "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// "PKR" only on Gross Profit / Net Profit rows; other cells are plain numbers (headers say (PKR))
+const pkr = (n: number) => "PKR " + fmtMoney(n)
+const num = (n: number) => fmtMoney(n)
 
 export interface PnLAccount {
   code: string
@@ -138,10 +140,10 @@ export async function generateProfitLossPDF(data: ProfitLossPDFData): Promise<js
   const addSection = (rows: any[], title: string, items: any[], total: number, color: [number,number,number]) => {
     if (!items || items.length === 0) return
     rows.push([{ content: title, styles: { fontStyle: "bold", fillColor: [240,240,245], textColor: color } },
-               { content: pkr(total), styles: { fontStyle: "bold", fillColor: [240,240,245], textColor: color, halign: "right" } }])
+               { content: num(total), styles: { fontStyle: "bold", fillColor: [240,240,245], textColor: color, halign: "right" } }])
     items.forEach((item: any) => {
       rows.push([{ content: `${item.code} – ${item.name}`, styles: { textColor: DARK } },
-                 { content: pkr(item.amount), styles: { textColor: DARK, halign: "right" } }])
+                 { content: num(item.amount), styles: { textColor: DARK, halign: "right" } }])
     })
   }
 
@@ -193,7 +195,7 @@ export async function generateProfitLossPDF(data: ProfitLossPDFData): Promise<js
     const projects = data.projects || []
     const rows = data.compareRows || []
 
-    const headers = ["Account", ...projects.map(p => p.name), "Unallocated", "Total"]
+    const headers = ["Account (PKR)", ...projects.map(p => p.name), "Unallocated", "Total"]
     const tableRows: any[] = []
     tableRows.push(headers.map(h => ({ content: h, styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE, halign: h === "Account" ? "left" : "right" } })))
 
@@ -204,24 +206,24 @@ export async function generateProfitLossPDF(data: ProfitLossPDFData): Promise<js
                       ...projects.map(() => ""), "", ""])
 
       sectionRows.forEach((row: any) => {
-        const projVals = projects.map(p => row.amounts[p.id] ? pkr(row.amounts[p.id]) : "–")
+        const projVals = projects.map(p => row.amounts[p.id] ? num(row.amounts[p.id]) : "–")
         tableRows.push([{ content: `${row.code} – ${row.name}`, styles: { halign: "left" } },
                         ...projVals.map(v => ({ content: v, styles: { halign: "right" } })),
-                        { content: row.unallocated ? pkr(row.unallocated) : "–", styles: { halign: "right" } },
-                        { content: pkr(row.total), styles: { halign: "right", fontStyle: "bold" } }])
+                        { content: row.unallocated ? num(row.unallocated) : "–", styles: { halign: "right" } },
+                        { content: num(row.total), styles: { halign: "right", fontStyle: "bold" } }])
       })
 
       // Subtotal
       const subTotalVals = projects.map(p => {
         const sum = sectionRows.reduce((s: number, r: any) => s + (r.amounts[p.id] || 0), 0)
-        return sum ? pkr(sum) : "–"
+        return sum ? num(sum) : "–"
       })
       const unallocSum = sectionRows.reduce((s: number, r: any) => s + r.unallocated, 0)
       const totalSum = sectionRows.reduce((s: number, r: any) => s + r.total, 0)
       tableRows.push([{ content: `Total ${title}`, styles: { fontStyle: "bold", halign: "left" } },
                       ...subTotalVals.map(v => ({ content: v, styles: { halign: "right", fontStyle: "bold" } })),
-                      { content: unallocSum ? pkr(unallocSum) : "–", styles: { halign: "right", fontStyle: "bold" } },
-                      { content: pkr(totalSum), styles: { halign: "right", fontStyle: "bold" } }])
+                      { content: unallocSum ? num(unallocSum) : "–", styles: { halign: "right", fontStyle: "bold" } },
+                      { content: num(totalSum), styles: { halign: "right", fontStyle: "bold" } }])
     }
 
     // Revenue
@@ -235,12 +237,12 @@ export async function generateProfitLossPDF(data: ProfitLossPDFData): Promise<js
       const rev = rows.filter(r => r.type === "Revenue").reduce((s, r) => s + (r.amounts[p.id] || 0), 0)
       const exp = rows.filter(r => r.category === "Direct Expenses").reduce((s, r) => s + (r.amounts[p.id] || 0), 0)
       const gp = rev - exp
-      return gp !== 0 ? pkr(gp) : "–"
+      return gp !== 0 ? num(gp) : "–"
     })
     tableRows.push([{ content: "Gross Profit", styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE, halign: "left" } },
                     ...gpVals.map(v => ({ content: v, styles: { halign: "right", fillColor: NAVY, textColor: WHITE } })),
                     { content: "–", styles: { fillColor: NAVY, textColor: WHITE, halign: "right" } },
-                    { content: pkr(data.compareGrossProfit || 0), styles: { fillColor: NAVY, textColor: WHITE, halign: "right", fontStyle: "bold" } }])
+                    { content: num(data.compareGrossProfit || 0), styles: { fillColor: NAVY, textColor: WHITE, halign: "right", fontStyle: "bold" } }])
 
     // Operating Expenses
     addCompareSection("Operating Expenses", (r: any) => r.category === "Operating Expenses", [245,158,11])
@@ -253,12 +255,12 @@ export async function generateProfitLossPDF(data: ProfitLossPDFData): Promise<js
       const rev = rows.filter(r => r.type === "Revenue").reduce((s, r) => s + (r.amounts[p.id] || 0), 0)
       const exp = rows.filter(r => r.type === "Expense").reduce((s, r) => s + (r.amounts[p.id] || 0), 0)
       const net = rev - exp
-      return net !== 0 ? pkr(net) : "–"
+      return net !== 0 ? num(net) : "–"
     })
     tableRows.push([{ content: "Net Profit / Loss", styles: { fontStyle: "bold", fillColor: NAVY, textColor: WHITE, halign: "left" } },
                     ...netVals.map(v => ({ content: v, styles: { halign: "right", fillColor: NAVY, textColor: WHITE } })),
                     { content: "–", styles: { fillColor: NAVY, textColor: WHITE, halign: "right" } },
-                    { content: pkr(data.compareNetProfit || 0), styles: { fillColor: NAVY, textColor: WHITE, halign: "right", fontStyle: "bold" } }])
+                    { content: num(data.compareNetProfit || 0), styles: { fillColor: NAVY, textColor: WHITE, halign: "right", fontStyle: "bold" } }])
 
     autoTable(doc, {
       startY: HEADER_H + 10,
