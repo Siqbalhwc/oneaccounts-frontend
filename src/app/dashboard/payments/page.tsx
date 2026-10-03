@@ -8,6 +8,8 @@ import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 import ActionSlots from "@/components/ActionSlots"
+import { fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 type SortField = "payment_no" | "payment_date" | "supplier" | "amount" | "payment_method"
 type SortDir = "asc" | "desc"
@@ -171,7 +173,7 @@ export default function PaymentsPage() {
   const sendWhatsApp = (pay: any) => {
     const supp = supplierMap[pay.party_id]
     if (!supp?.phone) { setBanner({ type: "error", text: "This supplier has no phone number on file, so the WhatsApp message could not be sent." }); return }
-    const msg = `Dear ${supp.name}, Your payment ${pay.payment_no} of PKR ${pay.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/payment/${pay.id}\nDate: ${pay.payment_date}\nThank you for your business.\n- OneAccounts by Siqbal`
+    const msg = `Dear ${supp.name}, Your payment ${pay.payment_no} of PKR ${fmtMoney(pay.amount)} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/payment/${pay.id}\nDate: ${pay.payment_date}\nThank you for your business.\n- OneAccounts by Siqbal`
     const link = getWhatsAppLink(supp.phone, msg)
     if (link) window.open(link, "_blank")
   }
@@ -270,7 +272,7 @@ export default function PaymentsPage() {
 
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Payments</div><div className="summary-value">{totalPayments}</div></div>
-        <div className="summary-item"><div className="summary-label">Total Amount (excl. reversed)</div><div className="summary-value" style={{ color: "#10B981" }}>PKR {totalAmount.toLocaleString()}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Amount (excl. reversed)</div><div className="summary-value" style={{ color: "#10B981", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(totalAmount)}</div></div>
       </div>
 
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
@@ -289,7 +291,7 @@ export default function PaymentsPage() {
                 <SortTh field="payment_no">Payment #</SortTh>
                 <SortTh field="payment_date">Date</SortTh>
                 <SortTh field="supplier" style={{ textAlign: "left" }}>Supplier</SortTh>
-                <SortTh field="amount" style={{ textAlign: "right" }}>Amount</SortTh>
+                <SortTh field="amount" style={{ textAlign: "right" }}>Amount (PKR)</SortTh>
                 <SortTh field="payment_method" style={{ textAlign: "center" }}>Method</SortTh>
                 <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
               </tr>
@@ -314,7 +316,7 @@ export default function PaymentsPage() {
                       </td>
                       <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{pay.payment_date}</td>
                       <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{suppName}</td>
-                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: isReversed ? "var(--text-muted)" : "#10B981", whiteSpace: "nowrap" }}>PKR {pay.amount?.toLocaleString()}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: isReversed ? "var(--text-muted)" : "#10B981", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(pay.amount)}</td>
                       <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{pay.payment_method || "-"}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
@@ -378,7 +380,7 @@ export default function PaymentsPage() {
                     <div className="pay-card-date">{pay.payment_date}</div>
                   </div>
                   <div className="pay-card-amt" style={{ color: isReversed ? "var(--text-muted)" : "#10B981" }}>
-                    PKR {pay.amount?.toLocaleString()}
+                    <CurrencyTag />{fmtMoney(pay.amount)}
                   </div>
                 </div>
                 <div className="pay-card-name">{suppName}</div>
@@ -417,7 +419,7 @@ export default function PaymentsPage() {
           <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, maxWidth: 440, width: "90%", boxShadow: "0 12px 32px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Reverse Payment?</h3>
             <p style={{ fontSize: 13, color: "var(--text)", margin: "0 0 10px 0", lineHeight: 1.5 }}>
-              You are about to reverse payment <strong>{reverseTarget.payment_no}</strong> to <strong>{supplierMap[reverseTarget.party_id]?.name || "this supplier"}</strong> for <strong>PKR {Number(reverseTarget.amount || 0).toLocaleString()}</strong>.
+              You are about to reverse payment <strong>{reverseTarget.payment_no}</strong> to <strong>{supplierMap[reverseTarget.party_id]?.name || "this supplier"}</strong> for <strong>PKR {fmtMoney(reverseTarget.amount || 0)}</strong>.
             </p>
             <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px 0", lineHeight: 1.5 }}>
               A reversing journal entry will be posted, and the supplier balance and any bills paid by this payment will be restored. The original entry is kept for audit.

@@ -4,6 +4,7 @@
  */
 
 import { fmtQty } from "../format-number"
+import { fmtMoney, fmtRate } from "../money"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -74,7 +75,9 @@ async function loadImage(url: string): Promise<string | null> {
   } catch { return null }
 }
 
-const pkr = (n: number) => "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// "PKR" is used once, on headline totals. Table cells and minor lines use plain numbers.
+const pkr = (n: number) => "PKR " + fmtMoney(n)
+const num = (n: number) => fmtMoney(n)
 
 function filledRect(doc: jsPDF, x: number, y: number, w: number, h: number, fillRgb: [number,number,number]) {
   doc.setFillColor(...fillRgb)
@@ -197,8 +200,8 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
   doc.text("#",          numCenterX, headerTextY, { align: "center" })
   doc.text("Description", descLeftX,  headerTextY, { align: "left" })
   doc.text("Qty",        qtyCenterX, headerTextY, { align: "center" })
-  doc.text("Unit Price", priceCenterX, headerTextY, { align: "center" })
-  doc.text("Amount",     amtCenterX, headerTextY, { align: "center" })
+  doc.text("Price (PKR)", priceCenterX, headerTextY, { align: "center" })
+  doc.text("Amount (PKR)", amtCenterX, headerTextY, { align: "center" })
 
   // ── TABLE BODY ───────────────────────────────────────────────────
   const bodyStartY = tableY + HEADER_ROW_H
@@ -237,8 +240,8 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
       i + 1,           // row number
       desc,
       fmtQty(item.qty),
-      pkr(item.unit_price),
-      pkr(item.total),
+      fmtRate(item.unit_price),
+      num(item.total),
     ]
   })
 
@@ -288,12 +291,12 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
 
   doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...MUTED)
   doc.text("Subtotal", sumX, SY)
-  doc.setTextColor(...DARK).text(pkr(data.subtotal), valX, SY, { align: "right" })
+  doc.setTextColor(...DARK).text(num(data.subtotal), valX, SY, { align: "right" })
   SY += 5.5
 
   doc.setFont("helvetica", "bold").setTextColor(...MUTED)
   doc.text("Tax (0%)", sumX, SY)
-  doc.setTextColor(...DARK).text(pkr(0), valX, SY, { align: "right" })
+  doc.setTextColor(...DARK).text(num(0), valX, SY, { align: "right" })
   SY += 5.5
 
   // Total box – 6 mm height, same as header
@@ -307,7 +310,7 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
   // ---- ACCOUNT BALANCE SUMMARY (as at issue) - PDF / shared link only ----
   if (data.balanceSummary) {
     const bs = data.balanceSummary
-    const money = (n: number) => (n < 0 ? "(" + pkr(Math.abs(n)) + ")" : pkr(n))
+    const money = (n: number) => (n < 0 ? "(" + num(Math.abs(n)) + ")" : num(n))
     const boxH = 24
     SY += 6
     if (SY + boxH > PH - 20) { doc.addPage(); SY = 20 }
@@ -327,13 +330,13 @@ export async function generatePaymentPDF(data: PaymentPDFData): Promise<jsPDF> {
     doc.setTextColor(...DARK)
     doc.text(money(bs.opening), vx, SY + 1, { align: "right" })
     doc.setTextColor(16, 185, 129)
-    doc.text("- " + pkr(bs.current), vx, SY + 7, { align: "right" })
+    doc.text("- " + num(bs.current), vx, SY + 7, { align: "right" })
     doc.setDrawColor(...BORDER)
     doc.line(bx + 3, SY + 10, valX - 3, SY + 10)
     doc.setFont("helvetica", "bold")
     doc.setTextColor(...NAVY)
     doc.text("Total Balance Payable", tx, SY + 16)
-    doc.text(money(bs.total), vx, SY + 16, { align: "right" })
+    doc.text(bs.total < 0 ? "(" + pkr(Math.abs(bs.total)) + ")" : pkr(bs.total), vx, SY + 16, { align: "right" })
     SY += boxH - 4
   }
 

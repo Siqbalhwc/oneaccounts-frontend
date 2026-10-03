@@ -1,4 +1,5 @@
 import jsPDF from "jspdf"
+import { fmtMoney } from "../money"
 import autoTable from "jspdf-autotable"
 
 // ─── Brand colours (same as invoice) ────────────────────────────────
@@ -26,8 +27,9 @@ async function loadImage(url: string): Promise<string | null> {
   } catch { return null }
 }
 
-const pkr = (n: number) =>
-  "PKR " + n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// "PKR" is used once, on the headline amount. Table cells use plain numbers (columns say "(PKR)").
+const pkr = (n: number) => "PKR " + fmtMoney(n)
+const num = (n: number) => fmtMoney(n)
 
 function filledRect(
   doc: jsPDF,
@@ -246,8 +248,8 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
       i + 1,
       `${line.account_code} – ${line.account_name}`,
       line.description || "—",
-      line.debit > 0 ? pkr(line.debit) : "–",
-      line.credit > 0 ? pkr(line.credit) : "–",
+      line.debit > 0 ? num(line.debit) : "–",
+      line.credit > 0 ? num(line.credit) : "–",
     ])
 
     // Totals row
@@ -257,8 +259,8 @@ export async function generateReceiptPDF(data: ReceiptPDFData): Promise<jsPDF> {
       "",
       "Total",
       "",
-      pkr(totalDebit),
-      pkr(totalCredit),
+      num(totalDebit),
+      num(totalCredit),
     ])
 
     autoTable(doc, {

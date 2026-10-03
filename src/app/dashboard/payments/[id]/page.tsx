@@ -9,6 +9,8 @@ import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
+import { fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 interface Payment {
   id: number
@@ -170,7 +172,7 @@ export default function PaymentDetailPage() {
   const waLink = payment && payment.supplier
     ? getWhatsAppLink(
         payment.supplier.phone || "",
-        `Dear ${payment.supplier.name}, Your payment ${payment.payment_no} of PKR ${payment.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/payment/${payment.id}\nDate: ${payment.payment_date}\nThank you for your business.\n— ${companyName || "OneAccounts"}`
+        `Dear ${payment.supplier.name}, Your payment ${payment.payment_no} of PKR ${fmtMoney(payment.amount)} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/payment/${payment.id}\nDate: ${payment.payment_date}\nThank you for your business.\n— ${companyName || "OneAccounts"}`
       )
     : ""
 
@@ -361,7 +363,7 @@ export default function PaymentDetailPage() {
           </div>
           <div>
             <div className="label">Amount</div>
-            <div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {payment.amount?.toLocaleString()}</div>
+            <div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(payment.amount)}</div>
           </div>
           <div>
             <div className="label">Bank</div>
@@ -408,13 +410,13 @@ export default function PaymentDetailPage() {
           <div className="table-wrapper">
             <table>
               <thead>
-                <tr><th>Bill Number</th><th style={{ textAlign: "right" }}>Amount</th></tr>
+                <tr><th>Bill Number</th><th style={{ textAlign: "right" }}>Amount (PKR)</th></tr>
               </thead>
               <tbody>
                 {payment.allocations.map((alloc, idx) => (
                   <tr key={idx}>
                     <td>{alloc.invoice_no}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {alloc.amount?.toLocaleString()}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(alloc.amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -439,16 +441,16 @@ export default function PaymentDetailPage() {
                       {line.source_type === 'payment_reversal' && <span className="source-tag">REVERSAL</span>}
                       {line.source_type === 'payment' && line.description?.includes('(edited)') && <span className="source-tag" style={{background: 'rgba(59,130,246,0.15)', color:'#3b82f6'}}>EDITED</span>}
                     </td>
-                    <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "var(--text-muted)" }}>{line.debit > 0 ? line.debit.toLocaleString() : "–"}</td>
-                    <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>{line.credit > 0 ? line.credit.toLocaleString() : "–"}</td>
+                    <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "var(--text-muted)" }}>{line.debit > 0 ? fmtMoney(line.debit) : "–"}</td>
+                    <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "var(--text-muted)" }}>{line.credit > 0 ? fmtMoney(line.credit) : "–"}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
                   <td>Total</td>
-                  <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
-                  <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
+                  <td style={{ textAlign: "right", color: "#F87171" }}>{fmtMoney(totalDebit)}</td>
+                  <td style={{ textAlign: "right", color: "#2DD4BF" }}>{fmtMoney(totalCredit)}</td>
                 </tr>
               </tfoot>
             </table>

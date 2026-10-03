@@ -10,6 +10,8 @@ import { generateReceiptPDF } from "@/lib/pdf/receiptPDF"
 import { useCompany } from "@/contexts/CompanyContext"
 import RecordHistory from "@/components/RecordHistory"
 import { getWhatsAppLink } from "@/lib/whatsapp"
+import { fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 interface Receipt {
   id: number
@@ -145,7 +147,7 @@ export default function ReceiptDetailPage() {
   const waLink = customer?.phone
     ? getWhatsAppLink(
         customer.phone,
-        `Dear ${customer.name}, Your receipt ${receipt?.receipt_no} of PKR ${receipt?.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/receipt/${receipt?.id}\nDate: ${receipt?.date}\nThank you for your business.\n— OneAccounts`
+        `Dear ${customer.name}, Your receipt ${receipt?.receipt_no} of PKR ${fmtMoney(receipt?.amount)} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/receipt/${receipt?.id}\nDate: ${receipt?.date}\nThank you for your business.\n— OneAccounts`
       )
     : ""
 
@@ -255,7 +257,7 @@ export default function ReceiptDetailPage() {
           </div>
           <div>
             <div className="label">Amount</div>
-            <div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B" }}>PKR {receipt.amount?.toLocaleString()}</div>
+            <div className="value" style={{ fontSize: 18, fontWeight: 700, color: "#F59E0B", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(receipt.amount)}</div>
           </div>
           <div>
             <div className="label">Payment Method</div>
@@ -288,14 +290,14 @@ export default function ReceiptDetailPage() {
             <thead>
               <tr>
                 <th>Invoice Number</th>
-                <th style={{ textAlign: "right" }}>Amount</th>
+                <th style={{ textAlign: "right" }}>Amount (PKR)</th>
               </tr>
             </thead>
             <tbody>
               {allocations.map((alloc, idx) => (
                 <tr key={idx}>
                   <td>{alloc.invoice_no}</td>
-                  <td style={{ textAlign: "right", fontWeight: 600 }}>PKR {alloc.amount?.toLocaleString()}</td>
+                  <td style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(alloc.amount)}</td>
                 </tr>
               ))}
             </tbody>
@@ -321,10 +323,10 @@ export default function ReceiptDetailPage() {
                   <tr key={idx}>
                     <td>{line.account_code} – {line.account_name}</td>
                     <td style={{ textAlign: "right", color: line.debit > 0 ? "#F87171" : "inherit" }}>
-                      {line.debit > 0 ? line.debit.toLocaleString() : "–"}
+                      {line.debit > 0 ? fmtMoney(line.debit) : "–"}
                     </td>
                     <td style={{ textAlign: "right", color: line.credit > 0 ? "#2DD4BF" : "inherit" }}>
-                      {line.credit > 0 ? line.credit.toLocaleString() : "–"}
+                      {line.credit > 0 ? fmtMoney(line.credit) : "–"}
                     </td>
                   </tr>
                 ))}
@@ -332,8 +334,8 @@ export default function ReceiptDetailPage() {
               <tfoot>
                 <tr style={{ background: "var(--card-hover)", fontWeight: 700 }}>
                   <td>Total</td>
-                  <td style={{ textAlign: "right", color: "#F87171" }}>{totalDebit.toLocaleString()}</td>
-                  <td style={{ textAlign: "right", color: "#2DD4BF" }}>{totalCredit.toLocaleString()}</td>
+                  <td style={{ textAlign: "right", color: "#F87171" }}>{fmtMoney(totalDebit)}</td>
+                  <td style={{ textAlign: "right", color: "#2DD4BF" }}>{fmtMoney(totalCredit)}</td>
                 </tr>
               </tfoot>
             </table>

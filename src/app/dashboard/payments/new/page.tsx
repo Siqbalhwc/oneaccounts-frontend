@@ -4,21 +4,24 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Search, X, CheckCircle, RefreshCw, Paperclip, ChevronDown, FileText, Upload } from "lucide-react"
+import { round2, fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 // ── WHT math helpers ──────────────────────────────────────
+// Rounding policy: WHT is calculated to 2 decimals (paisa) - the same maths as the database.
 function whtFromGross(gross: number, rate: number) {
-  return Math.round(gross * (rate / 100))
+  return round2(gross * (rate / 100))
 }
 function netFromGross(gross: number, rate: number) {
-  return gross - whtFromGross(gross, rate)
+  return round2(gross - whtFromGross(gross, rate))
 }
 function grossFromNet(net: number, rate: number) {
-  if (rate <= 0) return net
-  let gross = Math.round(net / (1 - rate / 100))
-  for (let i = 0; i < 3; i++) {
+  if (rate <= 0) return round2(net)
+  let gross = round2(net / (1 - rate / 100))
+  for (let i = 0; i < 6; i++) {
     const impliedNet = netFromGross(gross, rate)
-    if (impliedNet === net) break
-    gross += impliedNet < net ? 1 : -1
+    if (Math.abs(impliedNet - net) < 0.005) break
+    gross = round2(gross + (impliedNet < net ? 0.01 : -0.01))
   }
   return gross
 }
@@ -296,7 +299,7 @@ export default function NewPaymentPage() {
 
   // ── Allocation helpers ────────────────────────────────
   const toggleBill = (bill: any) => {
-    const due = bill.total - (bill.paid || 0)
+    const due = round2(bill.total - (bill.paid || 0))
     const key = String(bill.id)
     setNetAllocations(prev => {
       const current = prev[key] || 0
@@ -307,7 +310,7 @@ export default function NewPaymentPage() {
   }
 
   const updateNetAllocation = (bill: any, typedNet: number) => {
-    const due = bill.total - (bill.paid || 0)
+    const due = round2(bill.total - (bill.paid || 0))
     const rate = bill.wht_rate || 0
     const safeNet = Math.max(typedNet, 0)
     let gross = grossFromNet(safeNet, rate)
@@ -319,23 +322,23 @@ export default function NewPaymentPage() {
   const toggleOpeningAllocation = () => {
     setNetAllocations(prev => {
       const current = prev["opening"] || 0
-      const newVal = current > 0 ? 0 : supplierOpeningBalance
+      const newVal = current > 0 ? 0 : round2(supplierOpeningBalance)
       return { ...prev, opening: newVal }
     })
   }
   const updateOpeningAllocation = (value: number) => {
-    const clamped = Math.min(Math.max(value, 0), supplierOpeningBalance)
+    const clamped = round2(Math.min(Math.max(value, 0), supplierOpeningBalance))
     setNetAllocations(prev => ({ ...prev, opening: clamped }))
   }
 
   // ── Derived totals ────────────────────────────────────
   const billRows = bills.map(bill => {
-    const due = bill.total - (bill.paid || 0)
+    const due = round2(bill.total - (bill.paid || 0))
     const rate = bill.wht_rate || 0
     const net = netAllocations[String(bill.id)] || 0
     const gross = net > 0 ? Math.min(grossFromNet(net, rate), due) : 0
     const wht = whtFromGross(gross, rate)
-    const remainingGross = due - gross
+    const remainingGross = round2(due - gross)
     const remainingWht = whtFromGross(remainingGross, rate)
     const isFullySettled = gross >= due && due > 0
     return { ...bill, due, rate, net, gross, wht, remainingGross, remainingWht, isFullySettled }
@@ -343,12 +346,12 @@ export default function NewPaymentPage() {
 
   const openingNet = netAllocations["opening"] || 0
 
-  const totalGrossAllocated = billRows.reduce((s, b) => s + b.gross, 0) + openingNet
-  const totalWhtDeducted = billRows.reduce((s, b) => s + b.wht, 0)
-  const totalNetAllocated = billRows.reduce((s, b) => s + b.net, 0) + openingNet
+  const totalGrossAllocated = round2(billRows.reduce((s, b) => s + b.gross, 0) + openingNet)
+  const totalWhtDeducted = round2(billRows.reduce((s, b) => s + b.wht, 0))
+  const totalNetAllocated = round2(billRows.reduce((s, b) => s + b.net, 0) + openingNet)
 
-  const totalAmount = Number(paymentAmount || 0)
-  const difference = totalAmount - totalNetAllocated
+  const totalAmount = round2(Number(paymentAmount || 0))
+  const difference = round2(totalAmount - totalNetAllocated)
 
   // ── Submit (create or update) ─────────────────────────
   const uploadAttachment = async (file: File) => {
@@ -428,7 +431,7 @@ export default function NewPaymentPage() {
           p_payment_method: "Bank Transfer",
           p_bank_account_id: selectedBankId,
           p_allocations: allocationsPayload,
-          p_opening_allocation: ownOpeningLoaded ? (openingNet || 0) : null,
+          p_opening_allocation: ownOpeningLoaded ? round2(openingNet || 0) : null,
           p_reference: reference || null,
           p_notes: notes || null,
           p_user_email: 'system',
@@ -463,7 +466,7 @@ export default function NewPaymentPage() {
               bill_id: a.invoice_id,
               amount: a.allocated_amount,
             })),
-            opening_allocation: openingNet || 0,
+            opening_allocation: round2(openingNet || 0),
           }),
         })
         const result = await res.json()
@@ -619,7 +622,7 @@ export default function NewPaymentPage() {
                     {selectedSupplier ? (
                       <div className="sup-selected-badge" onClick={clearSupplier}>
                         <span>🚚</span><span style={{ flex: 1 }}>{selectedSupplier.code} — {selectedSupplier.name}</span>
-                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedSupplier.balance || 0).toLocaleString()}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {fmtMoney(selectedSupplier.balance || 0)}</span>
                         <button style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearSupplier(); }}><X size={14} /></button>
                         <button
                           style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer", opacity: refreshingSuppliers ? 0.5 : 1 }}
@@ -648,7 +651,7 @@ export default function NewPaymentPage() {
                               filteredSuppliers.map(s => (
                                 <div key={s.id} className="sup-option" onMouseDown={() => selectSupplier(s)}>
                                   <div><div className="sup-option-name">{s.name}</div><div className="sup-option-meta">{s.code}{s.phone ? ` · ${s.phone}` : ""}</div></div>
-                                  <div className="sup-option-bal">PKR {(s.balance || 0).toLocaleString()}</div>
+                                  <div className="sup-option-bal">{fmtMoney(s.balance || 0)}</div>
                                 </div>
                               ))
                             )}
@@ -682,7 +685,7 @@ export default function NewPaymentPage() {
                   <input className="pay-input" type="number" min="0" step="100" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value ? Number(e.target.value) : "")} placeholder="0" />
                   {!isDonation && totalNetAllocated > 0 && (
                     <div className="hint-text">
-                      Net payable after WHT: <strong>PKR {totalNetAllocated.toLocaleString()}</strong>
+                      Net payable after WHT: <strong>PKR {fmtMoney(totalNetAllocated)}</strong>
                     </div>
                   )}
                 </div>
@@ -698,26 +701,26 @@ export default function NewPaymentPage() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "sticky", top: 16 }}>
             <div className="pay-card">
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "0 0 10px" }}><h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: 0 }}>Summary</h3><span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: 0.4 }}>PKR</span></div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
-                <span>Payment Entered</span><span>PKR {totalAmount.toLocaleString()}</span>
+                <span>Payment Entered</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(totalAmount)}</span>
               </div>
               {!isDonation && (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 4 }}>
-                    <span>Bills/Opening Settled (Gross)</span><span>PKR {totalGrossAllocated.toLocaleString()}</span>
+                    <span>Bills/Opening Settled (Gross)</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(totalGrossAllocated)}</span>
                   </div>
                   {totalWhtDeducted > 0 && (
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--text-muted)" }}>
-                      <span>→ WHT to Tax Payable</span><span>PKR {totalWhtDeducted.toLocaleString()}</span>
+                      <span>→ WHT to Tax Payable</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(totalWhtDeducted)}</span>
                     </div>
                   )}
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600 }}>
-                    <span>→ Net from Bank</span><span>PKR {totalNetAllocated.toLocaleString()}</span>
+                    <span>→ Net from Bank</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(totalNetAllocated)}</span>
                   </div>
-                  {totalAmount > 0 && Math.abs(difference) > 0.5 && (
+                  {totalAmount > 0 && Math.abs(difference) >= 0.01 && (
                     <div style={{ fontSize: 12, color: "#EF4444", marginTop: 4 }}>
-                      ⚠️ {difference > 0 ? `Overpaid by PKR ${difference.toLocaleString()}` : `Underpaid by PKR ${Math.abs(difference).toLocaleString()}`}
+                      ⚠️ {difference > 0 ? `Overpaid by PKR ${fmtMoney(difference)}` : `Underpaid by PKR ${fmtMoney(Math.abs(difference))}`}
                     </div>
                   )}
                 </>
@@ -799,7 +802,7 @@ export default function NewPaymentPage() {
                           <td colSpan={3}>
                             <span style={{ fontWeight: 600 }}>Opening Balance</span>
                             <span style={{ marginLeft: 8, fontSize: 12, color: "var(--text-muted)" }}>
-                              (no WHT applies) - Total {supplierOpeningTotal.toLocaleString()} / Paid {supplierOpeningPaid.toLocaleString()} / Due {supplierOpeningBalance.toLocaleString()}
+                              (no WHT applies) - Total {fmtMoney(supplierOpeningTotal)} / Paid {fmtMoney(supplierOpeningPaid)} / Due {fmtMoney(supplierOpeningBalance)}
                             </span>
                           </td>
                           <td style={{ textAlign: "right" }}>
@@ -807,7 +810,7 @@ export default function NewPaymentPage() {
                           </td>
                           <td style={{ textAlign: "right" }} className="derived-cell">—</td>
                           <td style={{ textAlign: "right" }} className="derived-cell">
-                            PKR {(supplierOpeningBalance - openingNet).toLocaleString()}
+                            {fmtMoney(round2(supplierOpeningBalance - openingNet))}
                           </td>
                           <td></td>
                         </tr>
@@ -816,7 +819,7 @@ export default function NewPaymentPage() {
                         <tr key={bill.id}>
                           <td><input className="chk-box" type="checkbox" checked={bill.gross > 0} onChange={() => toggleBill(bill)} /></td>
                           <td>{bill.invoice_no}</td>
-                          <td style={{ fontWeight: 600 }}>{bill.due.toLocaleString()}</td>
+                          <td style={{ fontWeight: 600 }}>{fmtMoney(bill.due)}</td>
                           <td>{bill.rate > 0 ? `${bill.rate}%` : "—"}</td>
                           <td style={{ textAlign: "right" }}>
                             <input
@@ -828,11 +831,11 @@ export default function NewPaymentPage() {
                             />
                           </td>
                           <td style={{ textAlign: "right" }} className="derived-cell">
-                            {bill.gross.toLocaleString()} / {bill.wht.toLocaleString()}
+                            {fmtMoney(bill.gross)} / {fmtMoney(bill.wht)}
                           </td>
                           <td style={{ textAlign: "right" }} className="derived-cell">
-                            {bill.remainingGross.toLocaleString()}
-                            {bill.rate > 0 ? ` (WHT ${bill.remainingWht.toLocaleString()})` : ""}
+                            {fmtMoney(bill.remainingGross)}
+                            {bill.rate > 0 ? ` (WHT ${fmtMoney(bill.remainingWht)})` : ""}
                           </td>
                           <td>
                             {bill.gross > 0 && (
@@ -845,22 +848,22 @@ export default function NewPaymentPage() {
                       ))}
                       <tr style={{ borderTop: "2px solid var(--border)", fontWeight: 700 }}>
                         <td colSpan={5} style={{ textAlign: "right" }}>Allocated (Gross)</td>
-                        <td colSpan={3} style={{ textAlign: "right" }}>PKR {totalGrossAllocated.toLocaleString()}</td>
+                        <td colSpan={3} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(totalGrossAllocated)}</td>
                       </tr>
                       {totalWhtDeducted > 0 && (
                         <tr style={{ color: "var(--text-muted)" }}>
                           <td colSpan={5} style={{ textAlign: "right" }}>WHT → Withholding Tax Payable</td>
-                          <td colSpan={3} style={{ textAlign: "right" }}>PKR {totalWhtDeducted.toLocaleString()}</td>
+                          <td colSpan={3} style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(totalWhtDeducted)}</td>
                         </tr>
                       )}
                       <tr style={{ fontWeight: 600 }}>
                         <td colSpan={5} style={{ textAlign: "right" }}>Net Payment from Bank</td>
-                        <td colSpan={3} style={{ textAlign: "right", color: "#10B981" }}>PKR {totalNetAllocated.toLocaleString()}</td>
+                        <td colSpan={3} style={{ textAlign: "right", color: "#10B981", fontVariantNumeric: "tabular-nums" }}>PKR {fmtMoney(totalNetAllocated)}</td>
                       </tr>
-                      {totalAmount > 0 && Math.abs(difference) > 0.5 && (
+                      {totalAmount > 0 && Math.abs(difference) >= 0.01 && (
                         <tr style={{ fontSize: 12, color: "#EF4444" }}>
                           <td colSpan={5} style={{ textAlign: "right", paddingTop: 4 }}>
-                            ⚠️ Payment amount {difference > 0 ? `exceeds net payable by` : `is short by`} PKR {Math.abs(difference).toLocaleString()}
+                            ⚠️ Payment amount {difference > 0 ? `exceeds net payable by` : `is short by`} PKR {fmtMoney(Math.abs(difference))}
                           </td>
                           <td colSpan={3} style={{ textAlign: "right", paddingTop: 4, fontWeight: 600 }}>
                             {difference > 0 ? `Overpaid` : `Underpaid`}

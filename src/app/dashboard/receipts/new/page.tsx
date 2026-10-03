@@ -6,6 +6,8 @@ import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Search, X, CheckCircle, RefreshCw, Paperclip, ChevronDown, FileText, Upload, Send } from "lucide-react"
 import { useTheme } from "@/contexts/ThemeContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
+import { round2, fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 export default function NewReceiptPage() {
   const router = useRouter()
@@ -287,25 +289,25 @@ export default function NewReceiptPage() {
     const key = String(invId)
     setAllocations(prev => {
       const current = prev[key] || 0
-      const newVal = current > 0 ? 0 : due
+      const newVal = current > 0 ? 0 : round2(due)
       return { ...prev, [key]: newVal }
     })
   }
 
   const updateAllocation = (invId: number, value: number, due: number) => {
-    const clamped = Math.min(Math.max(value, 0), due)
+    const clamped = round2(Math.min(Math.max(value, 0), due))
     setAllocations(prev => ({ ...prev, [String(invId)]: clamped }))
   }
 
   const toggleOpeningAllocation = () => {
     setAllocations(prev => {
       const current = prev["opening"] || 0
-      const newVal = current > 0 ? 0 : customerOpeningBalance
+      const newVal = current > 0 ? 0 : round2(customerOpeningBalance)
       return { ...prev, opening: newVal }
     })
   }
   const updateOpeningAllocation = (value: number) => {
-    const clamped = Math.min(Math.max(value, 0), customerOpeningBalance)
+    const clamped = round2(Math.min(Math.max(value, 0), customerOpeningBalance))
     setAllocations(prev => ({ ...prev, opening: clamped }))
   }
 
@@ -314,9 +316,9 @@ export default function NewReceiptPage() {
     .reduce((s, [_, v]) => s + v, 0)
 
   const openingAllocation = allocations["opening"] || 0
-  const totalAllocated = totalAllocatedToInvoices + openingAllocation
-  const totalAmount = Number(receiptAmount || 0)
-  const unallocated = totalAmount - totalAllocated
+  const totalAllocated = round2(totalAllocatedToInvoices + openingAllocation)
+  const totalAmount = round2(Number(receiptAmount || 0))
+  const unallocated = round2(totalAmount - totalAllocated)
 
   // ── Save / Update ──
   const uploadAttachment = async (file: File) => {
@@ -381,10 +383,10 @@ export default function NewReceiptPage() {
       .filter(([key, amount]) => key !== "opening" && amount > 0)
       .map(([invId, amount]) => ({
         invoice_id: parseInt(invId),
-        amount: amount,
+        amount: round2(amount),
       }))
 
-    const openingAllocAmount = allocations["opening"] || 0
+    const openingAllocAmount = round2(allocations["opening"] || 0)
 
     try {
       if (editId) {
@@ -574,7 +576,7 @@ export default function NewReceiptPage() {
               <button
                 className="inv-btn"
                 onClick={() => {
-                  const msg = `Dear ${savedCustomerName}, Your receipt ${savedReceiptNo} of PKR ${savedAmount.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/receipt/${savedReceiptId}\nDate: ${savedDate}\nThank you for your business.\n- OneAccounts by Siqbal`
+                  const msg = `Dear ${savedCustomerName}, Your receipt ${savedReceiptNo} of PKR ${fmtMoney(savedAmount)} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/receipt/${savedReceiptId}\nDate: ${savedDate}\nThank you for your business.\n- OneAccounts by Siqbal`
                   window.open(getWhatsAppLink(savedCustomerPhone, msg), "_blank")
                 }}
               >
@@ -601,7 +603,7 @@ export default function NewReceiptPage() {
                     {selectedCustomer ? (
                       <div className="cust-selected-badge" onClick={clearCustomer}>
                         <span>👤</span><span style={{ flex: 1 }}>{selectedCustomer.code} — {selectedCustomer.name}</span>
-                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {(selectedCustomer.balance || 0).toLocaleString()}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Bal: PKR {fmtMoney(selectedCustomer.balance || 0)}</span>
                         <button style={{ marginLeft: 4, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); clearCustomer(); }}><X size={14} /></button>
                         <button
                           style={{ marginLeft: 2, background: "none", border: "none", color: "var(--primary)", cursor: "pointer", opacity: refreshingCustomers ? 0.5 : 1 }}
@@ -630,7 +632,7 @@ export default function NewReceiptPage() {
                               filteredCustomers.map(c => (
                                 <div key={c.id} className="cust-option" onMouseDown={() => selectCustomer(c)}>
                                   <div><div className="cust-option-name">{c.name}</div><div className="cust-option-meta">{c.code}{c.phone ? ` · ${c.phone}` : ""}</div></div>
-                                  <div className="cust-option-bal">PKR {(c.balance || 0).toLocaleString()}</div>
+                                  <div className="cust-option-bal">{fmtMoney(c.balance || 0)}</div>
                                 </div>
                               ))
                             )}
@@ -684,17 +686,17 @@ export default function NewReceiptPage() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="inv-card">
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: "0 0 10px" }}>Summary</h3>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "0 0 10px" }}><h3 style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", margin: 0 }}>Summary</h3><span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: 0.4 }}>PKR</span></div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
-                <span>Amount</span><span>PKR {totalAmount.toLocaleString()}</span>
+                <span>Amount</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(totalAmount)}</span>
               </div>
               {!isDonation && (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginTop: 4 }}>
-                    <span>Allocated</span><span>PKR {totalAllocated.toLocaleString()}</span>
+                    <span>Allocated</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(totalAllocated)}</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: unallocated > 0 ? "#EF4444" : "var(--text-muted)" }}>
-                    <span>Advance</span><span>PKR {unallocated.toLocaleString()}</span>
+                    <span>Advance</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(unallocated)}</span>
                   </div>
                 </>
               )}
@@ -768,25 +770,25 @@ export default function NewReceiptPage() {
                           />
                         </td>
                         <td>Opening Balance</td>
-                        <td>{customerOpeningTotal.toLocaleString()}</td>
-                        <td>{customerOpeningPaid.toLocaleString()}</td>
-                        <td style={{ fontWeight: 600 }}>{customerOpeningBalance.toLocaleString()}</td>
+                        <td>{fmtMoney(customerOpeningTotal)}</td>
+                        <td>{fmtMoney(customerOpeningPaid)}</td>
+                        <td style={{ fontWeight: 600 }}>{fmtMoney(customerOpeningBalance)}</td>
                         <td style={{ textAlign: "right" }}>
                           <input className="alloc-input" type="number" min="0" max={customerOpeningBalance} value={allocations["opening"] || 0} onChange={e => updateOpeningAllocation(parseFloat(e.target.value) || 0)} />
                         </td>
                       </tr>
                     )}
                     {invoices.map(inv => {
-                      const due = inv.total - (inv.paid || 0)
+                      const due = round2(inv.total - (inv.paid || 0))
                       const alloc = allocations[String(inv.id)] || 0
                       const checked = alloc > 0
                       return (
                         <tr key={inv.id}>
                           <td><input className="chk-box" type="checkbox" checked={checked} onChange={() => toggleInvoice(inv.id, due)} /></td>
                           <td>{inv.invoice_no}</td>
-                          <td>{inv.total.toLocaleString()}</td>
-                          <td>{(inv.paid || 0).toLocaleString()}</td>
-                          <td style={{ fontWeight: 600 }}>{due.toLocaleString()}</td>
+                          <td>{fmtMoney(inv.total)}</td>
+                          <td>{fmtMoney(inv.paid || 0)}</td>
+                          <td style={{ fontWeight: 600 }}>{fmtMoney(due)}</td>
                           <td style={{ textAlign: "right" }}>
                             <input className="alloc-input" type="number" min="0" max={due} value={alloc} onChange={e => updateAllocation(inv.id, parseFloat(e.target.value) || 0, due)} />
                           </td>
@@ -795,12 +797,12 @@ export default function NewReceiptPage() {
                     })}
                     <tr style={{ borderTop: "2px solid var(--border)", fontWeight: 700 }}>
                       <td colSpan={5} style={{ textAlign: "right" }}>Allocated</td>
-                      <td style={{ textAlign: "right" }}>PKR {totalAllocated.toLocaleString()}</td>
+                      <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>PKR {fmtMoney(totalAllocated)}</td>
                     </tr>
                     {unallocated > 0 && (
                       <tr style={{ fontSize: 12, color: "var(--text-muted)" }}>
                         <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
-                          Unallocated (advance): PKR {unallocated.toLocaleString()}
+                          Unallocated (advance): PKR {fmtMoney(unallocated)}
                         </td>
                       </tr>
                     )}

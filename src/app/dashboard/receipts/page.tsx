@@ -8,6 +8,8 @@ import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 import ActionSlots from "@/components/ActionSlots"
+import { fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 type SortField = "receipt_no" | "date" | "customer" | "amount" | "method"
 type SortDir = "asc" | "desc"
@@ -167,7 +169,7 @@ export default function ReceiptsPage() {
     if (!cust?.phone) { setBanner({ type: "error", text: "This customer has no phone number on file, so the WhatsApp message could not be sent." }); return }
     const code = (cust.country_code || "+92").replace(/\D/g, "")
     const phone = cust.phone.replace(/\D/g, "")
-    const msg = `Dear ${cust.name}, Your receipt ${rec.receipt_no} of PKR ${rec.amount?.toLocaleString()} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/receipt/${rec.id}\nDate: ${rec.date}\nThank you for your business.\n- OneAccounts by Siqbal`
+    const msg = `Dear ${cust.name}, Your receipt ${rec.receipt_no} of PKR ${fmtMoney(rec.amount)} has been recorded.\nView Online: https://app.oneaccountsbysiqbal.com/receipt/${rec.id}\nDate: ${rec.date}\nThank you for your business.\n- OneAccounts by Siqbal`
     const link = getWhatsAppLink(phone, msg)
     if (link) window.open(link, "_blank")
   }
@@ -266,7 +268,7 @@ export default function ReceiptsPage() {
 
       <div className="summary-grid">
         <div className="summary-item"><div className="summary-label">Total Receipts</div><div className="summary-value">{totalReceipts}</div></div>
-        <div className="summary-item"><div className="summary-label">Total Amount (excl. reversed)</div><div className="summary-value" style={{ color: "#10B981" }}>PKR {totalAmount.toLocaleString()}</div></div>
+        <div className="summary-item"><div className="summary-label">Total Amount (excl. reversed)</div><div className="summary-value" style={{ color: "#10B981", fontVariantNumeric: "tabular-nums" }}><CurrencyTag size={12} />{fmtMoney(totalAmount)}</div></div>
       </div>
 
       <div style={{ position: "relative", marginBottom: 16, maxWidth: 320 }}>
@@ -285,7 +287,7 @@ export default function ReceiptsPage() {
                 <SortTh field="receipt_no">Receipt #</SortTh>
                 <SortTh field="date">Date</SortTh>
                 <SortTh field="customer" style={{ textAlign: "left" }}>Customer</SortTh>
-                <SortTh field="amount" style={{ textAlign: "right" }}>Amount</SortTh>
+                <SortTh field="amount" style={{ textAlign: "right" }}>Amount (PKR)</SortTh>
                 <SortTh field="method" style={{ textAlign: "center" }}>Method</SortTh>
                 <th style={{ ...thStyle, textAlign: "center" }}>Actions</th>
               </tr>
@@ -310,7 +312,7 @@ export default function ReceiptsPage() {
                       </td>
                       <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{rec.date}</td>
                       <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{custName}</td>
-                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: isReversed ? "var(--text-muted)" : "#10B981", whiteSpace: "nowrap" }}>PKR {rec.amount?.toLocaleString()}</td>
+                      <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: isReversed ? "var(--text-muted)" : "#10B981", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(rec.amount)}</td>
                       <td style={{ ...tdStyle, textAlign: "center", whiteSpace: "nowrap" }}>{rec.payment_method || "—"}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>
                         <div style={{ display: "flex", gap: 4, justifyContent: "center", alignItems: "center" }}>
@@ -374,7 +376,7 @@ export default function ReceiptsPage() {
                     <div className="rec-card-date">{rec.date}</div>
                   </div>
                   <div className="rec-card-amt" style={{ color: isReversed ? "var(--text-muted)" : "#10B981" }}>
-                    PKR {rec.amount?.toLocaleString()}
+                    <CurrencyTag />{fmtMoney(rec.amount)}
                   </div>
                 </div>
                 <div className="rec-card-name">{custName}</div>
@@ -413,7 +415,7 @@ export default function ReceiptsPage() {
           <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: 24, maxWidth: 440, width: "90%", boxShadow: "0 12px 32px rgba(0,0,0,0.3)" }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Reverse Receipt?</h3>
             <p style={{ fontSize: 13, color: "var(--text)", margin: "0 0 10px 0", lineHeight: 1.5 }}>
-              You are about to reverse receipt <strong>{reverseTarget.receipt_no}</strong> from <strong>{customerMap[reverseTarget.party_id]?.name || "this customer"}</strong> for <strong>PKR {Number(reverseTarget.amount || 0).toLocaleString()}</strong>.
+              You are about to reverse receipt <strong>{reverseTarget.receipt_no}</strong> from <strong>{customerMap[reverseTarget.party_id]?.name || "this customer"}</strong> for <strong>PKR {fmtMoney(reverseTarget.amount || 0)}</strong>.
             </p>
             <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px 0", lineHeight: 1.5 }}>
               A reversing journal entry will be posted, and the customer balance and any invoices paid by this receipt will be restored. The original entry is kept for audit.

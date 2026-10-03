@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { fmtMoney } from "@/lib/money"
 
 export default function PaymentViewerClient({ id }: { id: string }) {
   const [data, setData] = useState<any>(null)
@@ -72,13 +73,14 @@ export default function PaymentViewerClient({ id }: { id: string }) {
           <div style={{ height: 1, background: "#f1f5f9", margin: "10px 0" }} />
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}>
             <span style={{ fontWeight: 700, color: "#64748b" }}>Amount Paid</span>
-            <span style={{ fontWeight: 800, color: "#10b981" }}>PKR {Number(payment.amount || 0).toLocaleString()}</span>
+            <span style={{ fontWeight: 800, color: "#10b981" }}>PKR {fmtMoney(payment.amount || 0)}</span>
           </div>
         </div>
 
         {data.balance_summary && (() => {
           const bs = data.balance_summary
-          const money = (n: number) => n < 0 ? "(PKR " + Math.abs(Number(n)).toLocaleString() + ")" : "PKR " + Number(n).toLocaleString()
+          const money = (n: number) => n < 0 ? "(" + fmtMoney(Math.abs(Number(n))) + ")" : fmtMoney(Number(n))
+          const moneyPkr = (n: number) => "PKR " + money(n)
           return (
             <div style={{ background: "white", borderRadius: 16, padding: "18px 22px", marginBottom: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}>
               <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", color: "#94a3b8", letterSpacing: "0.06em", marginBottom: 12 }}>Account Summary</div>
@@ -93,7 +95,7 @@ export default function PaymentViewerClient({ id }: { id: string }) {
               <div style={{ height: 1, background: "#f1f5f9", margin: "8px 0" }} />
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15 }}>
                 <span style={{ color: "#64748b", fontWeight: 700 }}>Total Payable</span>
-                <span style={{ fontWeight: 800, color: "#1740c8" }}>{money(bs.total)}</span>
+                <span style={{ fontWeight: 800, color: "#1740c8" }}>{moneyPkr(bs.total)}</span>
               </div>
             </div>
           )

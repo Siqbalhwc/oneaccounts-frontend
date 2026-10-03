@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { fmtMoney } from "@/lib/money"
 
 export default function ReceiptViewerClient({ id }: { id: string }) {
   const [data, setData] = useState<any>(null)
@@ -72,7 +73,7 @@ export default function ReceiptViewerClient({ id }: { id: string }) {
           <div style={{ height: 1, background: "#f1f5f9", margin: "10px 0" }} />
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}>
             <span style={{ fontWeight: 700, color: "#64748b" }}>Amount Received</span>
-            <span style={{ fontWeight: 800, color: "#10b981" }}>PKR {Number(receipt.amount || 0).toLocaleString()}</span>
+            <span style={{ fontWeight: 800, color: "#10b981" }}>PKR {fmtMoney(receipt.amount || 0)}</span>
           </div>
         </div>
 
