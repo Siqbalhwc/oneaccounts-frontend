@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import { useCompany } from "@/contexts/CompanyContext"
+import { fmtCompact, fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 interface KpiData {
   totalReceivables: number
@@ -14,11 +16,9 @@ interface KpiData {
   recentTransactions: any[]
 }
 
+// Plain compact figure (1.2M / 12.3K). Cards show a small PKR tag; tables say "(PKR)" in the header.
 function fmt(n: number): string {
-  const abs = Math.abs(n)
-  if (abs >= 1_000_000) return `PKR ${(abs / 1_000_000).toFixed(1)}M`
-  if (abs >= 1_000) return `PKR ${(abs / 1_000).toFixed(1)}K`
-  return `PKR ${abs.toLocaleString()}`
+  return fmtCompact(Math.abs(n))
 }
 
 export default function AccountantDashboard({ role }: { role: string }) {
@@ -384,18 +384,21 @@ export default function AccountantDashboard({ role }: { role: string }) {
           {[
             {
               label: "💰 Total Receivables",
+              money: true,
               value: fmt(data.totalReceivables),
               color: "#f97316",
               meta: `${data.overdueBillsCount} overdue bills`,
             },
             {
               label: "📤 Total Payables",
+              money: true,
               value: fmt(data.totalPayables),
               color: "#ef4444",
               meta: "Pending payments",
             },
             {
               label: "🏦 Cash & Bank Balance",
+              money: true,
               value: fmt(data.cashBalance),
               color: "#10b981",
               meta: "Cash + Bank accounts",
@@ -414,7 +417,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
             >
               <div className="kpi-label">{kpi.label}</div>
               <div className="kpi-value" style={{ color: kpi.color }}>
-                {kpi.value}
+                {kpi.money && <CurrencyTag size={10} />}{kpi.value}
               </div>
               <div className="kpi-meta">{kpi.meta}</div>
             </div>
@@ -487,7 +490,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
                             color: t.debit > 0 ? "#ef4444" : "var(--text)",
                           }}
                         >
-                          {t.debit > 0 ? t.debit.toLocaleString() : "—"}
+                          {t.debit > 0 ? fmtMoney(t.debit) : "—"}
                         </td>
                         <td
                           style={{
@@ -495,7 +498,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
                             color: t.credit > 0 ? "#10b981" : "var(--text)",
                           }}
                         >
-                          {t.credit > 0 ? t.credit.toLocaleString() : "—"}
+                          {t.credit > 0 ? fmtMoney(t.credit) : "—"}
                         </td>
                       </tr>
                     ))
@@ -607,7 +610,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
                       <th>Supplier</th>
                       <th>Bill No</th>
                       <th>Due Date</th>
-                      <th>Amount</th>
+                      <th>Amount (PKR)</th>
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -621,7 +624,7 @@ export default function AccountantDashboard({ role }: { role: string }) {
                         <td>{bill.suppliers?.name || "—"}</td>
                         <td>{bill.invoice_no}</td>
                         <td>{bill.due_date}</td>
-                        <td>{fmt(bill.total)}</td>
+                        <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(bill.total)}</td>
                         <td>
                           <span
                             className={`status-badge ${

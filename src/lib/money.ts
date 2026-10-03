@@ -48,3 +48,15 @@ export function splitAmount(total: number, parts: number): number[] {
   out.push(round2(round2(total) - used))
   return out
 }
+
+// Compact figure for dashboard cards and charts: 1234567 -> "1.2M", 12345 -> "12.3K", 450 -> "450".
+// No currency text here: cards show a small <CurrencyTag />, sentences add "PKR " themselves.
+export function fmtCompact(value: any): string {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return "0"
+  const sign = n < 0 ? "-" : ""
+  const abs = Math.abs(n)
+  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1)}K`
+  return `${sign}${Math.round(abs).toLocaleString(MONEY_LOCALE)}`
+}

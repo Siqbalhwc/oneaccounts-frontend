@@ -8,6 +8,8 @@ import { useTheme } from "@/contexts/ThemeContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useDashboardData } from "@/hooks/useDashboardData"
 import { createBrowserClient } from "@supabase/ssr"
+import { fmtCompact, fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 // ── Animated number hook ────────────────────────────────────
 function useAnimatedNumber(target: number, duration = 500) {
@@ -321,10 +323,11 @@ export default function ManagementDashboard({ role }: { role: string }) {
     return "Good evening"
   }
 
+  // Plain figure in millions (1.2M). Cards show a small PKR tag; sentences add "PKR " themselves.
   const formatPKR = (v: number): string => {
     const sign = v < 0 ? "-" : ""
     const abs = Math.abs(v)
-    return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
+    return `${sign}${(abs / 1_000_000).toFixed(1)}M`
   }
 
   const detailQuery = (extra: Record<string, string> = {}): string => {
@@ -353,7 +356,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
 
   const fmtM = (valueInMillions: number): string => {
     const sign = valueInMillions < 0 ? "-" : ""
-    return `${sign}PKR ${Math.abs(valueInMillions).toFixed(1)}M`
+    return `${sign}${Math.abs(valueInMillions).toFixed(1)}M`
   }
 
   const cardVariant = {
@@ -605,7 +608,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         {/* Overspent warning banner */}
         {overspentCount > 0 && (
           <motion.div className="warning-banner" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}>
-            <span>⚠️ Portfolio overspent by {formatPKR(totalSpent - totalBudget)}. {overspentCount} {overspentCount === 1 ? "project" : "projects"} need review.</span>
+            <span>⚠️ Portfolio overspent by PKR {formatPKR(totalSpent - totalBudget)}. {overspentCount} {overspentCount === 1 ? "project" : "projects"} need review.</span>
             <button className="warning-btn" onClick={() => router.push("/dashboard/reports/overspent" + detailQuery())}>View overspent projects →</button>
           </motion.div>
         )}
@@ -613,15 +616,15 @@ export default function ManagementDashboard({ role }: { role: string }) {
         {/* KPI cards */}
         <div className="dashboard-grid">
           {[
-            { label: "Total Budget",   value: fmtM(animBudget),   meta: `${projectRows.length} projects`, color: "var(--text)", link: "/dashboard/reports/budget-summary" },
-            { label: "Total Spent",     value: fmtM(animSpent),    meta: `${spentPct}% of budget`, color: "var(--text)", link: "/dashboard/reports/spending-detail" },
-            { label: remainingFunds < 0 ? "Overspent" : "Remaining", value: fmtM(animRemaining), meta: `${Math.abs(Math.round((remainingFunds / Math.max(totalBudget, 1)) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "var(--text)" : "var(--kpi-negative)", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
+            { label: "Total Budget",   money: true, value: fmtM(animBudget),   meta: `${projectRows.length} projects`, color: "var(--text)", link: "/dashboard/reports/budget-summary" },
+            { label: "Total Spent",     money: true, value: fmtM(animSpent),    meta: `${spentPct}% of budget`, color: "var(--text)", link: "/dashboard/reports/spending-detail" },
+            { label: remainingFunds < 0 ? "Overspent" : "Remaining", money: true, value: fmtM(animRemaining), meta: `${Math.abs(Math.round((remainingFunds / Math.max(totalBudget, 1)) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "var(--text)" : "var(--kpi-negative)", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
             { label: "Portfolio Health", value: overspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", meta: `${Math.round((1 - overspentCount / Math.max(projectRows.length, 1)) * 100)}% health score`, color: overspentCount > 0 ? "var(--kpi-warn)" : "var(--kpi-positive)", link: "/dashboard/reports/overspent" },
-            { label: "📆 Monthly Spending", value: monthlySpending > 0 ? fmtM(animMonthly) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. ${formatPKR(lastMonthSpending)} last month`, color: "var(--text)", link: "/dashboard/reports/spending-detail" },
+            { label: "📆 Monthly Spending", money: monthlySpending > 0, value: monthlySpending > 0 ? fmtM(animMonthly) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. PKR ${formatPKR(lastMonthSpending)} last month`, color: "var(--text)", link: "/dashboard/reports/spending-detail" },
           ].map((kpi: any, i: number) => (
             <motion.div key={kpi.label} className="card" custom={i} initial="hidden" animate="visible" variants={cardVariant} {...hoverScale} onClick={() => kpi.link && router.push(kpi.link + detailQuery())}>
               <div className="kpi-label">{kpi.label}</div>
-              <div className="kpi-value" style={{ color: kpi.color }}>{kpi.value}</div>
+              <div className="kpi-value" style={{ color: kpi.color }}>{kpi.money && <CurrencyTag size={10} />}{kpi.value}</div>
               <div className="kpi-meta">
                 {kpi.meta}
                 {kpi.label === "📆 Monthly Spending" && monthlySpending > 0 && <Trend value={spendingTrend} positive={spendingTrend < 0} negative={spendingTrend > 0} />}
@@ -638,7 +641,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         {/* Project Utilization + Donor Balances */}
         <div className="dashboard-grid-32">
           <motion.div className="card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.5 }}>
-            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>📊 Top 5 Project Utilization</div>
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>📊 Top 5 Project Utilization <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text-muted)" }}>(PKR)</span></div>
             {projectRows.slice(0, 5).map((p: any, idx: number) => (
               <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}&fy=${fiscalYear}`)} style={{ display: "flex", alignItems: "center", gap: "0.8rem", background: "var(--card)", borderRadius: "12px", padding: "0.5rem 1rem", border: "1px solid var(--border)", cursor: "pointer", marginBottom: "0.5rem", flexWrap: "wrap" }}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.status === "Overspent" ? "var(--kpi-negative)" : p.status === "Review" ? "var(--kpi-warn)" : p.status === "At Risk" ? "var(--kpi-warn)" : "var(--kpi-positive)", flexShrink: 0 }}></div>
@@ -658,7 +661,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
 
           <motion.div className="card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.5 }}>
-            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>💧 Donor Balances</div>
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>💧 Donor Balances <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text-muted)" }}>(PKR)</span></div>
             {donorBalances.map((d: any, idx: number) => (
               <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}&fy=${fiscalYear}`)} style={{ display: "flex", alignItems: "center", gap: "0.8rem", background: "var(--card)", borderRadius: "12px", padding: "0.5rem 1rem", border: "1px solid var(--border)", cursor: "pointer", marginBottom: "0.5rem", flexWrap: "wrap" }}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.overspent ? "var(--kpi-negative)" : "var(--kpi-info)", flexShrink: 0 }}></div>
@@ -682,7 +685,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
             ) : (
               <>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 100px", gap: 8, fontSize: "0.65rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", paddingBottom: 6, borderBottom: "1px solid var(--border)", marginBottom: 6 }}>
-                  <span>Activity</span><span>Budget</span><span>Actual</span><span>Unspent</span>
+                  <span>Activity</span><span>Budget (PKR)</span><span>Actual (PKR)</span><span>Unspent (PKR)</span>
                 </div>
                 {underspentActivities.map((act: any, idx: number) => (
                   <div key={idx} style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 100px", gap: 8, alignItems: "center", padding: "5px 0", borderBottom: "1px solid var(--border)", fontSize: "0.8rem" }}>
@@ -709,24 +712,24 @@ export default function ManagementDashboard({ role }: { role: string }) {
             <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "0.5rem", marginBottom: "0.8rem" }}>
               <div style={{ textAlign: "center" }}>
                 <div style={{ fontSize: "0.65rem", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 2 }}>Receivables</div>
-                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--kpi-warn)" }}>{formatPKR(totalReceivables)}</div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--kpi-warn)" }}><CurrencyTag size={10} />{formatPKR(totalReceivables)}</div>
               </div>
               <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text-soft)" }}>VS</div>
               <div style={{ textAlign: "center" }}>
                 <div style={{ fontSize: "0.65rem", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 2 }}>Payables</div>
-                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--kpi-warn)" }}>{formatPKR(totalPayables)}</div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--kpi-warn)" }}><CurrencyTag size={10} />{formatPKR(totalPayables)}</div>
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", fontSize: "0.75rem", fontWeight: 600 }}>
               {totalReceivables > totalPayables ? (
                 <>
                   <CheckCircle size={16} style={{ color: "var(--kpi-positive)" }} />
-                  <span style={{ color: "var(--kpi-positive)" }}>Healthy — Receivables exceed Payables by {formatPKR(totalReceivables - totalPayables)}</span>
+                  <span style={{ color: "var(--kpi-positive)" }}>Healthy — Receivables exceed Payables by PKR {formatPKR(totalReceivables - totalPayables)}</span>
                 </>
               ) : (
                 <>
                   <AlertTriangle size={16} style={{ color: "var(--kpi-negative)" }} />
-                  <span style={{ color: "var(--kpi-negative)" }}>Unhealthy — Payables exceed Receivables by {formatPKR(totalPayables - totalReceivables)}</span>
+                  <span style={{ color: "var(--kpi-negative)" }}>Unhealthy — Payables exceed Receivables by PKR {formatPKR(totalPayables - totalReceivables)}</span>
                 </>
               )}
             </div>
@@ -736,7 +739,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
         {/* Footer summary */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1, duration: 0.5 }} style={{ background: "var(--card)", borderRadius: 12, padding: "0.6rem 1.2rem", border: "1px solid var(--border)", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "0.8rem", fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 500 }}>
           <span>⚠️ Portfolio Health: {overspentCount > 0 ? "Needs Attention" : "Healthy"}</span>
-          <span>💰 Total Budget: {formatPKR(totalBudget)}</span>
+          <span>💰 Total Budget: PKR {formatPKR(totalBudget)}</span>
           <span>📈 Utilized: {spentPct}%</span>
           <span>📁 Projects: {projectRows.length}</span>
           <span style={{ marginLeft: "auto" }}>Last updated: {lastUpdated}</span>

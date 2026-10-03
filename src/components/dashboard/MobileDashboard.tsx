@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { useCompany } from "@/contexts/CompanyContext"
 import { useTheme } from "@/contexts/ThemeContext"
+import { fmtCompact, fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
+// Plain compact figure (1.2M / 12.3K). Cards show a small PKR tag; sentences add "PKR " themselves.
 function formatPKR(v: number): string {
-  const abs = Math.abs(v)
-  if (abs >= 1_000_000) return `PKR ${(abs / 1_000_000).toFixed(1)}M`
-  if (abs >= 1_000) return `PKR ${(abs / 1_000).toFixed(1)}K`
-  return `PKR ${abs.toLocaleString()}`
+  return fmtCompact(Math.abs(v))
 }
 
 interface MonthlyProfit {
@@ -174,8 +174,8 @@ export default function MobileDashboard({
             >
               {kpi.label}
             </div>
-            <div style={{ fontSize: "1.1rem", fontWeight: 800, color: kpi.color }}>
-              {kpi.value}
+            <div style={{ fontSize: "1.1rem", fontWeight: 800, color: kpi.color, whiteSpace: "nowrap" }}>
+              <CurrencyTag size={9} />{kpi.value}
             </div>
           </div>
         ))}
@@ -355,7 +355,7 @@ export default function MobileDashboard({
               <span>
                 📊 Avg:{" "}
                 <strong style={{ color: "var(--text)" }}>
-                  {formatPKR(
+                  PKR {formatPKR(
                     last6Months.reduce((s, m) => s + m.profit, 0) /
                       last6Months.length
                   )}

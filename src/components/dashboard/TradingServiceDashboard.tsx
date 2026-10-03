@@ -6,6 +6,8 @@ import { createBrowserClient } from "@supabase/ssr"
 import { Bell, RefreshCw, TrendingUp, TrendingDown } from "lucide-react"
 import { useTheme } from "@/contexts/ThemeContext"
 import { useCompany } from "@/contexts/CompanyContext"
+import { fmtCompact, fmtMoney } from "@/lib/money"
+import CurrencyTag from "@/components/CurrencyTag"
 
 // ── Animated number ─────────────────────────────────────────
 function useAnimatedNumber(target: number, duration = 500) {
@@ -709,7 +711,7 @@ function ProfitTrendChart({
                     borderRadius: 6, whiteSpace: "nowrap", zIndex: 10,
                     boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
                   }}>
-                    {m.month}: {formatPKR(m.profit)}
+                    {m.month}: PKR {formatPKR(m.profit)}
                   </div>
                 )}
                 <div
@@ -728,9 +730,9 @@ function ProfitTrendChart({
         </div>
       </div>
       <div className="trend-summary">
-        <span>📈 Best: <strong>{data.reduce((a, b) => a.profit > b.profit ? a : b).month}</strong> ({formatPKR(Math.max(...data.map(m => m.profit)))})</span>
-        <span>📉 Worst: <strong>{data.reduce((a, b) => a.profit < b.profit ? a : b).month}</strong> ({formatPKR(Math.min(...data.map(m => m.profit)))})</span>
-        <span>📊 Avg: <strong>{formatPKR(data.reduce((s, m) => s + m.profit, 0) / data.length)}</strong></span>
+        <span>📈 Best: <strong>{data.reduce((a, b) => a.profit > b.profit ? a : b).month}</strong> (PKR {formatPKR(Math.max(...data.map(m => m.profit)))})</span>
+        <span>📉 Worst: <strong>{data.reduce((a, b) => a.profit < b.profit ? a : b).month}</strong> (PKR {formatPKR(Math.min(...data.map(m => m.profit)))})</span>
+        <span>📊 Avg: <strong>PKR {formatPKR(data.reduce((s, m) => s + m.profit, 0) / data.length)}</strong></span>
       </div>
     </>
   )
@@ -952,13 +954,8 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
     return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"
   }
 
-  const formatPKR = (v: number): string => {
-    const sign = v < 0 ? "-" : ""
-    const abs  = Math.abs(v)
-    if (abs >= 1_000_000) return `${sign}PKR ${(abs / 1_000_000).toFixed(1)}M`
-    if (abs >= 1_000)     return `${sign}PKR ${(abs / 1_000).toFixed(1)}K`
-    return `${sign}PKR ${abs.toLocaleString()}`
-  }
+  // Plain compact figure (1.2M / 12.3K). Cards show a small PKR tag; sentences add "PKR " themselves.
+  const formatPKR = (v: number): string => fmtCompact(v)
 
   const formatRelativeTime = (d: Date | null): string => {
     if (!d) return ""
@@ -988,12 +985,12 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
   const invoiceBellItems = overdueInvoicesList.map(inv => ({
     title:    inv.invoice_no || `INV-${inv.id}`,
     subtitle: `Due ${inv.due_date}${inv.customer_name ? " · " + inv.customer_name : ""}`,
-    amount:   formatPKR(inv.total || 0),
+    amount:   "PKR " + formatPKR(inv.total || 0),
   }))
   const billBellItems = overdueBillsList.map(bill => ({
     title:    bill.invoice_no || `BILL-${bill.id}`,
     subtitle: `Due ${bill.due_date}${bill.customer_name ? " · " + bill.customer_name : ""}`,
-    amount:   formatPKR(bill.total || 0),
+    amount:   "PKR " + formatPKR(bill.total || 0),
   }))
 
   // ── Render guards ─────────────────────────────────────────
@@ -1252,12 +1249,12 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
         {/* ── KPI Cards ── */}
         <div className="kpi-row">
           {[
-            { label: "💰 Total Revenue",   value: formatPKR(animRevenue), color: "#10B981", link: "/dashboard/reports/profit-loss", delta: revenueDelta, goodWhenUp: true },
-            { label: "📤 Total Expenses",  value: formatPKR(animExpense), color: "#EF4444", link: "/dashboard/reports/profit-loss", delta: expenseDelta, goodWhenUp: false },
-            { label: "📈 Gross Profit",    value: formatPKR(animProfit),  color: grossProfit >= 0 ? "#10B981" : "#EF4444", link: "/dashboard/reports/profit-loss", delta: profitDelta, goodWhenUp: true },
-            { label: "🏦 Cash & Bank",     value: formatPKR(animCash),   color: "var(--kpi-info)", link: "/dashboard/banking/bank-accounts" },
-            { label: "🧾 Receivables",     value: formatPKR(animRecv),   color: "var(--kpi-warn)", link: "/dashboard/customers" },
-            { label: "📋 Payables",        value: formatPKR(animPay),    color: "#EF4444", link: "/dashboard/suppliers" },
+            { label: "💰 Total Revenue",   money: true, value: formatPKR(animRevenue), color: "#10B981", link: "/dashboard/reports/profit-loss", delta: revenueDelta, goodWhenUp: true },
+            { label: "📤 Total Expenses",  money: true, value: formatPKR(animExpense), color: "#EF4444", link: "/dashboard/reports/profit-loss", delta: expenseDelta, goodWhenUp: false },
+            { label: "📈 Gross Profit",    money: true, value: formatPKR(animProfit),  color: grossProfit >= 0 ? "#10B981" : "#EF4444", link: "/dashboard/reports/profit-loss", delta: profitDelta, goodWhenUp: true },
+            { label: "🏦 Cash & Bank",     money: true, value: formatPKR(animCash),   color: "var(--kpi-info)", link: "/dashboard/banking/bank-accounts" },
+            { label: "🧾 Receivables",     money: true, value: formatPKR(animRecv),   color: "var(--kpi-warn)", link: "/dashboard/customers" },
+            { label: "📋 Payables",        money: true, value: formatPKR(animPay),    color: "#EF4444", link: "/dashboard/suppliers" },
             {
               label: "⚠️ Overdue Inv.",
               value: overdueInvoicesCount.toString(),
@@ -1275,7 +1272,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
           ].map((kpi: any) => (
             <div key={kpi.label} className="card" onClick={() => router.push(kpi.link)}>
               <div className="kpi-label">{kpi.label}</div>
-              <div className="kpi-value" style={{ color: kpi.color }}>{kpi.value}</div>
+              <div className="kpi-value" style={{ color: kpi.color }}>{kpi.money && <CurrencyTag size={10} />}{kpi.value}</div>
               {kpi.sub && (
                 <div style={{ fontSize: "0.72rem", marginTop: 4, color: kpi.color, fontWeight: 600 }}>{kpi.sub}</div>
               )}
@@ -1301,7 +1298,7 @@ export default function TradingServiceDashboard({ role }: { role: string }) {
                 <thead>
                   <tr>
                     <th>Customer</th>
-                    <th style={{ textAlign: "right" }}>Outstanding</th>
+                    <th style={{ textAlign: "right" }}>Outstanding (PKR)</th>
                   </tr>
                 </thead>
                 <tbody>
