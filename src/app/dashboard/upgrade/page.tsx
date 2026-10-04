@@ -305,7 +305,7 @@ export default function UpgradePage() {
               {rows.map(r => (
                 <div className="r" key={r.name} title={r.note}><span className="nm">{r.name}</span><div className="tr"><div className="fl" style={{ width: `${(r.pkr / max) * 100}%`, background: "#8a94a0" }}>about Rs {fmtNum(r.pkr)}</div></div></div>
               ))}
-              <p className="oup-note">Entry plan, per user per month. US list prices billed yearly, checked {COMPETITORS.asOf}, at Rs {COMPETITORS.usdToPkr} per US dollar.</p>
+              <p className="oup-note">Entry plan, per month, billed yearly. Odoo at its Pakistan price, others at US list price. Checked {COMPETITORS.asOf}, at Rs {COMPETITORS.usdToPkr} per US dollar.</p>
             </>
           )
         })()}

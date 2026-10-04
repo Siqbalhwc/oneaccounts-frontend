@@ -78,14 +78,14 @@ export function fmtNum(n: number): string {
   return Math.round(n).toLocaleString('en-US')
 }
 
-// Competitor entry prices, US list prices billed yearly, USD per month.
+// Competitor entry prices, billed yearly, USD per month (Odoo at its Pakistan price).
 // Checked October 2026. Refresh these numbers from time to time.
 export const COMPETITORS = {
   asOf: 'Oct 2026',
   usdToPkr: 277,
   items: [
     { name: 'Zoho Books',  usd: 15,    note: 'Standard plan, 3 users included' },
-    { name: 'Odoo',        usd: 31.1,  note: 'Standard plan, all apps, per user' },
+    { name: 'Odoo',        usd: 17,    note: 'Standard plan, all apps, per user (Pakistan price)' },
     { name: 'QuickBooks',  usd: 38,    note: 'Simple Start, 1 user' },
   ],
 }
