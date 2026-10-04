@@ -11,8 +11,8 @@ import {
 import { useCompany } from "@/contexts/CompanyContext"
 import { fmtLongDate, type AccessStatus } from "@/lib/access"
 import {
-  FEATURES, PERIODS, PERIOD_META, PLAN_PRICING, addonPrice, extraUserPrice,
-  bestForLabel, featureName, SUPPORT, fmtNum, type BillingPeriod,
+  FEATURES, PERIODS, PERIOD_META, PLAN_PRICING, ADDON_PRICE_MONTHLY, addonPrice,
+  bestForLabel, featureName, SUPPORT, fmtNum, COMPETITORS, competitorPkr, type BillingPeriod,
 } from "@/lib/featureCatalog"
 import { UPGRADE_CSS } from "@/lib/upgradeStyles"
 
@@ -65,6 +65,7 @@ export default function UpgradePage() {
   const [period, setPeriod] = useState<BillingPeriod>("yearly")
   const [selected, setSelected] = useState<string[]>([])
   const [users, setUsers] = useState(0)
+  const [showIncluded, setShowIncluded] = useState(false)
 
   useEffect(() => {
     if (!companyId) return
@@ -110,8 +111,11 @@ export default function UpgradePage() {
 
   const months = PERIOD_META[period].months
   const perAddon = addonPrice(period)
-  const total = basePrice(period) + selected.length * perAddon * (1 + users) + users * extraUserPrice(period)
-  const saving = basePrice("monthly") * months - basePrice(period)
+  const seats = 1 + users
+  const extraUser = basePrice(period) // an extra user costs the same as a plan user
+  const total = (basePrice(period) + selected.length * perAddon) * seats
+  const monthlyRate = (basePrice("monthly") + selected.length * ADDON_PRICE_MONTHLY) * seats
+  const saving = Math.round(monthlyRate * months - total)
   const animTotal = useCountUp(total)
 
   const toggle = (code: string) =>
@@ -195,26 +199,26 @@ export default function UpgradePage() {
 
       {banner}
 
+      <div className="oup-now">
+        <span><b>{planName}</b> <span className="m">{statusText}</span></span>
+        <span className="m">
+          Core accounting{activeCodes.length ? ` + ${activeCodes.map(featureName).join(", ")}` : ""}
+        </span>
+        <button type="button" className="oup-link" onClick={() => setShowIncluded(v => !v)}>
+          {showIncluded ? "Hide" : "View included"}
+        </button>
+        {showIncluded && (
+          <div className="oup-chips" style={{ flexBasis: "100%" }}>
+            {CORE_CHIPS.map(c => <span key={c} className="oup-chip core">{c}</span>)}
+            {activeCodes.map(c => <span key={c} className="oup-chip">Active: {featureName(c)}</span>)}
+          </div>
+        )}
+      </div>
+
       <div className="oup-grid">
         <div>
           <div className="oup-card">
-            <div className="oup-lbl">What you have today</div>
-            <div style={{ marginBottom: 8 }}>
-              <b>{planName}</b> <span style={{ color: "var(--text-muted)" }}>{statusText}</span>
-            </div>
-            <div className="oup-chips">
-              {CORE_CHIPS.map(c => <span key={c} className="oup-chip core">{c}</span>)}
-              {activeCodes.map(c => <span key={c} className="oup-chip">Active: {featureName(c)}</span>)}
-            </div>
-            <p className="oup-note">
-              {isTrial && !blocked
-                ? "Your trial includes every module. After the trial you keep only the modules you pay for."
-                : "Modules marked Active stay on your account. Everything else can be added below."}
-            </p>
-          </div>
-
-          <div className="oup-card">
-            <div className="oup-lbl">1. Choose billing period</div>
+            <h2 className="oup-h">Choose your billing period</h2>
             <div className="oup-per">
               {PERIODS.map(p => {
                 const full = basePrice("monthly") * PERIOD_META[p].months
@@ -235,7 +239,7 @@ export default function UpgradePage() {
               <button type="button" aria-label="Fewer users" onClick={() => setUsers(u => Math.max(0, u - 1))}>-</button>
               <b>{users}</b>
               <button type="button" aria-label="More users" onClick={() => setUsers(u => u + 1)}>+</button>
-              <span className="oup-note" style={{ margin: 0 }}>Rs {fmtNum(extraUserPrice(period))} per extra user per {unit}</span>
+              <span className="oup-note" style={{ margin: 0 }}>Rs {fmtNum(extraUser)} each per {unit}</span>
             </div>
           </div>
         </div>
@@ -244,30 +248,21 @@ export default function UpgradePage() {
           <div className="oup-card oup-sum">
             <div className="oup-lbl">Order summary</div>
             <div className="oup-line"><span>{planName}, {PERIOD_META[period].label}</span><span>{fmtNum(basePrice(period))}</span></div>
-            {users > 0 && <div className="oup-line"><span>{users} extra user{users > 1 ? "s" : ""}</span><span>{fmtNum(users * extraUserPrice(period))}</span></div>}
+            {users > 0 && <div className="oup-line"><span>{users} extra user{users > 1 ? "s" : ""}</span><span>{fmtNum(users * extraUser)}</span></div>}
             {selected.map(c => (
-              <div key={c} className="oup-line"><span>{featureName(c)}{users > 0 ? ` x ${1 + users} users` : ""}</span><span>{fmtNum(perAddon * (1 + users))}</span></div>
+              <div key={c} className="oup-line"><span>{featureName(c)}{users > 0 ? ` x ${seats} users` : ""}</span><span>{fmtNum(perAddon * seats)}</span></div>
             ))}
             <div className="oup-tot"><span>Total (PKR)</span><span>{fmtNum(animTotal)}</span></div>
             {saving > 0 && <div className="oup-save">You save Rs {fmtNum(saving)} compared with paying monthly.</div>}
-            <p className="oup-note">{endsNote}</p>
             <button type="button" className="oup-cta" onClick={goPay} disabled={basePrice(period) === 0}>Continue to payment</button>
-
-            <div className="oup-cmp" style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
-              <div className="oup-lbl">Why OneAccounts</div>
-              <div className="r"><span className="nm">OneAccounts</span><div className="tr"><div className="fl" style={{ width: "30%", background: "var(--primary)" }}>Rs 3,000</div></div></div>
-              {["Odoo", "QuickBooks", "Zoho Books"].map(n => (
-                <div className="r" key={n}><span className="nm">{n}</span><div className="tr"><div className="fl" style={{ width: "100%", background: "#8a94a0" }}>from Rs 10,000+</div></div></div>
-              ))}
-              <p className="oup-note">Monthly price per user. Save up to 70%, and up to 17% more on a yearly plan.</p>
-            </div>
+            <p className="oup-note">{endsNote}</p>
           </div>
         </div>
       </div>
 
       <div className="oup-card">
-        <div className="oup-lbl">2. Add modules to your plan</div>
-        <p className="oup-note" style={{ margin: "-4px 0 12px" }}>Prices are per user, per {unit}.</p>
+        <h2 className="oup-h">Add modules</h2>
+        <p className="oup-note" style={{ margin: "-8px 0 12px" }}>Rs {fmtNum(ADDON_PRICE_MONTHLY)} per user per month each, with the same period discount.</p>
         <div className="oup-add">
           {FEATURES.map(f => {
             const have = activeCodes.includes(f.code)
@@ -276,13 +271,12 @@ export default function UpgradePage() {
             const tag = bestForLabel(f)
             return (
               <div key={f.code} className={`oup-a ${have ? "have" : on ? "on" : ""}`}>
-                {tag && !have && <span className="oup-tag">{tag}</span>}
                 <div className="oup-ai">
                   <span className="oup-ic"><Icon size={18} /></span>
-                  <div><div className="n">{f.name}</div><div className="d">{f.short}</div></div>
+                  <div><div className="n">{f.name}</div><div className="d">{f.short}</div>{tag && !have && <span className="oup-tag">{tag}</span>}</div>
                 </div>
                 <div className="oup-af">
-                  <span className="oup-ap">Rs {fmtNum(perAddon)}</span>
+                  <span className="oup-ap">Rs {fmtNum(ADDON_PRICE_MONTHLY)}<span style={{ fontWeight: 400, fontSize: 12, color: "var(--text-muted)" }}> /mo</span></span>
                   {have ? (
                     <span className="oup-ab have"><Check size={14} /> Active</span>
                   ) : (
@@ -295,6 +289,26 @@ export default function UpgradePage() {
             )
           })}
         </div>
+      </div>
+
+      <div className="oup-card oup-cmp sm">
+        {(() => {
+          const mine = basePrice("monthly")
+          const rows = COMPETITORS.items.map(c => ({ ...c, pkr: competitorPkr(c.usd) }))
+          const max = Math.max(mine, ...rows.map(r => r.pkr))
+          const maxRow = rows.reduce((m, r) => (r.pkr > m.pkr ? r : m), rows[0])
+          const cut = Math.round((1 - mine / maxRow.pkr) * 100)
+          return (
+            <>
+              <div className="oup-lbl">Why OneAccounts{cut > 0 ? ` - up to ${cut}% less than ${maxRow.name}` : ""}</div>
+              <div className="r"><span className="nm">OneAccounts</span><div className="tr"><div className="fl" style={{ width: `${Math.max(18, (mine / max) * 100)}%`, background: "var(--primary)" }}>Rs {fmtNum(mine)}</div></div></div>
+              {rows.map(r => (
+                <div className="r" key={r.name} title={r.note}><span className="nm">{r.name}</span><div className="tr"><div className="fl" style={{ width: `${(r.pkr / max) * 100}%`, background: "#8a94a0" }}>about Rs {fmtNum(r.pkr)}</div></div></div>
+              ))}
+              <p className="oup-note">Entry plan, per user per month. US list prices billed yearly, checked {COMPETITORS.asOf}, at Rs {COMPETITORS.usdToPkr} per US dollar.</p>
+            </>
+          )
+        })()}
       </div>
 
       <div className="oup-bar">

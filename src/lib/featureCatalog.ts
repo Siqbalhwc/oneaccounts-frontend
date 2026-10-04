@@ -17,18 +17,15 @@ export const PLAN_PRICING: Record<string, Record<BillingPeriod, number>> = {
   ngo:     { monthly: 5000, half_yearly: 28000, yearly: 50000 },
 }
 
-export const ADDON_PRICE_MONTHLY = 500        // per module, per user, per month
-export const EXTRA_USER_PRICE_MONTHLY = 500   // per extra user, per month
+// Each module costs Rs 500 per user per month (list price). Longer periods get the same discount as the plan.
+// An extra user costs the same as the plan's price per user for the chosen period.
+export const ADDON_PRICE_MONTHLY = 500
 
 /** Add-on price per user for the chosen period (same discount as the base plan) */
 export function addonPrice(period: BillingPeriod): number {
   if (period === 'monthly') return ADDON_PRICE_MONTHLY
   if (period === 'half_yearly') return Math.round(ADDON_PRICE_MONTHLY * 6 * (16000 / 18000))
   return Math.round(ADDON_PRICE_MONTHLY * 12 * (30000 / 36000))
-}
-
-export function extraUserPrice(period: BillingPeriod): number {
-  return EXTRA_USER_PRICE_MONTHLY * PERIOD_META[period].months
 }
 
 export interface CatalogFeature {
@@ -79,4 +76,19 @@ export const SUPPORT = {
 
 export function fmtNum(n: number): string {
   return Math.round(n).toLocaleString('en-US')
+}
+
+// Competitor entry prices, US list prices billed yearly, USD per month.
+// Checked October 2026. Refresh these numbers from time to time.
+export const COMPETITORS = {
+  asOf: 'Oct 2026',
+  usdToPkr: 277,
+  items: [
+    { name: 'Zoho Books',  usd: 15,    note: 'Standard plan, 3 users included' },
+    { name: 'Odoo',        usd: 31.1,  note: 'Standard plan, all apps, per user' },
+    { name: 'QuickBooks',  usd: 38,    note: 'Simple Start, 1 user' },
+  ],
+}
+export function competitorPkr(usd: number): number {
+  return Math.round((usd * COMPETITORS.usdToPkr) / 50) * 50
 }

@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useCompany } from "@/contexts/CompanyContext"
 import {
-  FEATURE_CODES, PERIODS, PERIOD_META, addonPrice, extraUserPrice, featureName,
+  FEATURE_CODES, PERIODS, PERIOD_META, addonPrice, featureName,
   SUPPORT, fmtNum, type BillingPeriod,
 } from "@/lib/featureCatalog"
 import { UPGRADE_CSS } from "@/lib/upgradeStyles"
@@ -147,7 +147,7 @@ function PaymentInner() {
           <div className="oup-card oup-sum">
             <div className="oup-lbl">Your order</div>
             <div className="oup-line"><span>Plan, {PERIOD_META[period].label}</span><span>{fmtNum(base)}</span></div>
-            {users > 0 && <div className="oup-line"><span>{users} extra user{users > 1 ? "s" : ""}</span><span>{fmtNum(users * extraUserPrice(period))}</span></div>}
+            {users > 0 && <div className="oup-line"><span>{users} extra user{users > 1 ? "s" : ""}</span><span>{fmtNum(users * base)}</span></div>}
             {topups.map(c => (
               <div key={c} className="oup-line"><span>{featureName(c)}{users > 0 ? ` x ${1 + users} users` : ""}</span><span>{fmtNum(perAddon * (1 + users))}</span></div>
             ))}
