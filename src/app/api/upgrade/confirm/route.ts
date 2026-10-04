@@ -1,7 +1,7 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-import { NextRequest, NextResponse } from 'next/server'
+import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server'
+import { FEATURE_CODES, PERIODS } from '@/lib/featureCatalog'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,141 +9,79 @@ const supabaseAdmin = createClient(
   { auth: { persistSession: false, autoRefreshToken: false } }
 )
 
-export async function POST(req: NextRequest) {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
-        },
-      },
+const MAX_FILE = 8 * 1024 * 1024
+const REF_PATTERN = /^[A-Z0-9]{2,6}-\d{4}-\d{4}$/
+
+// Records a bank-transfer payment as PENDING.
+// It does NOT change the plan, add-ons or the company's access dates.
+// A super admin verifies the transfer and then updates the account.
+export async function POST(request: Request) {
+  try {
+    const supabase = await createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+
+    const { data: role } = await supabaseAdmin
+      .from('user_roles')
+      .select('company_id')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle()
+    if (!role?.company_id) return NextResponse.json({ error: 'No active company found' }, { status: 400 })
+    const companyId = role.company_id as string
+
+    const form = await request.formData()
+    const file = form.get('receipt')
+    const amount = Number(form.get('amount') || 0)
+    const period = String(form.get('period') || '')
+    const planCode = String(form.get('plan_code') || '')
+    const users = Math.max(0, Math.min(100, parseInt(String(form.get('users') || '0'), 10) || 0))
+    const topups = String(form.get('topups') || '').split(',').filter(c => FEATURE_CODES.includes(c))
+    let reference = String(form.get('reference') || '').toUpperCase()
+
+    if (!(file instanceof File)) return NextResponse.json({ error: 'Please attach your transfer receipt.' }, { status: 400 })
+    if (file.size > MAX_FILE) return NextResponse.json({ error: 'The receipt file is too large (max 8 MB).' }, { status: 400 })
+    if (!/^(image\/|application\/pdf)/.test(file.type)) return NextResponse.json({ error: 'Receipt must be an image or a PDF.' }, { status: 400 })
+    if (!(amount > 0)) return NextResponse.json({ error: 'Invalid amount.' }, { status: 400 })
+    if (!(PERIODS as string[]).includes(period)) return NextResponse.json({ error: 'Invalid billing period.' }, { status: 400 })
+
+    if (!REF_PATTERN.test(reference)) {
+      reference = `OA-${new Date().toISOString().slice(2, 4)}${new Date().toISOString().slice(5, 7)}-${Math.floor(1000 + Math.random() * 9000)}`
     }
-  )
 
-  const { data: { user }, error: userError } = await supabase.auth.getUser()
-  if (userError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const path = `${companyId}/${Date.now()}-${safeName}`
+    const { error: upErr } = await supabaseAdmin.storage
+      .from('receipts')
+      .upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type, upsert: false })
+    if (upErr) return NextResponse.json({ error: 'Could not upload the receipt: ' + upErr.message }, { status: 500 })
 
-  const formData = await req.formData()
-  const file = formData.get('receipt') as File
-  const amount = formData.get('amount') as string
-  const period = formData.get('period') as string
-  const planCode = formData.get('plan') as string
-  const topups = formData.get('topups') as string
+    const { data: signed } = await supabaseAdmin.storage.from('receipts').createSignedUrl(path, 60 * 60 * 24 * 30)
 
-  if (!file || !amount) {
-    return NextResponse.json({ error: 'Missing file or amount' }, { status: 400 })
-  }
-
-  // 1. Get company_id
-  const { data: role } = await supabaseAdmin
-    .from('user_roles')
-    .select('company_id')
-    .eq('user_id', user.id)
-    .eq('is_active', true)
-    .single()
-
-  if (!role?.company_id) {
-    return NextResponse.json({ error: 'No company found' }, { status: 400 })
-  }
-
-  const companyId = role.company_id
-
-  // 2. Upload receipt
-  const fileExt = file.name.split('.').pop() || 'png'
-  const filePath = `${user.id}/${Date.now()}-receipt.${fileExt}`
-  const arrayBuffer = await file.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
-
-  const { error: uploadError } = await supabaseAdmin
-    .storage
-    .from('receipts')
-    .upload(filePath, buffer, {
-      contentType: file.type,
-      upsert: false,
+    const { error: insErr } = await supabaseAdmin.from('payment_notifications').insert({
+      company_id: companyId,
+      user_id: user.id,
+      amount,
+      period,
+      plan_code: planCode || null,
+      topups,
+      additional_users: users,
+      receipt_url: signed?.signedUrl || path,
+      reference,
+      status: 'pending',
     })
-
-  if (uploadError) {
-    console.error('Upload error:', uploadError)
-    return NextResponse.json({ error: 'Failed to upload receipt' }, { status: 500 })
-  }
-
-  // 3. Get signed URL
-  const { data: signedUrlData } = await supabaseAdmin
-    .storage
-    .from('receipts')
-    .createSignedUrl(filePath, 60 * 60 * 24 * 7)
-
-  const receiptUrl = signedUrlData?.signedUrl || filePath
-
-  // 4. Update subscription to active
-  const now = new Date()
-  const endDate = new Date()
-  if (period === 'monthly') endDate.setMonth(endDate.getMonth() + 1)
-  else if (period === 'half_yearly') endDate.setMonth(endDate.getMonth() + 6)
-  else if (period === 'yearly') endDate.setFullYear(endDate.getFullYear() + 1)
-
-  await supabaseAdmin
-    .from('subscriptions')
-    .update({
-      status: 'active',
-      payment_status: 'paid',
-      start_date: now.toISOString().split('T')[0],
-      end_date: endDate.toISOString().split('T')[0],
-      payment_reference: receiptUrl,
-    })
-    .eq('company_id', companyId)
-
-  // 5. Activate top‑ups
-  if (topups && topups.trim() !== '') {
-    const topupCodes = topups.split(',').filter(Boolean)
-    const { data: sub } = await supabaseAdmin
-      .from('subscriptions')
-      .select('id')
-      .eq('company_id', companyId)
-      .single()
-
-    if (sub) {
-      for (const code of topupCodes) {
-        const { data: feature } = await supabaseAdmin
-          .from('features')
-          .select('id')
-          .eq('code', code)
-          .single()
-
-        if (feature) {
-          await supabaseAdmin.from('company_features')
-            .upsert({ company_id: companyId, feature_id: feature.id, enabled: true }, { onConflict: 'company_id,feature_id' })
-
-          await supabaseAdmin.from('subscription_topups')
-            .insert({
-              subscription_id: sub.id,
-              feature_code: code,
-              start_date: now.toISOString().split('T')[0],
-              end_date: endDate.toISOString().split('T')[0],
-              price_per_user: 500,
-              status: 'active',
-            })
-        }
-      }
+    if (insErr) {
+      const dup = /duplicate|unique/i.test(insErr.message)
+      return NextResponse.json(
+        { error: dup ? 'This reference is already used. Please go back and try again.' : 'Could not record your payment: ' + insErr.message },
+        { status: dup ? 409 : 500 }
+      )
     }
+
+    return NextResponse.json({ success: true, reference })
+  } catch (e: any) {
+    console.error('upgrade/confirm failed:', e)
+    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
   }
-
-  // 6. Notify super‑admin
-  await supabaseAdmin.from('payment_notifications').insert({
-    company_id: companyId,
-    user_id: user.id,
-    amount: parseFloat(amount),
-    period,
-    plan_code: planCode,
-    topups: topups ? topups.split(',') : [],
-    receipt_url: receiptUrl,
-  })
-
-  return NextResponse.json({ success: true, message: 'Payment submitted! Your access will be activated once the payment is verified.' })
 }

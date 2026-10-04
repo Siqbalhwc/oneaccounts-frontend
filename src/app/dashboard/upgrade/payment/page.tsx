@@ -1,300 +1,169 @@
 "use client"
 
+import { Suspense, useMemo, useRef, useState } from "react"
+import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { ArrowLeft, Building2, Copy, Check, Upload, Loader2 } from "lucide-react"
-import { useState, useRef } from "react"
+import { useCompany } from "@/contexts/CompanyContext"
+import {
+  FEATURE_CODES, PERIODS, PERIOD_META, addonPrice, extraUserPrice, featureName,
+  SUPPORT, fmtNum, type BillingPeriod,
+} from "@/lib/featureCatalog"
+import { UPGRADE_CSS } from "@/lib/upgradeStyles"
 
-export default function PaymentPage() {
-  const searchParams = useSearchParams()
-  const amount       = searchParams.get("amount") || "0"
-  const period       = searchParams.get("period") || "yearly"
-  const plan         = searchParams.get("plan") || "basic"
-  const topups       = searchParams.get("topups") || ""
+const BANKS = [
+  { bank: "Meezan Bank", title: "Shahid Iqbal", rows: [["Account", "02850106669725"], ["IBAN", "PK40MEZN0002850106669725"]] },
+  { bank: "Standard Chartered Bank", title: "Shahid Iqbal", rows: [["Account", "01-1659402-01"]] },
+]
 
-  const periodLabel: Record<string, string> = {
-    monthly:     "month",
-    half_yearly: "6 months",
-    yearly:      "year",
-  }
-  const displayPeriod = periodLabel[period] || period
+function makeReference(companyName: string): string {
+  const words = (companyName || "").toUpperCase().replace(/[^A-Z0-9 ]/g, "").split(/\s+/).filter(Boolean)
+  let code = words.length > 1 ? words.map(w => w[0]).join("") : (words[0] || "OA")
+  code = code.slice(0, 5)
+  if (code.length < 2) code = (code + "OA").slice(0, 2)
+  const d = new Date()
+  const yymm = String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, "0")
+  const rand = String(Math.floor(1000 + Math.random() * 9000))
+  return `${code}-${yymm}-${rand}`
+}
 
-  const [copiedField, setCopiedField] = useState<string | null>(null)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+function CopyBtn({ text }: { text: string }) {
+  const [done, setDone] = useState(false)
+  return (
+    <button type="button" className="oup-link" onClick={() => {
+      navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1500) })
+    }}>{done ? "Copied" : "Copy"}</button>
+  )
+}
 
-  const bankAccounts = [
-    {
-      bankName:       "Standard Chartered Bank",
-      accountTitle:   "Shahid Iqbal",
-      accountNumber:  "01-1659402-01",
-      iban:           null,
-    },
-    {
-      bankName:       "Meezan Bank",
-      accountTitle:   "Shahid Iqbal",
-      accountNumber:  "02850106669725",
-      iban:           "PK40MEZN0002850106669725",
-    },
-  ]
+function PaymentInner() {
+  const sp = useSearchParams()
+  const { companyName } = useCompany()
 
-  const handleCopy = (text: string, field: string) => {
-    navigator.clipboard.writeText(text)
-    setCopiedField(field)
-    setTimeout(() => setCopiedField(null), 2000)
-  }
+  const amount = Number(sp.get("amount") || 0)
+  const rawPeriod = sp.get("period") as BillingPeriod
+  const period: BillingPeriod = PERIODS.includes(rawPeriod) ? rawPeriod : "yearly"
+  const planCode = sp.get("plan") || ""
+  const base = Number(sp.get("base") || 0)
+  const users = Math.max(0, Math.min(100, parseInt(sp.get("users") || "0", 10) || 0))
+  const topups = (sp.get("topups") || "").split(",").filter(c => FEATURE_CODES.includes(c))
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0])
+  const reference = useMemo(() => makeReference(companyName), [companyName])
+  const [file, setFile] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
+  const [doneRef, setDoneRef] = useState("")
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const perAddon = addonPrice(period)
+
+  const submit = async () => {
+    if (!file) { setError("Please choose your transfer receipt first."); return }
+    setBusy(true); setError("")
+    try {
+      const fd = new FormData()
+      fd.append("receipt", file)
+      fd.append("amount", String(amount))
+      fd.append("period", period)
+      fd.append("plan_code", planCode)
+      fd.append("topups", topups.join(","))
+      fd.append("users", String(users))
+      fd.append("reference", reference)
+      const res = await fetch("/api/upgrade/confirm", { method: "POST", body: fd })
+      const data = await res.json()
+      if (res.ok && data.success) setDoneRef(data.reference || reference)
+      else setError(data.error || "Could not submit your payment. Please try again.")
+    } catch {
+      setError("Network error. Please try again.")
     }
+    setBusy(false)
   }
 
-  const handleSubmit = async () => {
-    if (!selectedFile) return
-    setUploading(true)
+  const header = (
+    <div className="oup-head">
+      <img src="/logo.png" alt="OneAccounts" />
+      <div><h1>Payment</h1><p className="oup-sub">{companyName}</p></div>
+    </div>
+  )
 
-    const formData = new FormData()
-    formData.append("receipt", selectedFile)
-    formData.append("amount", amount)
-    formData.append("period", period)
-    formData.append("plan", plan)
-    formData.append("topups", topups)
-
-    const res = await fetch("/api/upgrade/confirm", {
-      method: "POST",
-      body: formData,
-    })
-    const data = await res.json()
-
-    if (data.success) {
-      setSuccess(true)
-    } else {
-      alert(data.error || "Something went wrong")
-    }
-    setUploading(false)
-  }
-
-  // Success state
-  if (success) {
+  if (doneRef) {
+    const msg = `Hello, I have paid for OneAccounts. Company: ${companyName}. Reference: ${doneRef}. Amount: Rs ${fmtNum(amount)}.`
     return (
-      <div style={{
-        display: "flex", flexDirection: "column", alignItems: "center",
-        justifyContent: "center", minHeight: "60vh", gap: 16,
-        fontFamily: "'Inter', sans-serif", padding: 24,
-        background: "var(--bg)", color: "var(--text)",
-      }}>
-        <div style={{ fontSize: 48 }}>✅</div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Payment Submitted!</h1>
-        <p style={{ color: "var(--text-muted)", fontSize: 14, textAlign: "center", maxWidth: 400, lineHeight: 1.6 }}>
-          Your plan is now active. You will receive a confirmation email at your registered email address shortly.
-        </p>
-        <a
-          href="/dashboard"
-          style={{
-            background: "var(--primary)", color: "var(--primary-text)", padding: "12px 24px",
-            borderRadius: 10, textDecoration: "none", fontWeight: 700,
-          }}
-        >
-          Go to Dashboard
-        </a>
+      <div className="oup">
+        <style>{UPGRADE_CSS}</style>
+        {header}
+        <div className="oup-card" style={{ maxWidth: 640, margin: "20px auto" }}>
+          <h2 style={{ fontSize: 20 }}>Payment received, pending verification</h2>
+          <p className="oup-sub">Reference <b>{doneRef}</b> · Rs {fmtNum(amount)}</p>
+          <p>We will check your transfer and update your account. To speed this up, message us with your reference and a screenshot of the transfer.</p>
+          <div className="oup-ct">
+            <a className="g" target="_blank" rel="noreferrer" href={`https://wa.me/${SUPPORT.whatsappNumber}?text=${encodeURIComponent(msg)}`}>WhatsApp {SUPPORT.whatsappDisplay}</a>
+            <a href={`mailto:${SUPPORT.email}?subject=${encodeURIComponent("Payment " + doneRef)}&body=${encodeURIComponent(msg)}`}>{SUPPORT.email}</a>
+          </div>
+          <p className="oup-note">Until your payment is verified, your account stays as it is. You can leave this page.</p>
+          <Link className="oup-back" href="/dashboard/upgrade" style={{ marginTop: 12 }}>Back to Plan &amp; Billing</Link>
+        </div>
       </div>
     )
   }
 
-  // Normal checkout page
   return (
-    <div style={{
-      padding: 24, background: "var(--bg)", minHeight: "100vh",
-      fontFamily: "'Inter', sans-serif", maxWidth: 650, margin: "0 auto",
-      color: "var(--text)",
-    }}>
-      <a
-        href="/dashboard/upgrade"
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 6,
-          color: "var(--primary)", textDecoration: "none", marginBottom: 20,
-          fontWeight: 500,
-        }}
-      >
-        <ArrowLeft size={16} /> Back to Plan
-      </a>
+    <div className="oup">
+      <style>{UPGRADE_CSS}</style>
+      {header}
+      <Link className="oup-back" href="/dashboard/upgrade">&larr; Back to plan</Link>
+      <div className="oup-step"><span>1 Choose plan</span><span>&rsaquo;</span><b>2 Pay and upload receipt</b><span>&rsaquo;</span><span>3 We verify and update</span></div>
 
-      {/* Payment header card */}
-      <div style={{
-        background: "var(--card)", borderRadius: 18, padding: 28,
-        boxShadow: "var(--shadow-sm)", border: "1px solid var(--border)",
-        marginBottom: 20,
-      }}>
-        <h1 style={{
-          fontSize: 22, fontWeight: 800, display: "flex", alignItems: "center", gap: 8,
-          color: "var(--text)", margin: 0,
-        }}>
-          <Building2 size={24} /> Bank Transfer
-        </h1>
-        <p style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 4 }}>
-          Complete your payment to one of the accounts below, then upload the transfer receipt.
-        </p>
-
-        <div style={{
-          marginTop: 20, background: "var(--bg-soft)", borderRadius: 12, padding: 16,
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          border: "1px solid var(--border)",
-        }}>
-          <span style={{ fontWeight: 600, fontSize: 14, color: "var(--primary)" }}>Total Amount</span>
-          <span style={{ fontSize: 24, fontWeight: 800, color: "var(--text)" }}>
-            PKR {Number(amount).toLocaleString()}
-          </span>
-        </div>
-        <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-          Plan: {plan} · Billing: {displayPeriod}
-        </p>
-      </div>
-
-      {/* Bank accounts */}
-      {bankAccounts.map((acc, i) => (
-        <div
-          key={i}
-          style={{
-            background: "var(--card)", borderRadius: 18, padding: 20,
-            boxShadow: "var(--shadow-sm)", border: "1px solid var(--border)",
-            marginBottom: 16,
-          }}
-        >
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", margin: 0 }}>{acc.bankName}</h2>
-          <div style={{ marginTop: 12 }}>
-            <div style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: 14,
-            }}>
-              <span style={{ fontWeight: 600, color: "var(--text-muted)" }}>Account Title</span>
-              <span style={{ color: "var(--text)" }}>{acc.accountTitle}</span>
-            </div>
-            <div style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: 14,
-            }}>
-              <span style={{ fontWeight: 600, color: "var(--text-muted)" }}>Account Number</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ color: "var(--text)" }}>{acc.accountNumber}</span>
-                <button
-                  style={{
-                    background: "none", border: "none", cursor: "pointer",
-                    color: "var(--primary)",
-                  }}
-                  onClick={() => handleCopy(acc.accountNumber, `acc-${i}`)}
-                >
-                  {copiedField === `acc-${i}` ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
-                </button>
+      <div className="oup-grid">
+        <div>
+          <div className="oup-card">
+            <h2>Bank transfer</h2>
+            <p className="oup-note" style={{ marginTop: 0 }}>Transfer the total to either account and write this reference in the transfer note.</p>
+            <div className="oup-ref"><span>Payment reference: <b>{reference}</b></span><CopyBtn text={reference} /></div>
+            {BANKS.map(b => (
+              <div key={b.bank}>
+                <div className="oup-bk"><span><b>{b.bank}</b><br />Account title: {b.title}</span></div>
+                {b.rows.map(([k, v]) => (
+                  <div className="oup-bk" key={k}><span>{k}</span><span>{v} <CopyBtn text={v} /></span></div>
+                ))}
               </div>
-            </div>
-            {acc.iban && (
-              <div style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                padding: "8px 0", fontSize: 14,
-              }}>
-                <span style={{ fontWeight: 600, color: "var(--text-muted)" }}>IBAN</span>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 13, color: "var(--text)" }}>{acc.iban}</span>
-                  <button
-                    style={{
-                      background: "none", border: "none", cursor: "pointer",
-                      color: "var(--primary)",
-                    }}
-                    onClick={() => handleCopy(acc.iban, `iban-${i}`)}
-                  >
-                    {copiedField === `iban-${i}` ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
-                  </button>
-                </div>
-              </div>
-            )}
+            ))}
           </div>
-        </div>
-      ))}
 
-      {/* Upload section */}
-      <div style={{
-        background: "var(--card)", borderRadius: 18, padding: 28,
-        boxShadow: "var(--shadow-sm)", border: "1px solid var(--border)",
-        marginBottom: 20,
-      }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: "var(--text)" }}>
-          📎 Attach Payment Receipt
-        </h2>
-        <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 4 }}>
-          Upload a screenshot or photo of the transfer confirmation.
-        </p>
-
-        <input
-          type="file"
-          accept="image/*,.pdf"
-          ref={fileInputRef}
-          style={{ display: "none" }}
-          onChange={handleFileChange}
-        />
-
-        {selectedFile ? (
-          <div style={{
-            marginTop: 12, display: "flex", alignItems: "center", gap: 10,
-            background: "var(--bg)", padding: 10, borderRadius: 10,
-            border: "1px solid var(--border)",
-          }}>
-            <span style={{ fontSize: 13, color: "var(--text)", flex: 1 }}>
-              {selectedFile.name}
-            </span>
-            <button
-              onClick={() => setSelectedFile(null)}
-              style={{
-                background: "none", border: "none", color: "#EF4444",
-                cursor: "pointer", fontSize: 13, fontWeight: 600,
-              }}
-            >
-              Remove
+          <div className="oup-card">
+            <h2>Upload your receipt</h2>
+            <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }}
+              onChange={e => { setFile(e.target.files?.[0] || null); setError("") }} />
+            <button type="button" className="oup-up" onClick={() => fileRef.current?.click()}>
+              {file ? file.name : "Choose a screenshot, photo or PDF of the transfer"}
+            </button>
+            {error && <p className="oup-note" style={{ color: "var(--danger)" }}>{error}</p>}
+            <button type="button" className="oup-cta" onClick={submit} disabled={busy || amount <= 0}>
+              {busy ? "Submitting..." : "Submit payment"}
             </button>
           </div>
-        ) : (
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            style={{
-              marginTop: 12, padding: "12px 20px", borderRadius: 10,
-              border: "2px dashed var(--border)", background: "var(--bg)",
-              cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
-              fontSize: 14, color: "var(--text-muted)", width: "100%", justifyContent: "center",
-            }}
-          >
-            <Upload size={16} /> Choose file
-          </button>
-        )}
+        </div>
 
-        <button
-          onClick={handleSubmit}
-          disabled={!selectedFile || uploading}
-          style={{
-            marginTop: 16, width: "100%", padding: 14, borderRadius: 12,
-            background: uploading ? "var(--text-muted)" : "var(--primary)",
-            color: uploading ? "#fff" : "var(--primary-text)",
-            border: "none", fontSize: 15, fontWeight: 700,
-            cursor: uploading ? "not-allowed" : "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-          }}
-        >
-          {uploading ? (
-            <><Loader2 size={16} className="animate-spin" /> Processing...</>
-          ) : (
-            "Submit Payment & Activate Plan"
-          )}
-        </button>
-      </div>
-
-      {/* Info note */}
-      <div style={{
-        background: "var(--bg-soft)", border: "1px solid var(--border)",
-        borderRadius: 12, padding: 14, fontSize: 13, color: "var(--text-muted)",
-        lineHeight: 1.6,
-      }}>
-        📧 A confirmation email will be sent to your registered email address. Activation is immediate.
+        <div>
+          <div className="oup-card oup-sum">
+            <div className="oup-lbl">Your order</div>
+            <div className="oup-line"><span>Plan, {PERIOD_META[period].label}</span><span>{fmtNum(base)}</span></div>
+            {users > 0 && <div className="oup-line"><span>{users} extra user{users > 1 ? "s" : ""}</span><span>{fmtNum(users * extraUserPrice(period))}</span></div>}
+            {topups.map(c => (
+              <div key={c} className="oup-line"><span>{featureName(c)}{users > 0 ? ` x ${1 + users} users` : ""}</span><span>{fmtNum(perAddon * (1 + users))}</span></div>
+            ))}
+            <div className="oup-tot"><span>Total (PKR)</span><span>{fmtNum(amount)}</span></div>
+            <p className="oup-note">Access runs for {PERIOD_META[period].label.toLowerCase()} once we verify your payment.</p>
+          </div>
+        </div>
       </div>
     </div>
+  )
+}
+
+export default function PaymentPage() {
+  return (
+    <Suspense fallback={null}>
+      <PaymentInner />
+    </Suspense>
   )
 }

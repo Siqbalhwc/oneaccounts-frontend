@@ -1,3 +1,4 @@
+import { createClient as createSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
@@ -8,6 +9,14 @@ const supabaseAdmin = createClient(
 )
 
 export async function GET() {
+  // Only a super admin may list payments from all companies
+  const supabase = await createSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { data: sa } = await supabaseAdmin
+    .from('super_admins').select('user_id').eq('user_id', user.id).maybeSingle()
+  if (!sa) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
   const { data: payments, error } = await supabaseAdmin
     .from('payment_notifications')
     .select('*, companies(name)')
