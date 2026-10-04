@@ -6,6 +6,10 @@ import {
   Trash2, ToggleLeft, ToggleRight, Plus, X, LogIn, CreditCard,
   AlertTriangle, ChevronDown, ChevronRight, Download,
 } from "lucide-react"
+import {
+  QUICK_PERIODS, applyQuickPeriod, renewalBase, fmtLongDate, isValidDateStr,
+  addMonthsStr, addDaysStr, todayPK, GRACE_DAYS_PAID, type AccessStatus,
+} from "@/lib/access"
 
 const FEATURE_CODES = [
   "asset_management",           // ← added
@@ -56,6 +60,10 @@ interface Company {
   plan: string
   is_trial: boolean
   trial_ends_at: string | null
+  access_until: string | null
+  suspended_at: string | null
+  suspended_reason: string | null
+  access: AccessStatus | null
   user_count: number
   admin_email: string
   features: string[]
@@ -76,11 +84,17 @@ export default function SuperAdminPage() {
   const [selectedCompanyForFeatures, setSelectedCompanyForFeatures] = useState<Company | null>(null)
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false)
   const [subscriptionForm, setSubscriptionForm] = useState({
-    companyId: "", planType: "basic", paymentMethod: "Bank Transfer", paymentRef: "", amount: "", startDate: "",
+    companyId: "", planType: "basic", paymentMethod: "Bank Transfer", paymentRef: "", amount: "", startDate: "", endDate: "",
     topups: [] as string[],
     maxUsers: "",
   })
   const [savingSubscription, setSavingSubscription] = useState(false)
+
+  // Access (last working day / suspend) modal
+  const [accessCompany, setAccessCompany] = useState<Company | null>(null)
+  const [accessDate, setAccessDate] = useState("")
+  const [suspendReason, setSuspendReason] = useState("")
+  const [savingAccess, setSavingAccess] = useState(false)
   const [payments, setPayments] = useState<any[]>([])
 
   // --- Super Admin Access Control ---
@@ -217,26 +231,60 @@ export default function SuperAdminPage() {
       paymentMethod: "Bank Transfer",
       paymentRef: "",
       amount: "",
-      startDate: new Date().toISOString().split("T")[0],
+      startDate: todayPK(),
+      endDate: addMonthsStr(todayPK(), 12),
       topups: [],
       maxUsers: "",
     })
     setShowSubscriptionModal(true)
   }
 
-  const extendTrial = async (company: Company, days: number) => {
-    const res = await fetch("/api/super-admin/companies/extend-trial", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companyId: company.id, days }),
-    })
-    const data = await res.json()
-    if (data.success) {
-      showMessage(`✅ Trial extended by ${days} days – new expiry: ${new Date(data.newTrialEndsAt).toLocaleDateString()}`)
-      fetchCompanies()
-    } else {
-      showMessage(data.error || "Extension failed", true)
-    }
+  const openAccessModal = (company: Company) => {
+    setAccessCompany(company)
+    setAccessDate(company.access_until && isValidDateStr(company.access_until) ? company.access_until : "")
+    setSuspendReason("")
+  }
+
+  const callAccess = async (body: Record<string, any>, okMessage: string) => {
+    if (!accessCompany) return
+    setSavingAccess(true)
+    try {
+      const res = await fetch("/api/super-admin/companies/access", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: accessCompany.id, ...body }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        const st = data.access?.state
+        const note =
+          st === "suspended" ? " (company is still suspended)" :
+          data.access?.blocked ? " (company is still blocked - check the date)" : ""
+        showMessage(okMessage + note)
+        setAccessCompany(null)
+        fetchCompanies()
+      } else {
+        showMessage(data.error || "Update failed", true)
+      }
+    } catch { showMessage("Network error", true) }
+    setSavingAccess(false)
+  }
+
+  const saveAccessDate = () => {
+    if (!isValidDateStr(accessDate)) { showMessage("Please choose a valid date", true); return }
+    callAccess(
+      { action: "set_date", accessUntil: accessDate },
+      `✅ ${accessCompany?.name}: last working day is now ${fmtLongDate(accessDate)}`
+    )
+  }
+
+  const doSuspend = () => {
+    if (!suspendReason.trim()) { showMessage("Please enter a reason", true); return }
+    callAccess({ action: "suspend", reason: suspendReason.trim() }, `${accessCompany?.name} suspended`)
+  }
+
+  const doReactivate = () => {
+    callAccess({ action: "reactivate" }, `✅ ${accessCompany?.name} reactivated`)
   }
 
   const toggleTopup = (code: string) => {
@@ -260,6 +308,7 @@ export default function SuperAdminPage() {
         paymentRef: subscriptionForm.paymentRef,
         amount: parseFloat(subscriptionForm.amount) || 0,
         startDate: subscriptionForm.startDate,
+        endDate: subscriptionForm.endDate,
         topups: subscriptionForm.topups,
         maxUsers: subscriptionForm.maxUsers ? parseInt(subscriptionForm.maxUsers) : null,
       }),
@@ -339,14 +388,24 @@ export default function SuperAdminPage() {
   }
 
   const getStatusBadge = (company: Company) => {
+    const a = company.access
+    if (a?.state === "suspended") {
+      return <span className="sa-status-badge sa-status-expired">Suspended</span>
+    }
+    if (a?.state === "trial_expired") {
+      return <span className="sa-status-badge sa-status-expired">Trial Expired</span>
+    }
+    if (a?.state === "subscription_expired") {
+      return <span className="sa-status-badge sa-status-expired">Expired</span>
+    }
+    if (a?.state === "grace") {
+      return <span className="sa-status-badge sa-status-expiring">Grace - {a.grace_days_left}d left</span>
+    }
     if (company.is_trial) {
-      if (company.trial_ends_at && new Date(company.trial_ends_at) <= new Date()) {
-        return <span className="sa-status-badge sa-status-expired">Trial Expired</span>
-      }
       return <span className="sa-status-badge sa-status-trial">Trial</span>
     }
-    if (company.subscription) {
-      if (isExpiringSoon(company.subscription)) {
+    if (company.subscription || company.access_until) {
+      if (a?.days_left != null && a.days_left <= 10 && a.days_left >= 0) {
         return <span className="sa-status-badge sa-status-expiring">Expiring Soon</span>
       }
       return <span className="sa-status-badge sa-status-active">Active</span>
@@ -354,8 +413,8 @@ export default function SuperAdminPage() {
     return <span className="sa-status-badge sa-status-no-sub">No Subscription</span>
   }
 
-  const activeTrials = companies.filter(c => c.is_trial && c.trial_ends_at && new Date(c.trial_ends_at) > new Date())
-  const expiredTrials = companies.filter(c => c.is_trial && c.trial_ends_at && new Date(c.trial_ends_at) <= new Date())
+  const activeTrials = companies.filter(c => c.is_trial && !c.access?.blocked)
+  const expiredTrials = companies.filter(c => c.is_trial && c.access?.blocked)
   const activeClients = companies.filter(c => !c.is_trial)
 
   if (checkingAccess) {
@@ -397,23 +456,7 @@ export default function SuperAdminPage() {
           </td>
           <td className="sa-td">{getStatusBadge(company)}</td>
           <td className="sa-td sa-actions">
-            {company.is_trial && (
-              <select
-                className="sa-select-trial"
-                defaultValue=""
-                onChange={(e) => {
-                  const days = parseInt(e.target.value)
-                  if (!days) return
-                  extendTrial(company, days)
-                  e.target.value = ""
-                }}
-              >
-                <option value="" disabled>⏳ Extend</option>
-                <option value="7">+7 days</option>
-                <option value="15">+15 days</option>
-                <option value="30">+30 days</option>
-              </select>
-            )}
+            <button className="sa-btn" onClick={() => openAccessModal(company)} title="Access dates / Suspend">Access</button>
             <button className="sa-btn" onClick={() => openFeatureModal(company)} title="Features">⚙️</button>
             <button className="sa-btn sa-btn-primary" onClick={() => openSubscriptionModal(company)} title="Subscribe / Update"><CreditCard size={12} /></button>
             <button className="sa-btn" onClick={() => impersonate(company)} title="Login as admin"><LogIn size={12} /></button>
@@ -446,7 +489,11 @@ export default function SuperAdminPage() {
                       </div>
                     ) : (
                       <div className="sa-expanded-subtext">
-                        {company.is_trial ? `Trial ends ${new Date(company.trial_ends_at!).toLocaleDateString()}` : 'No subscription'}
+                        {company.access?.state === 'suspended'
+                          ? `Suspended: ${company.suspended_reason || ''}`
+                          : company.access_until
+                            ? `${company.is_trial ? 'Trial' : 'Access'} last working day: ${fmtLongDate(company.access_until)}`
+                            : (company.is_trial ? 'Trial (no end date set)' : 'No subscription')}
                       </div>
                     )}
                   </div>
@@ -705,6 +752,82 @@ export default function SuperAdminPage() {
         </div>
       )}
 
+      {accessCompany && (() => {
+        const co = accessCompany
+        const base = renewalBase(co.access_until)
+        const a = co.access
+        const suspended = a?.state === "suspended"
+        return (
+          <div className="modal-overlay" onClick={() => setAccessCompany(null)}>
+            <div className="modal-box" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Access - {co.name}</h2>
+                <button className="sa-btn" onClick={() => setAccessCompany(null)}><X size={16}/></button>
+              </div>
+
+              <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 12, lineHeight: 1.6 }}>
+                <div>Status: {getStatusBadge(co)}</div>
+                <div>Current last working day: <strong>{co.access_until ? fmtLongDate(co.access_until) : "none set (never blocked by date)"}</strong></div>
+                {suspended && <div style={{ color: "#DC2626" }}>Suspended: {co.suspended_reason}</div>}
+              </div>
+
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Quick pick (counted from {fmtLongDate(base)})</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                {QUICK_PERIODS.map(p => {
+                  const target = applyQuickPeriod(base, p)
+                  return (
+                    <button key={p.label} type="button"
+                      className={"sa-btn" + (accessDate === target ? " sa-btn-primary" : "")}
+                      onClick={() => setAccessDate(target)}
+                      style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", padding: "6px 10px" }}>
+                      <span style={{ fontWeight: 700 }}>+ {p.label}</span>
+                      <span style={{ fontSize: 10, opacity: 0.8 }}>{fmtLongDate(target)}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Or choose any last working day</label>
+              <input className="input-field" type="date" value={accessDate} onChange={e => setAccessDate(e.target.value)} />
+
+              <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 12 }}>
+                {isValidDateStr(accessDate)
+                  ? <>Last working day will be <strong>{fmtLongDate(accessDate)}</strong>.
+                      {co.is_trial
+                        ? " Access stops the next day."
+                        : ` Then ${GRACE_DAYS_PAID} grace days (until ${fmtLongDate(addDaysStr(accessDate, GRACE_DAYS_PAID))}), after which access stops.`}
+                    </>
+                  : "Pick a quick option or a date."}
+              </div>
+
+              <button className="sa-btn sa-btn-primary" onClick={saveAccessDate}
+                disabled={savingAccess || !isValidDateStr(accessDate)}
+                style={{ width: "100%", padding: "10px", fontSize: 13, marginBottom: 14 }}>
+                {savingAccess ? "Saving..." : isValidDateStr(accessDate) ? `Save - last working day ${fmtLongDate(accessDate)}` : "Save"}
+              </button>
+
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                {suspended ? (
+                  <button className="sa-btn sa-btn-primary" onClick={doReactivate} disabled={savingAccess}
+                    style={{ width: "100%", padding: "10px", fontSize: 13 }}>
+                    Reactivate (remove suspension)
+                  </button>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Suspend now</div>
+                    <input className="input-field" placeholder="Reason (required)" value={suspendReason} onChange={e => setSuspendReason(e.target.value)} />
+                    <button className="sa-btn sa-btn-danger" onClick={doSuspend} disabled={savingAccess || !suspendReason.trim()}
+                      style={{ width: "100%", padding: "10px", fontSize: 13 }}>
+                      Suspend - company can only open the Upgrade page
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {showSubscriptionModal && (
         <div className="modal-overlay" onClick={() => setShowSubscriptionModal(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
@@ -719,7 +842,29 @@ export default function SuperAdminPage() {
             </select>
             <input className="input-field" placeholder="Payment Reference" value={subscriptionForm.paymentRef} onChange={e => setSubscriptionForm({...subscriptionForm, paymentRef: e.target.value})} />
             <input className="input-field" placeholder="Amount (PKR)" type="number" value={subscriptionForm.amount} onChange={e => setSubscriptionForm({...subscriptionForm, amount: e.target.value})} />
+            <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Start date</label>
             <input className="input-field" type="date" value={subscriptionForm.startDate} onChange={e => setSubscriptionForm({...subscriptionForm, startDate: e.target.value})} />
+
+            <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Last working day (paid up to)</label>
+            <input className="input-field" type="date" style={{ marginBottom: 6 }} value={subscriptionForm.endDate} onChange={e => setSubscriptionForm({...subscriptionForm, endDate: e.target.value})} />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+              {QUICK_PERIODS.map(p => {
+                const from = isValidDateStr(subscriptionForm.startDate) ? subscriptionForm.startDate : todayPK()
+                const target = applyQuickPeriod(from, p)
+                return (
+                  <button key={p.label} type="button" className="sa-btn"
+                    onClick={() => setSubscriptionForm({...subscriptionForm, endDate: target})}
+                    title={`Last working day: ${fmtLongDate(target)}`}>
+                    {p.label}
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text)", marginBottom: 10 }}>
+              {isValidDateStr(subscriptionForm.endDate)
+                ? <>Last working day will be <strong>{fmtLongDate(subscriptionForm.endDate)}</strong>. Grace period of {GRACE_DAYS_PAID} days follows, then access stops.</>
+                : "Choose a last working day."}
+            </div>
             <input className="input-field" placeholder="Payment Method" value={subscriptionForm.paymentMethod} onChange={e => setSubscriptionForm({...subscriptionForm, paymentMethod: e.target.value})} />
             <input className="input-field" placeholder="Max Users (e.g., 1, 5, blank=unlimited)" type="number" value={subscriptionForm.maxUsers} onChange={e => setSubscriptionForm({...subscriptionForm, maxUsers: e.target.value})} />
 

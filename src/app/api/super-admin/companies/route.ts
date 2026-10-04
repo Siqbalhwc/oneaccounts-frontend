@@ -30,6 +30,7 @@ export async function GET() {
     .from('companies')
     .select(`
       id, name, plan_id, trial_ends_at, is_trial,
+      access_until, suspended_at, suspended_reason,
       plans(name),
       user_roles(count)
     `)
@@ -72,12 +73,19 @@ export async function GET() {
 
     const featureCodes = companyFeatures?.map((f: any) => f.features?.code).filter(Boolean) || []
 
+    // Access state comes from the database rule (single source of truth)
+    const { data: access } = await supabaseAdmin.rpc('company_access_for', { p_company_id: c.id })
+
     return {
       id: c.id,
       name: c.name,
       plan: c.plans?.name || 'Basic',
       is_trial: c.is_trial,
       trial_ends_at: c.trial_ends_at,
+      access_until: c.access_until,
+      suspended_at: c.suspended_at,
+      suspended_reason: c.suspended_reason,
+      access: access || null,
       user_count: c.user_roles?.[0]?.count || 0,
       admin_email: adminEmail,
       subscription: latestSub || null,

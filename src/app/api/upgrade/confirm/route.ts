@@ -145,5 +145,5 @@ export async function POST(req: NextRequest) {
     receipt_url: receiptUrl,
   })
 
-  return NextResponse.json({ success: true, message: 'Payment submitted! Your plan is now active.' })
+  return NextResponse.json({ success: true, message: 'Payment submitted! Your access will be activated once the payment is verified.' })
 }

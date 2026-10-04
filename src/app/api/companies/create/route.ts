@@ -43,6 +43,7 @@ export async function POST(request: Request) {
       plan_id: plan.id,
       trial_ends_at: trialEnd,
       is_trial: true,
+      access_until: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date(trialEnd)),
       business_type: type,
     })
     .select('id')

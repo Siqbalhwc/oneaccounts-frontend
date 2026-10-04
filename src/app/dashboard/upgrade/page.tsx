@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { Check, Clock, ArrowRight, Plus, ShieldCheck, Zap, AlertTriangle, Star, TrendingUp, X, Minus } from "lucide-react"
 import { useCompany } from "@/contexts/CompanyContext"
+import { fmtLongDate, type AccessStatus } from "@/lib/access"
 
 const BENCHMARK_NOTE =
   "Competitor plans start at PKR 10,000+ / user / month (Odoo, QuickBooks, Zoho). You save up to 70% with OneAccounts."
@@ -144,6 +145,7 @@ export default function UpgradePage() {
   const [highlightCard, setHighlightCard] = useState(false)
   const [isTrial, setIsTrial] = useState(false)
   const [isLifetime, setIsLifetime] = useState(false)
+  const [access, setAccess] = useState<AccessStatus | null>(null)
 
   // ✅ NEW: actual trial end date from company_settings
   const [trialEndDate, setTrialEndDate] = useState<Date | null>(null)
@@ -165,6 +167,10 @@ export default function UpgradePage() {
           setBusinessType(company.business_type || "")
           setIsTrial(company.is_trial || false)
         }
+
+        // Access state (single rule in the database)
+        const { data: accessData } = await supabase.rpc("company_access_status")
+        if (accessData) setAccess(accessData as AccessStatus)
 
         // ✅ Fetch the real trial expiry from company_settings
         const { data: settings } = await supabase
@@ -255,6 +261,10 @@ export default function UpgradePage() {
 
   // ✅ Correct trial days calculation using real trial_ends_at
   const trialDaysLeft = (() => {
+  if (isTrial && access?.access_until && access.days_left != null) {
+    // last working day counts as a usable day
+    return access.state === "active" ? access.days_left + 1 : 0
+  }
   if (subscription?.end_date) {
     return Math.ceil((new Date(subscription.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
   }
@@ -423,13 +433,44 @@ export default function UpgradePage() {
         </p>
       </div>
 
+      {access && access.state === "suspended" && (
+        <div className="banner banner-error">
+          <AlertTriangle size={16} />
+          <span>
+            Your account has been suspended{access.suspended_reason ? <>: <strong>{access.suspended_reason}</strong></> : "."}
+            {" "}Please contact support or complete your payment to restore access.
+          </span>
+        </div>
+      )}
+      {access && access.state === "trial_expired" && (
+        <div className="banner banner-error">
+          <AlertTriangle size={16} />
+          <span>Your trial ended on <strong>{fmtLongDate(access.access_until)}</strong>. Upgrade to restore access.</span>
+        </div>
+      )}
+      {access && access.state === "subscription_expired" && (
+        <div className="banner banner-error">
+          <AlertTriangle size={16} />
+          <span>Your subscription ended on <strong>{fmtLongDate(access.access_until)}</strong> and the grace period is over. Renew to restore access.</span>
+        </div>
+      )}
+      {access && access.state === "grace" && (
+        <div className="banner banner-warn">
+          <Clock size={16} />
+          <span>
+            Your subscription ended on <strong>{fmtLongDate(access.access_until)}</strong>.
+            You can keep working until <strong>{fmtLongDate(access.grace_until)}</strong> ({access.grace_days_left} day{access.grace_days_left === 1 ? "" : "s"} left). Renew now to avoid interruption.
+          </span>
+        </div>
+      )}
+
       {isUrgent && !isExpired && (
         <div className="banner banner-warn">
           <Clock size={16} />
           Your trial expires in <strong>{trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""}</strong>. Upgrade now to avoid any interruption.
         </div>
       )}
-      {isExpired && (
+      {isExpired && !access?.blocked && (
         <div className="banner banner-error">
           <AlertTriangle size={16} />
           Your trial has expired. Upgrade to restore full access.

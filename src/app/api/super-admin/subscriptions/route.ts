@@ -1,6 +1,7 @@
 import { createClient as createSupabaseClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { isValidDateStr, addMonthsStr } from '@/lib/access'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { companyId, planType, paymentMethod, paymentRef, amount, startDate, topups } = await request.json()
+  const { companyId, planType, paymentMethod, paymentRef, amount, startDate, topups, endDate: endDateInput } = await request.json()
   if (!companyId || !planType) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
@@ -42,10 +43,14 @@ export async function POST(request: Request) {
   }
 
   const start = startDate || new Date().toISOString().split('T')[0]
-  // Set end date to 1 year after start
-  const endDate = new Date(start)
-  endDate.setFullYear(endDate.getFullYear() + 1)
-  const end = endDate.toISOString().split('T')[0]
+  // Last working day: chosen by the super admin; default = 1 year after start
+  if (endDateInput && !isValidDateStr(endDateInput)) {
+    return NextResponse.json({ error: 'Invalid last working day' }, { status: 400 })
+  }
+  const end = endDateInput || addMonthsStr(start, 12)
+  if (end < start) {
+    return NextResponse.json({ error: 'Last working day cannot be before the start date' }, { status: 400 })
+  }
 
   // Update company: set plan, clear trial flags
   const { error: updateError } = await supabaseAdmin
@@ -54,6 +59,9 @@ export async function POST(request: Request) {
       plan_id: planData.id,
       is_trial: false,
       trial_ends_at: null,
+      access_until: end,
+      suspended_at: null,
+      suspended_reason: null,
     })
     .eq('id', companyId)
 
@@ -101,7 +109,7 @@ export async function POST(request: Request) {
       company_id: companyId,
       amount,
       plan_code: planType,
-      period: '1 year',
+      period: `${start} to ${end}`,
       topups: topups || [],
     })
 
