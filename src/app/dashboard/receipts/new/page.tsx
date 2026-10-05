@@ -319,6 +319,9 @@ export default function NewReceiptPage() {
   const totalAllocated = round2(totalAllocatedToInvoices + openingAllocation)
   const totalAmount = round2(Number(receiptAmount || 0))
   const unallocated = round2(totalAmount - totalAllocated)
+  // Allocation can never exceed the amount received in the bank (blocked, never treated as advance)
+  const overAllocatedBy = isDonation ? 0 : round2(totalAllocated - totalAmount)
+  const isOverAllocated = overAllocatedBy > 0.005
 
   // ── Save / Update ──
   const uploadAttachment = async (file: File) => {
@@ -368,6 +371,10 @@ export default function NewReceiptPage() {
     if (!companyId) { setError("Company not loaded"); return }
     if (!selectedBankId) { setError("Please select a bank account"); return }
     if (totalAmount <= 0) { setError("Enter a valid receipt amount"); return }
+    if (!isDonation && round2(totalAllocated - totalAmount) > 0.005) {
+      setError(`Allocated amount (PKR ${fmtMoney(totalAllocated)}) is more than the receipt amount (PKR ${fmtMoney(totalAmount)}). Reduce the allocation or increase the amount.`)
+      return
+    }
     if (!customerId && !isDonation) {
       setError("Please select a customer. To record a donation, enable the Donation / Other Income checkbox.")
       return
@@ -500,6 +507,7 @@ export default function NewReceiptPage() {
           transition: all 0.15s; white-space: nowrap; text-decoration: none;
         }
         .inv-btn:hover { background: var(--card-hover); }
+        .inv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .cust-wrap { position: relative; }
         .cust-input-row { position: relative; display: flex; align-items: center; }
         .cust-dropdown {
@@ -696,13 +704,18 @@ export default function NewReceiptPage() {
                     <span>Allocated</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(totalAllocated)}</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: unallocated > 0 ? "#EF4444" : "var(--text-muted)" }}>
-                    <span>Advance</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(unallocated)}</span>
+                    <span>Advance</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{fmtMoney(Math.max(unallocated, 0))}</span>
                   </div>
+                  {isOverAllocated && (
+                    <div style={{ fontSize: 12, color: "#EF4444", fontWeight: 600, marginTop: 4 }}>
+                      ⚠️ Allocated is more than the amount by PKR {fmtMoney(overAllocatedBy)}. Cannot save.
+                    </div>
+                  )}
                 </>
               )}
             </div>
             <div className="inv-card desktop-save">
-              <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
+              <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading || isOverAllocated}>
                 {loading ? "Posting..." : editId ? "💾 Update Receipt" : "💾 Save Receipt"}
               </button>
             </div>
@@ -799,6 +812,13 @@ export default function NewReceiptPage() {
                       <td colSpan={5} style={{ textAlign: "right" }}>Allocated</td>
                       <td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>PKR {fmtMoney(totalAllocated)}</td>
                     </tr>
+                    {isOverAllocated && (
+                      <tr style={{ fontSize: 12, color: "#EF4444", fontWeight: 600 }}>
+                        <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
+                          ⚠️ Allocated exceeds the received amount by PKR {fmtMoney(overAllocatedBy)}. Reduce the allocation or increase the amount.
+                        </td>
+                      </tr>
+                    )}
                     {unallocated > 0 && (
                       <tr style={{ fontSize: 12, color: "var(--text-muted)" }}>
                         <td colSpan={6} style={{ textAlign: "right", paddingTop: 4 }}>
@@ -828,9 +848,16 @@ export default function NewReceiptPage() {
             scrolling through the form and the allocation table, instead of
             being stranded above them. */}
         <div className="mobile-save-bar">
-          <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
-            {loading ? "Posting..." : editId ? "💾 Update Receipt" : "💾 Save Receipt"}
-          </button>
+          <div style={{ width: "100%" }}>
+            {isOverAllocated && (
+              <div style={{ fontSize: 12, color: "#EF4444", fontWeight: 600, marginBottom: 6, textAlign: "center" }}>
+                ⚠️ Allocated is more than the amount by PKR {fmtMoney(overAllocatedBy)}
+              </div>
+            )}
+            <button className="inv-btn" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading || isOverAllocated}>
+              {loading ? "Posting..." : editId ? "💾 Update Receipt" : "💾 Save Receipt"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

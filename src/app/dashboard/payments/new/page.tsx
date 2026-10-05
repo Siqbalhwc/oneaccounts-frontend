@@ -352,6 +352,9 @@ export default function NewPaymentPage() {
 
   const totalAmount = round2(Number(paymentAmount || 0))
   const difference = round2(totalAmount - totalNetAllocated)
+  // Net cash entered must cover everything being settled (bank amount + WHT): never settle more than was paid
+  const overAllocatedBy = isDonation ? 0 : round2(totalNetAllocated - totalAmount)
+  const isOverAllocated = overAllocatedBy > 0.005
 
   // ── Submit (create or update) ─────────────────────────
   const uploadAttachment = async (file: File) => {
@@ -401,6 +404,10 @@ export default function NewPaymentPage() {
     if (!companyId) { setError("Company not loaded"); return }
     if (!selectedBankId) { setError("Please select a bank account"); return }
     if (totalAmount <= 0) { setError("Enter a valid payment amount"); return }
+    if (!isDonation && round2(totalNetAllocated - totalAmount) > 0.005) {
+      setError(`Net amount allocated (PKR ${fmtMoney(totalNetAllocated)}) is more than the payment amount (PKR ${fmtMoney(totalAmount)}). Reduce the allocation or increase the payment amount.`)
+      return
+    }
     if (!supplierId && !isDonation) {
       setError("Please select a supplier or enable Donation / Other Expense.")
       return
@@ -527,6 +534,7 @@ export default function NewPaymentPage() {
           transition: all 0.15s; white-space: nowrap; text-decoration: none;
         }
         .pay-btn:hover { background: var(--card-hover); }
+        .pay-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .pay-btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
         .pay-btn-primary:hover { background: var(--primary-hover); }
         .sup-wrap { position: relative; }
@@ -723,11 +731,16 @@ export default function NewPaymentPage() {
                       ⚠️ {difference > 0 ? `Overpaid by PKR ${fmtMoney(difference)}` : `Underpaid by PKR ${fmtMoney(Math.abs(difference))}`}
                     </div>
                   )}
+                  {isOverAllocated && (
+                    <div style={{ fontSize: 12, color: "#EF4444", fontWeight: 600, marginTop: 4 }}>
+                      ⚠️ Allocation is more than the payment by PKR {fmtMoney(overAllocatedBy)}. Cannot save.
+                    </div>
+                  )}
                 </>
               )}
             </div>
             <div className="pay-card desktop-save">
-              <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
+              <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading || isOverAllocated}>
                 {loading ? "Posting..." : editId ? "💾 Update Payment" : "💾 Save Payment"}
               </button>
             </div>
@@ -870,6 +883,13 @@ export default function NewPaymentPage() {
                           </td>
                         </tr>
                       )}
+                      {isOverAllocated && (
+                        <tr style={{ fontSize: 12, color: "#EF4444", fontWeight: 600 }}>
+                          <td colSpan={8} style={{ textAlign: "right", paddingTop: 4 }}>
+                            ⚠️ Allocation exceeds the payment amount by PKR {fmtMoney(overAllocatedBy)}. Reduce the allocation or increase the payment amount.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -885,9 +905,16 @@ export default function NewPaymentPage() {
             scrolling through the form and the allocation table, instead of
             being stranded above them. */}
         <div className="mobile-save-bar">
-          <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading}>
-            {loading ? "Posting..." : editId ? "💾 Update Payment" : "💾 Save Payment"}
-          </button>
+          <div style={{ width: "100%" }}>
+            {isOverAllocated && (
+              <div style={{ fontSize: 12, color: "#EF4444", fontWeight: 600, marginBottom: 6, textAlign: "center" }}>
+                ⚠️ Allocation is more than the payment by PKR {fmtMoney(overAllocatedBy)}
+              </div>
+            )}
+            <button className="pay-btn pay-btn-primary" style={{ justifyContent: "center", padding: 10, width: "100%" }} onClick={handleSubmit} disabled={loading || isOverAllocated}>
+              {loading ? "Posting..." : editId ? "💾 Update Payment" : "💾 Save Payment"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
