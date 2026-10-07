@@ -210,25 +210,6 @@ export default function BankTransfersPage() {
         .transfer-table { width: 100%; border-collapse: collapse; }
         .transfer-table tbody tr:last-child td { border-bottom: none; }
         .transfer-table tbody tr:hover td { background: var(--card-hover); }
-        .btn {
-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-          color: white; border: none; transition: all 0.2s;
-        }
-        .btn:hover {
-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
-          transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
-        }
-        .btn-outline {
-          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
-        }
-        .btn-outline:hover {
-          background: var(--card-hover);
-          transform: translateY(-1px);
-          box-shadow: none;
-        }
         .search-input {
           width: 100%; height: 38px; border: 1.5px solid var(--border);
           border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px;
@@ -268,13 +249,13 @@ export default function BankTransfersPage() {
         }
       `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+      <div className="oa-list-header">
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>↔️ Bank Transfers</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Record transfers between your bank accounts</p>
         </div>
         {canEdit && (
-          <button className="btn" onClick={() => router.push("/dashboard/banking/bank-transfers/new")}>
+          <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/banking/bank-transfers/new")}>
             <ArrowRightLeft size={16} /> New Transfer
           </button>
         )}

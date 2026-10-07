@@ -269,9 +269,6 @@ function AssetsContent() {
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         @keyframes shimmer { 0% { opacity:0.4; } 50% { opacity:0.8; } 100% { opacity:0.4; } }
-        .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; background:transparent; border:1.5px solid var(--border); color:var(--text-muted); transition:all 0.2s; }
-        .btn:hover { background:var(--card-hover); }
-        .btn-primary { background:var(--primary); color:var(--primary-text); border-color:var(--primary); }
         .btn-icon { background:transparent; border:1.5px solid var(--border); color:var(--text-muted); padding:5px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1; }
         .btn-icon:hover { background:var(--card-hover); }
         .input { height:38px; border:1.5px solid var(--border); border-radius:8px; padding:0 12px 0 36px; font-size:13px; background:var(--card); color:var(--text); outline:none; box-sizing:border-box; width:100%; }
@@ -297,14 +294,14 @@ function AssetsContent() {
       `}</style>
 
       {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
+      <div className="oa-list-header">
         <div>
           <h1 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0 }}>📦 Asset Register</h1>
           <p style={{ fontSize:13, color:"var(--text-muted)", margin:0 }}>Manage fixed assets, depreciation, transfers & sales</p>
         </div>
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-          <button className="btn" onClick={fetchAssets} title="Refresh list"><RefreshCw size={14} /> Refresh</button>
-          <button className="btn" onClick={async () => {
+        <div className="oa-list-actions">
+          <button className="oa-btn" onClick={fetchAssets} title="Refresh list"><RefreshCw size={14} /> Refresh</button>
+          <button className="oa-btn" onClick={async () => {
             const pdfData = {
               companyName: companyName || "OneAccounts",
               companyTagline: companyTagline || "",
@@ -327,9 +324,9 @@ function AssetsContent() {
           }}><Download size={14} /> PDF</button>
           {canEdit && (
             <>
-              <button className="btn" onClick={openDepreciationModal}><RefreshCw size={14} /> Run Depreciation</button>
-              <button className="btn" onClick={() => router.push("/dashboard/assets/import")}><Upload size={14} /> Import</button>
-              <button className="btn btn-primary" onClick={() => router.push("/dashboard/assets/new")}><Plus size={16} /> New Asset</button>
+              <button className="oa-btn" onClick={openDepreciationModal}><RefreshCw size={14} /> Run Depreciation</button>
+              <button className="oa-btn" onClick={() => router.push("/dashboard/assets/import")}><Upload size={14} /> Import</button>
+              <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/assets/new")}><Plus size={16} /> New Asset</button>
             </>
           )}
         </div>
@@ -357,7 +354,7 @@ function AssetsContent() {
           <option value="Sold">Sold</option>
           <option value="Disposed">Disposed</option>
         </select>
-        {statusFilter && <button className="btn" onClick={() => setStatusFilter("")}>Clear</button>}
+        {statusFilter && <button className="oa-btn" onClick={() => setStatusFilter("")}>Clear</button>}
       </div>
 
       {fetchError && (
@@ -451,7 +448,7 @@ function AssetsContent() {
                     {depResult.errors.map((e: string, i: number) => <li key={i}>{e}</li>)}
                   </ul>
                 )}
-                <button className="btn" style={{ marginTop: 12 }} onClick={() => { setShowDepModal(false); fetchAssets(); }}>Close</button>
+                <button className="oa-btn" style={{ marginTop: 12 }} onClick={() => { setShowDepModal(false); fetchAssets(); }}>Close</button>
               </div>
             ) : (
               <>
@@ -487,7 +484,7 @@ function AssetsContent() {
                 <div style={{ marginBottom: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <strong>Select Assets ({selectedAssetIds.length} of {assets.filter(a => a.status === "Active" && a.remaining_life_months > 0).length})</strong>
-                    <button className="btn" style={{ fontSize: 11, padding: "4px 10px" }} onClick={toggleSelectAll}>
+                    <button className="oa-btn" style={{ fontSize: 11, padding: "4px 10px" }} onClick={toggleSelectAll}>
                       {selectedAssetIds.length === assets.filter(a => a.status === "Active" && a.remaining_life_months > 0).length ? "Deselect All" : "Select All"}
                     </button>
                   </div>
@@ -523,8 +520,8 @@ function AssetsContent() {
                 </div>
 
                 <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-                  <button className="btn" onClick={() => setShowDepModal(false)}>Cancel</button>
-                  <button className="btn btn-primary" onClick={executeDepreciation} disabled={depRunning || selectedAssetIds.length === 0}>
+                  <button className="oa-btn" onClick={() => setShowDepModal(false)}>Cancel</button>
+                  <button className="oa-btn oa-btn-primary" onClick={executeDepreciation} disabled={depRunning || selectedAssetIds.length === 0}>
                     {depRunning ? <><Loader2 size={16} className="spinner" /> Processing...</> : "Confirm & Post"}
                   </button>
                 </div>

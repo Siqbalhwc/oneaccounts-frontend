@@ -296,25 +296,6 @@ export default function BankAccountsPage() {
         .bank-table { width: 100%; border-collapse: collapse; }
         .bank-table tbody tr:last-child td { border-bottom: none; }
         .bank-table tbody tr:hover td { background: var(--card-hover); }
-        .btn {
-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-          color: white; border: none; transition: all 0.2s;
-        }
-        .btn:hover {
-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
-          transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
-        }
-        .btn-outline {
-          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
-        }
-        .btn-outline:hover {
-          background: var(--card-hover);
-          transform: translateY(-1px);
-          box-shadow: none;
-        }
         .btn-icon {
           background: transparent; border: 1.5px solid var(--border);
           color: var(--text-muted); padding: 5px; border-radius: 6px;
@@ -370,7 +351,7 @@ export default function BankAccountsPage() {
         .pr-modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
       `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+      <div className="oa-list-header">
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🏦 Bank Accounts</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
@@ -378,11 +359,11 @@ export default function BankAccountsPage() {
           </p>
         </div>
         {canEdit && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn" onClick={() => router.push("/dashboard/banking/bank-accounts/new")}>
+          <div className="oa-list-actions">
+            <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/banking/bank-accounts/new")}>
               <Plus size={16} /> Add Bank Account
             </button>
-            <button className="btn btn-outline" onClick={() => router.push("/dashboard/accounts/new")}>
+            <button className="oa-btn oa-btn-outline" onClick={() => router.push("/dashboard/accounts/new")}>
               <Plus size={16} /> New GL Account
             </button>
           </div>
@@ -506,8 +487,8 @@ export default function BankAccountsPage() {
               </div>
             </div>
             <div className="pr-modal-footer">
-              <button className="btn btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="btn" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+              <button className="oa-btn oa-btn-outline" onClick={() => setShowModal(false)}>Cancel</button>
+              <button className="oa-btn oa-btn-primary" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</button>
             </div>
           </div>
         </div>
@@ -522,8 +503,8 @@ export default function BankAccountsPage() {
               <p style={{ color: "#EF4444" }}>This will remove the bank details but keep the GL account.</p>
             </div>
             <div className="pr-modal-footer" style={{ justifyContent: "center" }}>
-              <button className="btn btn-outline" onClick={() => setDeleteId(null)}>Cancel</button>
-              <button className="btn" style={{ background: "#EF4444", borderColor: "#EF4444" }} onClick={handleDelete}>Delete</button>
+              <button className="oa-btn oa-btn-outline" onClick={() => setDeleteId(null)}>Cancel</button>
+              <button className="oa-btn" style={{ background: "#EF4444", borderColor: "#EF4444" }} onClick={handleDelete}>Delete</button>
             </div>
           </div>
         </div>

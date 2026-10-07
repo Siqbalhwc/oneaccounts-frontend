@@ -162,13 +162,6 @@ function InvestorsContent() {
           font-weight: 700; text-transform: uppercase; font-size: 10px;
         }
         .sort-btn:hover { color: var(--primary); }
-        .btn {
-          padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border);
-          font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-          background: transparent; color: var(--text-muted);
-        }
-        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
-        .btn:hover { background: var(--card-hover); }
         .btn-icon {
           background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
           padding: 6px; border-radius: 8px; cursor: pointer;
@@ -203,12 +196,12 @@ function InvestorsContent() {
 
       {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 16px", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{flash}</div>}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+      <div className="oa-list-header">
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>💼 Investors</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage investor capital and details</p>
         </div>
-        <button className="btn btn-primary" onClick={() => router.push("/dashboard/investors/new")}><Plus size={16} /> Add Investor</button>
+        <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/investors/new")}><Plus size={16} /> Add Investor</button>
       </div>
 
       <div className="summary-grid">
@@ -274,8 +267,8 @@ function InvestorsContent() {
               <div><label className="inv-label">Notes</label><input className="inv-input" value={notes} onChange={e => setNotes(e.target.value)} /></div>
             </div>
             <div className="inv-modal-footer">
-              <button className="btn" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+              <button className="oa-btn" onClick={() => setShowModal(false)}>Cancel</button>
+              <button className="oa-btn oa-btn-primary" onClick={handleSave} disabled={saving}>
                 {saving ? "Saving..." : "💾 Save Investor"}
               </button>
             </div>
@@ -290,8 +283,8 @@ function InvestorsContent() {
             <div className="inv-modal-header"><div className="inv-modal-title">⚠️ Delete Investor?</div></div>
             <div className="inv-modal-body" style={{ textAlign: "center" }}><p style={{ color: "#EF4444" }}>Cannot be undone.</p></div>
             <div className="inv-modal-footer" style={{ justifyContent: "center" }}>
-              <button className="btn" onClick={() => setDeleteId(null)}>Cancel</button>
-              <button className="btn btn-primary" style={{ background: "#EF4444", borderColor: "#EF4444" }} onClick={handleDelete}>Delete</button>
+              <button className="oa-btn" onClick={() => setDeleteId(null)}>Cancel</button>
+              <button className="oa-btn oa-btn-primary" style={{ background: "#EF4444", borderColor: "#EF4444" }} onClick={handleDelete}>Delete</button>
             </div>
           </div>
         </div>

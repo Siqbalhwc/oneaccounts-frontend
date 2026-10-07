@@ -209,17 +209,6 @@ export default function PurchaseOrdersPage() {
         .po-table { width: 100%; border-collapse: collapse; }
         .po-table tbody tr:last-child td { border-bottom: none; }
         .po-table tbody tr:hover td { background: var(--card-hover); }
-        .btn {
-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-          color: white; border: none; transition: all 0.2s;
-        }
-        .btn:hover {
-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
-          transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
-        }
         .btn-icon {
           background: transparent; border: 1.5px solid var(--border);
           color: var(--text-muted); padding: 5px; border-radius: 6px;
@@ -266,13 +255,13 @@ export default function PurchaseOrdersPage() {
         }
       `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+      <div className="oa-list-header">
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📋 Purchase Orders</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Create and manage purchase orders" : "View orders"}</p>
         </div>
         {canEdit && (
-          <button className="btn" onClick={() => router.push("/dashboard/purchase-orders/new")}>
+          <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/purchase-orders/new")}>
             <Plus size={16} /> New Order
           </button>
         )}

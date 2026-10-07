@@ -323,12 +323,6 @@ export default function AccountsPage() {
           outline: none; font-family: inherit; background: var(--card); color: var(--text);
         }
         .ac-search:focus { border-color: var(--primary); }
-        .btn {
-          padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border);
-          font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-        }
-        .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
-        .btn-outline:hover { background: var(--card-hover); }
         .btn-icon {
           background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
           padding: 6px; border-radius: 8px; cursor: pointer;
@@ -359,13 +353,13 @@ export default function AccountsPage() {
         </div>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+      <div className="oa-list-header">
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📋 Chart of Accounts</h1>
           <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Manage your general ledger accounts</p>
         </div>
         {canEdit && (
-          <button className="btn btn-outline" onClick={() => router.push("/dashboard/accounts/new")}>
+          <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/accounts/new")}>
             <Plus size={16} /> Add Account
           </button>
         )}
@@ -495,8 +489,8 @@ export default function AccountsPage() {
               </div>
             </div>
             <div className="pr-modal-footer">
-              <button className="btn btn-outline" onClick={() => setShowEditModal(false)}>Cancel</button>
-              <button className="btn btn-outline" onClick={handleSaveEdit} disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+              <button className="oa-btn oa-btn-outline" onClick={() => setShowEditModal(false)}>Cancel</button>
+              <button className="oa-btn oa-btn-primary" onClick={handleSaveEdit} disabled={saving}>{saving ? "Saving..." : "Save"}</button>
             </div>
           </div>
         </div>
@@ -511,8 +505,8 @@ export default function AccountsPage() {
               <p style={{ color: "#EF4444" }}>This will permanently delete the account. If it has any transactions, the deletion will fail.</p>
             </div>
             <div className="pr-modal-footer" style={{ justifyContent: "center" }}>
-              <button className="btn btn-outline" onClick={() => setDeleteId(null)}>Cancel</button>
-              <button className="btn btn-outline" style={{ background: "#EF4444", color: "white", borderColor: "#EF4444" }} onClick={handleDelete}>Delete</button>
+              <button className="oa-btn oa-btn-outline" onClick={() => setDeleteId(null)}>Cancel</button>
+              <button className="oa-btn oa-btn-outline" style={{ background: "#EF4444", color: "white", borderColor: "#EF4444" }} onClick={handleDelete}>Delete</button>
             </div>
           </div>
         </div>
