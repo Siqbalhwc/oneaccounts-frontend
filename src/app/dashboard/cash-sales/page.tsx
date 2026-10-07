@@ -424,25 +424,6 @@ export default function CashSalesListPage() {
         .cs-table tbody tr:last-child td { border-bottom: none; }
         .cs-table tbody tr:hover td { background: var(--card-hover); }
         .cs-table tbody tr.cs-row { cursor: pointer; }
-        .btn {
-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-          color: white; border: none; transition: all 0.2s;
-        }
-        .btn:hover {
-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
-          transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
-        }
-        .btn-outline {
-          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
-        }
-        .btn-outline:hover {
-          background: var(--card-hover);
-          transform: translateY(-1px);
-          box-shadow: none;
-        }
         .btn-icon {
           background: transparent; border: 1.5px solid var(--border);
           color: var(--text-muted); padding: 5px; border-radius: 6px;
@@ -523,7 +504,6 @@ export default function CashSalesListPage() {
           .summary-grid { grid-template-columns: 1fr 1fr !important; }
           .summary-value { font-size: 18px; }
           .header-row { flex-direction: column; align-items: stretch; }
-          .header-row .btn { justify-content: center; }
           .cs-search { max-width: 100%; min-width: 100%; }
           .cs-filters .cs-select, .cs-filters .cs-date { flex: 1; min-width: 120px; }
           .desktop-table { display: none; }
@@ -531,13 +511,13 @@ export default function CashSalesListPage() {
         }
       `}</style>
 
-      <div className="header-row">
+      <div className="oa-list-header">
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Cash Sales</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Record of direct cash counter sales</p>
         </div>
         {canEdit && (
-          <button className="btn" onClick={() => router.push("/dashboard/cash-sales/new")}><Plus size={16} /> New Cash Sale</button>
+          <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/cash-sales/new")}><Plus size={16} /> New Cash Sale</button>
         )}
       </div>
 
@@ -701,7 +681,7 @@ export default function CashSalesListPage() {
 
       {!loading && remaining > 0 && (
         <div className="cs-more">
-          <button className="btn btn-outline" onClick={() => setVisibleCount(c => c + PAGE_SIZE)}>
+          <button className="oa-btn oa-btn-outline" onClick={() => setVisibleCount(c => c + PAGE_SIZE)}>
             Show more ({remaining} remaining)
           </button>
         </div>

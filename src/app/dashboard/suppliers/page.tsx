@@ -344,25 +344,6 @@ export default function SuppliersPage() {
         .sup-table { width: 100%; border-collapse: collapse; }
         .sup-table tbody tr:last-child td { border-bottom: none; }
         .sup-table tbody tr:hover td { background: var(--card-hover); }
-        .btn {
-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-          color: white; border: none; transition: all 0.2s;
-        }
-        .btn:hover {
-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
-          transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
-        }
-        .btn-outline {
-          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
-        }
-        .btn-outline:hover {
-          background: var(--card-hover);
-          transform: translateY(-1px);
-          box-shadow: none;
-        }
         .btn-icon {
           background: transparent; border: 1.5px solid var(--border);
           color: var(--text-muted); padding: 5px; border-radius: 6px;
@@ -429,6 +410,7 @@ export default function SuppliersPage() {
           .header-row .title-area { margin-bottom: 8px; text-align: left; }
           .header-row .actions { width: 100%; justify-content: space-between; }
           .search-section { max-width: 100%; }
+          .search-section { flex-wrap: wrap !important; gap: 8px 16px !important; } .search-box { flex: 1 1 100% !important; max-width: 100% !important; } .summary-grid { grid-template-columns: 1fr 1fr; } .summary-item { padding: 12px; } .summary-value { font-size: 18px; overflow-wrap: anywhere; }
         }
 
         /* -- Mobile card list: hidden by default (desktop/tablet shows the table) -- */
@@ -454,28 +436,28 @@ export default function SuppliersPage() {
         }
       `}</style>
 
-      <div className="header-row">
+      <div className="oa-list-header">
         <div className="title-area">
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Suppliers</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage your supplier accounts</p>
         </div>
-        <div className="actions">
+        <div className="oa-list-actions">
           {showImportExport && (
             <>
-              <button className="btn btn-outline" onClick={downloadTemplate} title="Download CSV template">
+              <button className="oa-btn oa-btn-outline" onClick={downloadTemplate} title="Download CSV template">
                 <FileText size={14} /> Template
               </button>
-              <label className="btn btn-outline" style={{ cursor: "pointer" }}>
+              <label className="oa-btn oa-btn-outline" style={{ cursor: "pointer" }}>
                 <Upload size={14} /> Import
                 <input type="file" accept=".csv" onChange={handleImport} ref={fileInputRef} style={{ display: "none" }} />
               </label>
-              <button className="btn btn-outline" onClick={handleExport} title="Export to CSV">
+              <button className="oa-btn oa-btn-outline" onClick={handleExport} title="Export to CSV">
                 <Download size={14} /> Export
               </button>
             </>
           )}
           {canEdit && (
-            <button className="btn" onClick={openNew}>
+            <button className="oa-btn oa-btn-primary" onClick={openNew}>
               <Plus size={16} /> Add Supplier
             </button>
           )}
@@ -494,7 +476,7 @@ export default function SuppliersPage() {
       </div>
 
       <div className="search-section" style={{ display: "flex", alignItems: "center", gap: 16, maxWidth: "none" }}>
-        <div style={{ position: "relative", maxWidth: 320, flex: 1 }}>
+        <div className="search-box" style={{ position: "relative", maxWidth: 320, flex: 1 }}>
           <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
           <input className="search-input" placeholder="Search by code, name, or phone..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
         </div>
@@ -628,8 +610,8 @@ export default function SuppliersPage() {
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
           <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
-            <button className="btn btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+            <button className="oa-btn oa-btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+            <button className="oa-btn oa-btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
           </div>
         </div>
       )}
@@ -646,8 +628,8 @@ export default function SuppliersPage() {
                 : `${confirmTarget.name} has no transaction history and can be safely deleted. This cannot be undone.`}
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button className="btn btn-outline" onClick={() => setConfirmTarget(null)}>Cancel</button>
-              <button className="btn" onClick={confirmArchiveOrDelete}>Confirm</button>
+              <button className="oa-btn oa-btn-outline" onClick={() => setConfirmTarget(null)}>Cancel</button>
+              <button className="oa-btn oa-btn-primary" onClick={confirmArchiveOrDelete}>Confirm</button>
             </div>
           </div>
         </div>

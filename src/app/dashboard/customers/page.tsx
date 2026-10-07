@@ -367,25 +367,6 @@ export default function CustomersPage() {
           .cust-table { width: 100%; border-collapse: collapse; }
           .cust-table tbody tr:last-child td { border-bottom: none; }
           .cust-table tbody tr:hover td { background: var(--card-hover); }
-          .btn {
-            padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-            cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-            background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-            color: white; border: none; transition: all 0.2s;
-          }
-          .btn:hover {
-            background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(7,19,82,0.45);
-          }
-          .btn-outline {
-            background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
-          }
-          .btn-outline:hover {
-            background: var(--card-hover);
-            transform: translateY(-1px);
-            box-shadow: none;
-          }
           .btn-icon {
             background: transparent; border: 1.5px solid var(--border);
             color: var(--text-muted); padding: 5px; border-radius: 6px;
@@ -473,6 +454,7 @@ export default function CustomersPage() {
             .search-section {
               max-width: 100%;
             }
+            .search-section { flex-wrap: wrap !important; gap: 8px 16px !important; } .search-box { flex: 1 1 100% !important; max-width: 100% !important; } .summary-grid { grid-template-columns: 1fr 1fr; } .summary-item { padding: 12px; } .summary-value { font-size: 18px; overflow-wrap: anywhere; }
           }
 
           /* -- Mobile card list: hidden by default (desktop/tablet shows the table) -- */
@@ -498,28 +480,28 @@ export default function CustomersPage() {
         `}</style>
 
         {/* -- HEADER ROW: title left, all buttons right -- */}
-        <div className="header-row">
+        <div className="oa-list-header">
           <div className="title-area">
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Customers</h1>
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Manage your customer accounts</p>
           </div>
-          <div className="actions">
+          <div className="oa-list-actions">
             {showImportExport && (
               <>
-                <button className="btn btn-outline" onClick={downloadTemplate} title="Download CSV template">
+                <button className="oa-btn oa-btn-outline" onClick={downloadTemplate} title="Download CSV template">
                   <FileText size={14} /> Template
                 </button>
-                <label className="btn btn-outline" style={{ cursor: "pointer" }}>
+                <label className="oa-btn oa-btn-outline" style={{ cursor: "pointer" }}>
                   <Upload size={14} /> Import
                   <input type="file" accept=".csv" onChange={handleImport} ref={fileInputRef} style={{ display: "none" }} />
                 </label>
-                <button className="btn btn-outline" onClick={handleExport} title="Export to CSV">
+                <button className="oa-btn oa-btn-outline" onClick={handleExport} title="Export to CSV">
                   <Download size={14} /> Export
                 </button>
               </>
             )}
             {canEdit && (
-              <button className="btn" onClick={() => router.push("/dashboard/customers/new")}>
+              <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/customers/new")}>
                 <Plus size={16} /> Add Customer
               </button>
             )}
@@ -541,7 +523,7 @@ export default function CustomersPage() {
 
         {/* -- Search (below summary) -- */}
         <div className="search-section" style={{ display: "flex", alignItems: "center", gap: 16, maxWidth: "none" }}>
-          <div style={{ position: "relative", maxWidth: 320, flex: 1 }}>
+          <div className="search-box" style={{ position: "relative", maxWidth: 320, flex: 1 }}>
             <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
             <input className="input" placeholder="Search by code, name, phone, email..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
@@ -698,8 +680,8 @@ export default function CustomersPage() {
                   : `${confirmTarget.name} has no transaction history and can be safely deleted. This cannot be undone.`}
               </p>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button className="btn btn-outline" onClick={() => setConfirmTarget(null)}>Cancel</button>
-                <button className="btn" onClick={confirmArchiveOrDelete}>Confirm</button>
+                <button className="oa-btn oa-btn-outline" onClick={() => setConfirmTarget(null)}>Cancel</button>
+                <button className="oa-btn oa-btn-primary" onClick={confirmArchiveOrDelete}>Confirm</button>
               </div>
             </div>
           </div>

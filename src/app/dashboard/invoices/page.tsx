@@ -238,17 +238,6 @@ export default function InvoicesPage() {
         .inv-table { width: 100%; border-collapse: collapse; }
         .inv-table tbody tr:last-child td { border-bottom: none; }
         .inv-table tbody tr:hover td { background: var(--card-hover); }
-        .btn {
-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-          color: white; border: none; transition: all 0.2s;
-        }
-        .btn:hover {
-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
-          transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
-        }
         .btn-icon {
           background: transparent; border: 1.5px solid var(--border);
           color: var(--text-muted); padding: 5px; border-radius: 6px;
@@ -300,15 +289,15 @@ export default function InvoicesPage() {
       `}</style>
 
       {/* ── Page header ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+      <div className="oa-list-header">
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🧾 Sales Invoices</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Create and manage invoices" : "View invoices"}</p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button className="btn" onClick={() => router.push("/dashboard/sales-returns")} title="View all sales returns"><Undo2 size={16} /> Sales Returns</button>
+        <div className="oa-list-actions">
+          <button className="oa-btn" onClick={() => router.push("/dashboard/sales-returns")} title="View all sales returns"><Undo2 size={16} /> Sales Returns</button>
           {canEdit && (
-            <button className="btn" onClick={() => router.push("/dashboard/invoices/new")}><Plus size={16} /> New Invoice</button>
+            <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/invoices/new")}><Plus size={16} /> New Invoice</button>
           )}
         </div>
       </div>

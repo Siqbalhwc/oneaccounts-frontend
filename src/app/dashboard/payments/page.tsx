@@ -211,9 +211,6 @@ export default function PaymentsPage() {
         .pay-table { width: 100%; border-collapse: collapse; }
         .pay-table tbody tr:last-child td { border-bottom: none; }
         .pay-table tbody tr:hover td { background: var(--card-hover); }
-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); transition: all 0.2s; }
-        .btn:hover { background: var(--card-hover); }
-        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
         .btn-icon { background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); padding: 5px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1; }
         .btn-icon:hover { background: var(--card-hover); }
         .search-input { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; background: var(--card); color: var(--text); outline: none; box-sizing: border-box; }
@@ -250,13 +247,13 @@ export default function PaymentsPage() {
         }
       `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+      <div className="oa-list-header">
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>💳 Payments</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Record supplier payments" : "View payments"}</p>
         </div>
         {canEdit && (
-          <button className="btn btn-primary" onClick={() => router.push("/dashboard/payments/new")}>
+          <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/payments/new")}>
             <Plus size={16} /> New Payment
           </button>
         )}
@@ -425,8 +422,8 @@ export default function PaymentsPage() {
               A reversing journal entry will be posted, and the supplier balance and any bills paid by this payment will be restored. The original entry is kept for audit.
             </p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button className="btn" onClick={() => setReverseTarget(null)} disabled={reversing}>Cancel</button>
-              <button className="btn btn-primary" onClick={confirmReverse} disabled={reversing}>{reversing ? "Reversing..." : "Reverse Payment"}</button>
+              <button className="oa-btn" onClick={() => setReverseTarget(null)} disabled={reversing}>Cancel</button>
+              <button className="oa-btn oa-btn-primary" onClick={confirmReverse} disabled={reversing}>{reversing ? "Reversing..." : "Reverse Payment"}</button>
             </div>
           </div>
         </div>

@@ -1,0 +1,624 @@
+diff --git a/src/app/dashboard/bills/page.tsx b/src/app/dashboard/bills/page.tsx
+index f5c72ea1..b59b87ad 100644
+--- a/src/app/dashboard/bills/page.tsx
++++ b/src/app/dashboard/bills/page.tsx
+@@ -217,17 +217,6 @@ export default function BillsPage() {
+         .bill-table { width: 100%; border-collapse: collapse; }
+         .bill-table tbody tr:last-child td { border-bottom: none; }
+         .bill-table tbody tr:hover td { background: var(--card-hover); }
+-        .btn {
+-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+-          color: white; border: none; transition: all 0.2s;
+-        }
+-        .btn:hover {
+-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+-          transform: translateY(-1px);
+-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+-        }
+         .btn-icon {
+           background: transparent; border: 1.5px solid var(--border);
+           color: var(--text-muted); padding: 5px; border-radius: 6px;
+@@ -274,17 +263,17 @@ export default function BillsPage() {
+         }
+       `}</style>
+ 
+-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
++      <div className="oa-list-header">
+         <div>
+           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📦 Purchase Bills</h1>
+           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Create and manage bills" : "View bills"}</p>
+         </div>
+-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+-          <button className="btn" onClick={() => router.push("/dashboard/purchase-returns")} title="View all purchase returns">
++        <div className="oa-list-actions">
++          <button className="oa-btn" onClick={() => router.push("/dashboard/purchase-returns")} title="View all purchase returns">
+             <Undo2 size={16} /> Purchase Returns
+           </button>
+           {canEdit && (
+-            <button className="btn" onClick={() => router.push("/dashboard/bills/new")}>
++            <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/bills/new")}>
+               <Plus size={16} /> New Bill
+             </button>
+           )}
+diff --git a/src/app/dashboard/cash-sales/page.tsx b/src/app/dashboard/cash-sales/page.tsx
+index 2be07441..c63e34e0 100644
+--- a/src/app/dashboard/cash-sales/page.tsx
++++ b/src/app/dashboard/cash-sales/page.tsx
+@@ -424,25 +424,6 @@ export default function CashSalesListPage() {
+         .cs-table tbody tr:last-child td { border-bottom: none; }
+         .cs-table tbody tr:hover td { background: var(--card-hover); }
+         .cs-table tbody tr.cs-row { cursor: pointer; }
+-        .btn {
+-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+-          color: white; border: none; transition: all 0.2s;
+-        }
+-        .btn:hover {
+-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+-          transform: translateY(-1px);
+-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+-        }
+-        .btn-outline {
+-          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
+-        }
+-        .btn-outline:hover {
+-          background: var(--card-hover);
+-          transform: translateY(-1px);
+-          box-shadow: none;
+-        }
+         .btn-icon {
+           background: transparent; border: 1.5px solid var(--border);
+           color: var(--text-muted); padding: 5px; border-radius: 6px;
+@@ -523,7 +504,6 @@ export default function CashSalesListPage() {
+           .summary-grid { grid-template-columns: 1fr 1fr !important; }
+           .summary-value { font-size: 18px; }
+           .header-row { flex-direction: column; align-items: stretch; }
+-          .header-row .btn { justify-content: center; }
+           .cs-search { max-width: 100%; min-width: 100%; }
+           .cs-filters .cs-select, .cs-filters .cs-date { flex: 1; min-width: 120px; }
+           .desktop-table { display: none; }
+@@ -531,13 +511,13 @@ export default function CashSalesListPage() {
+         }
+       `}</style>
+ 
+-      <div className="header-row">
++      <div className="oa-list-header">
+         <div>
+           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Cash Sales</h1>
+           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Record of direct cash counter sales</p>
+         </div>
+         {canEdit && (
+-          <button className="btn" onClick={() => router.push("/dashboard/cash-sales/new")}><Plus size={16} /> New Cash Sale</button>
++          <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/cash-sales/new")}><Plus size={16} /> New Cash Sale</button>
+         )}
+       </div>
+ 
+@@ -701,7 +681,7 @@ export default function CashSalesListPage() {
+ 
+       {!loading && remaining > 0 && (
+         <div className="cs-more">
+-          <button className="btn btn-outline" onClick={() => setVisibleCount(c => c + PAGE_SIZE)}>
++          <button className="oa-btn oa-btn-outline" onClick={() => setVisibleCount(c => c + PAGE_SIZE)}>
+             Show more ({remaining} remaining)
+           </button>
+         </div>
+diff --git a/src/app/dashboard/customers/page.tsx b/src/app/dashboard/customers/page.tsx
+index 55b1009b..7bc3e960 100644
+--- a/src/app/dashboard/customers/page.tsx
++++ b/src/app/dashboard/customers/page.tsx
+@@ -367,25 +367,6 @@ export default function CustomersPage() {
+           .cust-table { width: 100%; border-collapse: collapse; }
+           .cust-table tbody tr:last-child td { border-bottom: none; }
+           .cust-table tbody tr:hover td { background: var(--card-hover); }
+-          .btn {
+-            padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+-            cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+-            background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+-            color: white; border: none; transition: all 0.2s;
+-          }
+-          .btn:hover {
+-            background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+-            transform: translateY(-1px);
+-            box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+-          }
+-          .btn-outline {
+-            background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
+-          }
+-          .btn-outline:hover {
+-            background: var(--card-hover);
+-            transform: translateY(-1px);
+-            box-shadow: none;
+-          }
+           .btn-icon {
+             background: transparent; border: 1.5px solid var(--border);
+             color: var(--text-muted); padding: 5px; border-radius: 6px;
+@@ -473,6 +454,7 @@ export default function CustomersPage() {
+             .search-section {
+               max-width: 100%;
+             }
++            .search-section { flex-wrap: wrap !important; gap: 8px 16px !important; } .search-box { flex: 1 1 100% !important; max-width: 100% !important; } .summary-grid { grid-template-columns: 1fr 1fr; } .summary-item { padding: 12px; } .summary-value { font-size: 18px; overflow-wrap: anywhere; }
+           }
+ 
+           /* -- Mobile card list: hidden by default (desktop/tablet shows the table) -- */
+@@ -498,28 +480,28 @@ export default function CustomersPage() {
+         `}</style>
+ 
+         {/* -- HEADER ROW: title left, all buttons right -- */}
+-        <div className="header-row">
++        <div className="oa-list-header">
+           <div className="title-area">
+             <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Customers</h1>
+             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Manage your customer accounts</p>
+           </div>
+-          <div className="actions">
++          <div className="oa-list-actions">
+             {showImportExport && (
+               <>
+-                <button className="btn btn-outline" onClick={downloadTemplate} title="Download CSV template">
++                <button className="oa-btn oa-btn-outline" onClick={downloadTemplate} title="Download CSV template">
+                   <FileText size={14} /> Template
+                 </button>
+-                <label className="btn btn-outline" style={{ cursor: "pointer" }}>
++                <label className="oa-btn oa-btn-outline" style={{ cursor: "pointer" }}>
+                   <Upload size={14} /> Import
+                   <input type="file" accept=".csv" onChange={handleImport} ref={fileInputRef} style={{ display: "none" }} />
+                 </label>
+-                <button className="btn btn-outline" onClick={handleExport} title="Export to CSV">
++                <button className="oa-btn oa-btn-outline" onClick={handleExport} title="Export to CSV">
+                   <Download size={14} /> Export
+                 </button>
+               </>
+             )}
+             {canEdit && (
+-              <button className="btn" onClick={() => router.push("/dashboard/customers/new")}>
++              <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/customers/new")}>
+                 <Plus size={16} /> Add Customer
+               </button>
+             )}
+@@ -541,7 +523,7 @@ export default function CustomersPage() {
+ 
+         {/* -- Search (below summary) -- */}
+         <div className="search-section" style={{ display: "flex", alignItems: "center", gap: 16, maxWidth: "none" }}>
+-          <div style={{ position: "relative", maxWidth: 320, flex: 1 }}>
++          <div className="search-box" style={{ position: "relative", maxWidth: 320, flex: 1 }}>
+             <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+             <input className="input" placeholder="Search by code, name, phone, email..." value={search} onChange={(e) => setSearch(e.target.value)} />
+           </div>
+@@ -698,8 +680,8 @@ export default function CustomersPage() {
+                   : `${confirmTarget.name} has no transaction history and can be safely deleted. This cannot be undone.`}
+               </p>
+               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+-                <button className="btn btn-outline" onClick={() => setConfirmTarget(null)}>Cancel</button>
+-                <button className="btn" onClick={confirmArchiveOrDelete}>Confirm</button>
++                <button className="oa-btn oa-btn-outline" onClick={() => setConfirmTarget(null)}>Cancel</button>
++                <button className="oa-btn oa-btn-primary" onClick={confirmArchiveOrDelete}>Confirm</button>
+               </div>
+             </div>
+           </div>
+diff --git a/src/app/dashboard/invoices/page.tsx b/src/app/dashboard/invoices/page.tsx
+index b956dbf9..70bd9296 100644
+--- a/src/app/dashboard/invoices/page.tsx
++++ b/src/app/dashboard/invoices/page.tsx
+@@ -238,17 +238,6 @@ export default function InvoicesPage() {
+         .inv-table { width: 100%; border-collapse: collapse; }
+         .inv-table tbody tr:last-child td { border-bottom: none; }
+         .inv-table tbody tr:hover td { background: var(--card-hover); }
+-        .btn {
+-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+-          color: white; border: none; transition: all 0.2s;
+-        }
+-        .btn:hover {
+-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+-          transform: translateY(-1px);
+-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+-        }
+         .btn-icon {
+           background: transparent; border: 1.5px solid var(--border);
+           color: var(--text-muted); padding: 5px; border-radius: 6px;
+@@ -300,15 +289,15 @@ export default function InvoicesPage() {
+       `}</style>
+ 
+       {/* ── Page header ── */}
+-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
++      <div className="oa-list-header">
+         <div>
+           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🧾 Sales Invoices</h1>
+           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Create and manage invoices" : "View invoices"}</p>
+         </div>
+-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+-          <button className="btn" onClick={() => router.push("/dashboard/sales-returns")} title="View all sales returns"><Undo2 size={16} /> Sales Returns</button>
++        <div className="oa-list-actions">
++          <button className="oa-btn" onClick={() => router.push("/dashboard/sales-returns")} title="View all sales returns"><Undo2 size={16} /> Sales Returns</button>
+           {canEdit && (
+-            <button className="btn" onClick={() => router.push("/dashboard/invoices/new")}><Plus size={16} /> New Invoice</button>
++            <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/invoices/new")}><Plus size={16} /> New Invoice</button>
+           )}
+         </div>
+       </div>
+diff --git a/src/app/dashboard/journal/page.tsx b/src/app/dashboard/journal/page.tsx
+index 180d2b85..696a6fae 100644
+--- a/src/app/dashboard/journal/page.tsx
++++ b/src/app/dashboard/journal/page.tsx
+@@ -266,17 +266,6 @@ export default function JournalPage() {
+         .journal-table { width: 100%; border-collapse: collapse; }
+         .journal-table tbody tr:last-child td { border-bottom: none; }
+         .journal-table tbody tr:hover td { background: var(--card-hover); }
+-        .btn {
+-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+-          color: white; border: none; transition: all 0.2s;
+-        }
+-        .btn:hover {
+-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+-          transform: translateY(-1px);
+-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+-        }
+         .btn-icon {
+           background: transparent; border: 1.5px solid var(--border);
+           color: var(--text-muted); padding: 5px; border-radius: 6px;
+@@ -364,13 +353,13 @@ export default function JournalPage() {
+         }
+       `}</style>
+ 
+-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
++      <div className="oa-list-header">
+         <div>
+           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📓 Journal Entries</h1>
+           <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{canEdit ? "Manage double‑entry transactions" : "View journal entries"}</p>
+         </div>
+         {canEdit && (
+-          <button className="btn" onClick={() => router.push("/dashboard/journal/new")}>
++          <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/journal/new")}>
+             <Plus size={16} /> New Entry
+           </button>
+         )}
+diff --git a/src/app/dashboard/payments/page.tsx b/src/app/dashboard/payments/page.tsx
+index 1f8c24a9..3122abc9 100644
+--- a/src/app/dashboard/payments/page.tsx
++++ b/src/app/dashboard/payments/page.tsx
+@@ -211,9 +211,6 @@ export default function PaymentsPage() {
+         .pay-table { width: 100%; border-collapse: collapse; }
+         .pay-table tbody tr:last-child td { border-bottom: none; }
+         .pay-table tbody tr:hover td { background: var(--card-hover); }
+-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); transition: all 0.2s; }
+-        .btn:hover { background: var(--card-hover); }
+-        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+         .btn-icon { background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); padding: 5px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1; }
+         .btn-icon:hover { background: var(--card-hover); }
+         .search-input { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; background: var(--card); color: var(--text); outline: none; box-sizing: border-box; }
+@@ -250,13 +247,13 @@ export default function PaymentsPage() {
+         }
+       `}</style>
+ 
+-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
++      <div className="oa-list-header">
+         <div>
+           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>💳 Payments</h1>
+           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Record supplier payments" : "View payments"}</p>
+         </div>
+         {canEdit && (
+-          <button className="btn btn-primary" onClick={() => router.push("/dashboard/payments/new")}>
++          <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/payments/new")}>
+             <Plus size={16} /> New Payment
+           </button>
+         )}
+@@ -425,8 +422,8 @@ export default function PaymentsPage() {
+               A reversing journal entry will be posted, and the supplier balance and any bills paid by this payment will be restored. The original entry is kept for audit.
+             </p>
+             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+-              <button className="btn" onClick={() => setReverseTarget(null)} disabled={reversing}>Cancel</button>
+-              <button className="btn btn-primary" onClick={confirmReverse} disabled={reversing}>{reversing ? "Reversing..." : "Reverse Payment"}</button>
++              <button className="oa-btn" onClick={() => setReverseTarget(null)} disabled={reversing}>Cancel</button>
++              <button className="oa-btn oa-btn-primary" onClick={confirmReverse} disabled={reversing}>{reversing ? "Reversing..." : "Reverse Payment"}</button>
+             </div>
+           </div>
+         </div>
+diff --git a/src/app/dashboard/products/page.tsx b/src/app/dashboard/products/page.tsx
+index d050a661..30ccfbab 100644
+--- a/src/app/dashboard/products/page.tsx
++++ b/src/app/dashboard/products/page.tsx
+@@ -383,25 +383,6 @@ export default function StockRegisterPage() {
+         .stock-table { width: 100%; border-collapse: collapse; }
+         .stock-table tbody tr:last-child td { border-bottom: none; }
+         .stock-table tbody tr:hover td { background: var(--card-hover); }
+-        .btn {
+-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+-          color: white; border: none; transition: all 0.2s;
+-        }
+-        .btn:hover {
+-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+-          transform: translateY(-1px);
+-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+-        }
+-        .btn-outline {
+-          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
+-        }
+-        .btn-outline:hover {
+-          background: var(--card-hover);
+-          transform: translateY(-1px);
+-          box-shadow: none;
+-        }
+         .btn-icon {
+           background: transparent; border: 1.5px solid var(--border);
+           color: var(--text-muted); padding: 5px; border-radius: 6px;
+@@ -537,7 +518,7 @@ export default function StockRegisterPage() {
+       `}</style>
+ 
+       {/* Header: title left, Add Product right */}
+-      <div className="header-row">
++      <div className="oa-list-header">
+         <div className="title-area">
+           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
+             {isConstruction ? "🏗️ Units & Plots" : "📦 Stock Register"}
+@@ -549,7 +530,7 @@ export default function StockRegisterPage() {
+           </p>
+         </div>
+         {canEdit && (
+-          <button className="btn" onClick={() => router.push("/dashboard/products/new")}>
++          <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/products/new")}>
+             <Plus size={16} /> {isConstruction ? "Add Unit / Plot" : "Add Product"}
+           </button>
+         )}
+@@ -597,7 +578,7 @@ export default function StockRegisterPage() {
+             {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+           </select>
+           {categoryFilter && (
+-            <button className="btn btn-outline" onClick={() => { setCategoryFilter(""); setPage(1); }} style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
++            <button className="oa-btn oa-btn-outline" onClick={() => { setCategoryFilter(""); setPage(1); }} style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
+               Clear
+             </button>
+           )}
+@@ -801,8 +782,8 @@ export default function StockRegisterPage() {
+         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
+           <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
+           <div style={{ display: "flex", gap: 8 }}>
+-            <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+-            <button className="btn btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
++            <button className="oa-btn oa-btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
++            <button className="oa-btn oa-btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+           </div>
+         </div>
+       )}
+diff --git a/src/app/dashboard/receipts/page.tsx b/src/app/dashboard/receipts/page.tsx
+index dcd225be..45bfd27c 100644
+--- a/src/app/dashboard/receipts/page.tsx
++++ b/src/app/dashboard/receipts/page.tsx
+@@ -207,9 +207,6 @@ export default function ReceiptsPage() {
+         .rec-table { width: 100%; border-collapse: collapse; }
+         .rec-table tbody tr:last-child td { border-bottom: none; }
+         .rec-table tbody tr:hover td { background: var(--card-hover); }
+-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); transition: all 0.2s; }
+-        .btn:hover { background: var(--card-hover); }
+-        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
+         .btn-icon { background: transparent; border: 1.5px solid var(--border); color: var(--text-muted); padding: 5px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1; }
+         .btn-icon:hover { background: var(--card-hover); }
+         .search-input { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px 0 36px; font-size: 13px; background: var(--card); color: var(--text); outline: none; box-sizing: border-box; }
+@@ -246,13 +243,13 @@ export default function ReceiptsPage() {
+         }
+       `}</style>
+ 
+-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
++      <div className="oa-list-header">
+         <div>
+           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>💰 Receipts</h1>
+           <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{canEdit ? "Record customer payments" : "View receipts"}</p>
+         </div>
+         {canEdit && (
+-          <button className="btn btn-primary" onClick={() => router.push("/dashboard/receipts/new")}>
++          <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/receipts/new")}>
+             <Plus size={16} /> New Receipt
+           </button>
+         )}
+@@ -421,8 +418,8 @@ export default function ReceiptsPage() {
+               A reversing journal entry will be posted, and the customer balance and any invoices paid by this receipt will be restored. The original entry is kept for audit.
+             </p>
+             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+-              <button className="btn" onClick={() => setReverseTarget(null)} disabled={reversing}>Cancel</button>
+-              <button className="btn btn-primary" onClick={confirmReverse} disabled={reversing}>{reversing ? "Reversing..." : "Reverse Receipt"}</button>
++              <button className="oa-btn" onClick={() => setReverseTarget(null)} disabled={reversing}>Cancel</button>
++              <button className="oa-btn oa-btn-primary" onClick={confirmReverse} disabled={reversing}>{reversing ? "Reversing..." : "Reverse Receipt"}</button>
+             </div>
+           </div>
+         </div>
+diff --git a/src/app/dashboard/suppliers/page.tsx b/src/app/dashboard/suppliers/page.tsx
+index 328ba17b..e4c0b09a 100644
+--- a/src/app/dashboard/suppliers/page.tsx
++++ b/src/app/dashboard/suppliers/page.tsx
+@@ -344,25 +344,6 @@ export default function SuppliersPage() {
+         .sup-table { width: 100%; border-collapse: collapse; }
+         .sup-table tbody tr:last-child td { border-bottom: none; }
+         .sup-table tbody tr:hover td { background: var(--card-hover); }
+-        .btn {
+-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
+-          color: white; border: none; transition: all 0.2s;
+-        }
+-        .btn:hover {
+-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
+-          transform: translateY(-1px);
+-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
+-        }
+-        .btn-outline {
+-          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
+-        }
+-        .btn-outline:hover {
+-          background: var(--card-hover);
+-          transform: translateY(-1px);
+-          box-shadow: none;
+-        }
+         .btn-icon {
+           background: transparent; border: 1.5px solid var(--border);
+           color: var(--text-muted); padding: 5px; border-radius: 6px;
+@@ -429,6 +410,7 @@ export default function SuppliersPage() {
+           .header-row .title-area { margin-bottom: 8px; text-align: left; }
+           .header-row .actions { width: 100%; justify-content: space-between; }
+           .search-section { max-width: 100%; }
++          .search-section { flex-wrap: wrap !important; gap: 8px 16px !important; } .search-box { flex: 1 1 100% !important; max-width: 100% !important; } .summary-grid { grid-template-columns: 1fr 1fr; } .summary-item { padding: 12px; } .summary-value { font-size: 18px; overflow-wrap: anywhere; }
+         }
+ 
+         /* -- Mobile card list: hidden by default (desktop/tablet shows the table) -- */
+@@ -454,28 +436,28 @@ export default function SuppliersPage() {
+         }
+       `}</style>
+ 
+-      <div className="header-row">
++      <div className="oa-list-header">
+         <div className="title-area">
+           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Suppliers</h1>
+           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Manage your supplier accounts</p>
+         </div>
+-        <div className="actions">
++        <div className="oa-list-actions">
+           {showImportExport && (
+             <>
+-              <button className="btn btn-outline" onClick={downloadTemplate} title="Download CSV template">
++              <button className="oa-btn oa-btn-outline" onClick={downloadTemplate} title="Download CSV template">
+                 <FileText size={14} /> Template
+               </button>
+-              <label className="btn btn-outline" style={{ cursor: "pointer" }}>
++              <label className="oa-btn oa-btn-outline" style={{ cursor: "pointer" }}>
+                 <Upload size={14} /> Import
+                 <input type="file" accept=".csv" onChange={handleImport} ref={fileInputRef} style={{ display: "none" }} />
+               </label>
+-              <button className="btn btn-outline" onClick={handleExport} title="Export to CSV">
++              <button className="oa-btn oa-btn-outline" onClick={handleExport} title="Export to CSV">
+                 <Download size={14} /> Export
+               </button>
+             </>
+           )}
+           {canEdit && (
+-            <button className="btn" onClick={openNew}>
++            <button className="oa-btn oa-btn-primary" onClick={openNew}>
+               <Plus size={16} /> Add Supplier
+             </button>
+           )}
+@@ -494,7 +476,7 @@ export default function SuppliersPage() {
+       </div>
+ 
+       <div className="search-section" style={{ display: "flex", alignItems: "center", gap: 16, maxWidth: "none" }}>
+-        <div style={{ position: "relative", maxWidth: 320, flex: 1 }}>
++        <div className="search-box" style={{ position: "relative", maxWidth: 320, flex: 1 }}>
+           <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+           <input className="search-input" placeholder="Search by code, name, or phone..." value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+         </div>
+@@ -628,8 +610,8 @@ export default function SuppliersPage() {
+         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
+           <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
+           <div style={{ display: "flex", gap: 8 }}>
+-            <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+-            <button className="btn btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
++            <button className="oa-btn oa-btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
++            <button className="oa-btn oa-btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+           </div>
+         </div>
+       )}
+@@ -646,8 +628,8 @@ export default function SuppliersPage() {
+                 : `${confirmTarget.name} has no transaction history and can be safely deleted. This cannot be undone.`}
+             </p>
+             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+-              <button className="btn btn-outline" onClick={() => setConfirmTarget(null)}>Cancel</button>
+-              <button className="btn" onClick={confirmArchiveOrDelete}>Confirm</button>
++              <button className="oa-btn oa-btn-outline" onClick={() => setConfirmTarget(null)}>Cancel</button>
++              <button className="oa-btn oa-btn-primary" onClick={confirmArchiveOrDelete}>Confirm</button>
+             </div>
+           </div>
+         </div>
+diff --git a/src/app/globals.css b/src/app/globals.css
+index f41160f9..b5987138 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -243,3 +243,41 @@ body {
+   background: var(--bg-soft);
+   border: 1px solid var(--border-strong);
+ }
++
++
++/* ── STANDARD LIST-PAGE BUTTONS & HEADER (shared; used by the list pages) ── */
++.oa-btn {
++  padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
++  line-height: 1.2; font-family: inherit; white-space: nowrap; cursor: pointer;
++  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
++  background: transparent; color: var(--text-muted);
++  border: 1.5px solid var(--border); transition: all 0.2s;
++}
++.oa-btn:hover { background: var(--card-hover); }
++.oa-btn:disabled { opacity: 0.55; cursor: not-allowed; }
++.oa-btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
++.oa-btn.oa-btn-primary {
++  background: var(--primary);
++  background: linear-gradient(135deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 35%, #000) 100%);
++  color: var(--primary-text); border-color: transparent;
++}
++.oa-btn.oa-btn-primary:hover {
++  filter: brightness(1.12); transform: translateY(-1px);
++  box-shadow: 0 6px 20px rgba(7, 19, 82, 0.35);
++}
++.oa-btn.oa-btn-primary:disabled { transform: none; box-shadow: none; filter: none; }
++
++.oa-list-header {
++  display: flex; justify-content: space-between; align-items: center;
++  margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
++}
++.oa-list-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
++
++@media (max-width: 640px) {
++  .oa-list-header { flex-direction: column; align-items: stretch; gap: 12px; }
++  .oa-list-actions { width: 100%; }
++  .oa-list-header > .oa-btn,
++  .oa-list-actions > .oa-btn { flex: 1 1 0; min-height: 40px; }
++  .oa-list-header > .oa-btn.oa-btn-primary { flex: 1 1 100%; }
++  .oa-list-actions > .oa-btn.oa-btn-primary { order: -1; flex: 1 1 100%; }
++}
+diff --git a/src/components/CustomerVendorLink.tsx b/src/components/CustomerVendorLink.tsx
+index ae0b12ed..1eae7391 100644
+--- a/src/components/CustomerVendorLink.tsx
++++ b/src/components/CustomerVendorLink.tsx
+@@ -232,7 +232,7 @@ export default function CustomerVendorLink({ partyType, party, companyId, counte
+               <div style={{ background: "rgba(245,158,11,0.1)", border: "1px solid #F59E0B", borderRadius: 8, padding: "10px 12px", marginBottom: 12, fontSize: 12.5, color: "var(--text)" }}>
+                 Possible match found: <b>{suggestedMatch.name}</b> {suggestedMatch.phone ? `(${suggestedMatch.phone})` : ""}. Same business/person?
+                 <div style={{ marginTop: 8 }}>
+-                  <button className="btn" style={{ fontSize: 12, padding: "5px 10px" }} disabled={busy} onClick={() => doLink(suggestedMatch.id)}>Yes, Link</button>
++                  <button className="oa-btn oa-btn-primary" style={{ fontSize: 12, padding: "5px 10px" }} disabled={busy} onClick={() => doLink(suggestedMatch.id)}>Yes, Link</button>
+                 </div>
+               </div>
+             )}
+@@ -252,7 +252,7 @@ export default function CustomerVendorLink({ partyType, party, companyId, counte
+                       <div style={{ fontSize: 13, fontWeight: 600 }}>{c.name}</div>
+                       <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{c.phone || "-"}</div>
+                     </div>
+-                    <button className="btn btn-outline" style={{ fontSize: 12, padding: "4px 10px" }} disabled={busy} onClick={() => doLink(c.id)}>Link</button>
++                    <button className="oa-btn oa-btn-outline" style={{ fontSize: 12, padding: "4px 10px" }} disabled={busy} onClick={() => doLink(c.id)}>Link</button>
+                   </div>
+                 ))
+               )}
+@@ -290,10 +290,10 @@ export default function CustomerVendorLink({ partyType, party, companyId, counte
+             </div>
+ 
+             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+-              <button className="btn" style={{ flex: 1 }} disabled={busy || !canSettle} onClick={doSettle}>
++              <button className="oa-btn oa-btn-primary" style={{ flex: 1 }} disabled={busy || !canSettle} onClick={doSettle}>
+                 {canSettle ? `Settle Full Amount (PKR ${Math.min(customerBalance, supplierBalance).toLocaleString()})` : "Nothing to settle"}
+               </button>
+-              <button className="btn btn-outline" disabled={busy} onClick={doUnlink}>Unlink</button>
++              <button className="oa-btn oa-btn-outline" disabled={busy} onClick={doUnlink}>Unlink</button>
+             </div>
+ 
+             {error && <div style={{ color: "#EF4444", fontSize: 12, marginBottom: 10 }}>{error}</div>}
+@@ -312,7 +312,7 @@ export default function CustomerVendorLink({ partyType, party, companyId, counte
+                       <div style={{ color: "var(--text-muted)" }}>{h.status === "reversed" ? "Reversed" : "Posted"}</div>
+                     </div>
+                     {h.status === "posted" && (
+-                      <button className="btn btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} disabled={busy} onClick={() => doUndo(h.id)}>Undo</button>
++                      <button className="oa-btn oa-btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} disabled={busy} onClick={() => doUndo(h.id)}>Undo</button>
+                     )}
+                   </div>
+                 ))

@@ -383,25 +383,6 @@ export default function StockRegisterPage() {
         .stock-table { width: 100%; border-collapse: collapse; }
         .stock-table tbody tr:last-child td { border-bottom: none; }
         .stock-table tbody tr:hover td { background: var(--card-hover); }
-        .btn {
-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-          color: white; border: none; transition: all 0.2s;
-        }
-        .btn:hover {
-          background: linear-gradient(135deg, #1E55E8 0%, #0F2280 100%);
-          transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(7,19,82,0.45);
-        }
-        .btn-outline {
-          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
-        }
-        .btn-outline:hover {
-          background: var(--card-hover);
-          transform: translateY(-1px);
-          box-shadow: none;
-        }
         .btn-icon {
           background: transparent; border: 1.5px solid var(--border);
           color: var(--text-muted); padding: 5px; border-radius: 6px;
@@ -537,7 +518,7 @@ export default function StockRegisterPage() {
       `}</style>
 
       {/* Header: title left, Add Product right */}
-      <div className="header-row">
+      <div className="oa-list-header">
         <div className="title-area">
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
             {isConstruction ? "🏗️ Units & Plots" : "📦 Stock Register"}
@@ -549,7 +530,7 @@ export default function StockRegisterPage() {
           </p>
         </div>
         {canEdit && (
-          <button className="btn" onClick={() => router.push("/dashboard/products/new")}>
+          <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/products/new")}>
             <Plus size={16} /> {isConstruction ? "Add Unit / Plot" : "Add Product"}
           </button>
         )}
@@ -597,7 +578,7 @@ export default function StockRegisterPage() {
             {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
           </select>
           {categoryFilter && (
-            <button className="btn btn-outline" onClick={() => { setCategoryFilter(""); setPage(1); }} style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
+            <button className="oa-btn oa-btn-outline" onClick={() => { setCategoryFilter(""); setPage(1); }} style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
               Clear
             </button>
           )}
@@ -801,8 +782,8 @@ export default function StockRegisterPage() {
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
           <span>Showing {Math.min(pageSize, total - (page-1)*pageSize)} of {total}</span>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
-            <button className="btn btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+            <button className="oa-btn oa-btn-outline" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+            <button className="oa-btn oa-btn-outline" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
           </div>
         </div>
       )}

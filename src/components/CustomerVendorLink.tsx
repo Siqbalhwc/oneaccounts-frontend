@@ -232,7 +232,7 @@ export default function CustomerVendorLink({ partyType, party, companyId, counte
               <div style={{ background: "rgba(245,158,11,0.1)", border: "1px solid #F59E0B", borderRadius: 8, padding: "10px 12px", marginBottom: 12, fontSize: 12.5, color: "var(--text)" }}>
                 Possible match found: <b>{suggestedMatch.name}</b> {suggestedMatch.phone ? `(${suggestedMatch.phone})` : ""}. Same business/person?
                 <div style={{ marginTop: 8 }}>
-                  <button className="btn" style={{ fontSize: 12, padding: "5px 10px" }} disabled={busy} onClick={() => doLink(suggestedMatch.id)}>Yes, Link</button>
+                  <button className="oa-btn oa-btn-primary" style={{ fontSize: 12, padding: "5px 10px" }} disabled={busy} onClick={() => doLink(suggestedMatch.id)}>Yes, Link</button>
                 </div>
               </div>
             )}
@@ -252,7 +252,7 @@ export default function CustomerVendorLink({ partyType, party, companyId, counte
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{c.name}</div>
                       <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{c.phone || "-"}</div>
                     </div>
-                    <button className="btn btn-outline" style={{ fontSize: 12, padding: "4px 10px" }} disabled={busy} onClick={() => doLink(c.id)}>Link</button>
+                    <button className="oa-btn oa-btn-outline" style={{ fontSize: 12, padding: "4px 10px" }} disabled={busy} onClick={() => doLink(c.id)}>Link</button>
                   </div>
                 ))
               )}
@@ -290,10 +290,10 @@ export default function CustomerVendorLink({ partyType, party, companyId, counte
             </div>
 
             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-              <button className="btn" style={{ flex: 1 }} disabled={busy || !canSettle} onClick={doSettle}>
+              <button className="oa-btn oa-btn-primary" style={{ flex: 1 }} disabled={busy || !canSettle} onClick={doSettle}>
                 {canSettle ? `Settle Full Amount (PKR ${Math.min(customerBalance, supplierBalance).toLocaleString()})` : "Nothing to settle"}
               </button>
-              <button className="btn btn-outline" disabled={busy} onClick={doUnlink}>Unlink</button>
+              <button className="oa-btn oa-btn-outline" disabled={busy} onClick={doUnlink}>Unlink</button>
             </div>
 
             {error && <div style={{ color: "#EF4444", fontSize: 12, marginBottom: 10 }}>{error}</div>}
@@ -312,7 +312,7 @@ export default function CustomerVendorLink({ partyType, party, companyId, counte
                       <div style={{ color: "var(--text-muted)" }}>{h.status === "reversed" ? "Reversed" : "Posted"}</div>
                     </div>
                     {h.status === "posted" && (
-                      <button className="btn btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} disabled={busy} onClick={() => doUndo(h.id)}>Undo</button>
+                      <button className="oa-btn oa-btn-outline" style={{ fontSize: 11, padding: "3px 8px" }} disabled={busy} onClick={() => doUndo(h.id)}>Undo</button>
                     )}
                   </div>
                 ))
