@@ -98,7 +98,7 @@ export default function NewBankAccountPage() {
   if (!companyId) return <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading company data…</div>
 
   return (
-    <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
+    <div className="page-wrap" style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
         .form-card {
           background: var(--card); border: 1px solid var(--border); border-radius: 12px;
@@ -115,17 +115,6 @@ export default function NewBankAccountPage() {
           font-family: inherit; background: var(--bg); color: var(--text);
         }
         .input:focus, .select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
-        .btn {
-          padding: 10px 20px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600;
-          font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-        }
-        .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
-        .btn-outline:hover { background: var(--card-hover); }
-        .btn-primary {
-          background: var(--primary); color: var(--primary-text); border-color: var(--primary);
-          box-shadow: 0 4px 12px rgba(37,99,235,0.3);
-        }
-        .btn-primary:hover { background: var(--primary-hover); }
         .inline-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
         .layout {
@@ -140,11 +129,30 @@ export default function NewBankAccountPage() {
           .layout { flex-direction: column; }
           .summary-side { width: 100%; }
         }
+
+        /* Mobile save bar: hidden on desktop, sticky to the bottom on mobile (same as New Customer) */
+        .mobile-save-bar { display: none; }
+        @media (max-width: 860px) {
+          .summary-side .desktop-save { display: none; }
+          .mobile-save-bar {
+            display: flex; position: sticky; bottom: 0; background: var(--card);
+            border-top: 1px solid var(--border); padding: 10px 0; margin-top: 16px; z-index: 50;
+          }
+          .mobile-save-bar .oa-btn { width: 100%; min-height: 44px; }
+        }
+        @media (max-width: 600px) {
+          .page-wrap { padding: 12px !important; }
+          .inline-group { grid-template-columns: 1fr; }
+          .form-card { padding: 16px; }
+          .mobile-save-bar { margin-left: -12px; margin-right: -12px; padding: 10px 12px; }
+          /* 16px stops iOS Safari auto-zooming the page when a field is tapped */
+          .input, .select { font-size: 16px; }
+        }
       `}</style>
 
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-          <button className="btn btn-outline" onClick={() => router.push("/dashboard/banking/bank-accounts")}><ArrowLeft size={16} /></button>
+          <button className="oa-btn oa-btn-outline" style={{ padding: "6px 12px" }} onClick={() => router.push("/dashboard/banking/bank-accounts")}><ArrowLeft size={16} /></button>
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 800, color: "var(--text)", margin: 0 }}>➕ New Bank Account</h1>
             <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Link a GL account with bank details</p>
@@ -209,15 +217,22 @@ export default function NewBankAccountPage() {
               </div>
             </div>
 
+            <div className="desktop-save">
             <button
-              className="btn btn-primary"
+              className="oa-btn oa-btn-primary"
               style={{ width: "100%", justifyContent: "center", marginTop: 16 }}
               onClick={handleSubmit}
               disabled={loading}
             >
               {loading ? "Saving..." : <> <Plus size={16} /> Create Bank Account </>}
             </button>
+            </div>
           </div>
+        </div>
+        <div className="mobile-save-bar">
+          <button className="oa-btn oa-btn-primary" style={{ justifyContent: "center" }} onClick={handleSubmit} disabled={loading}>
+            {loading ? "Saving..." : <> <Plus size={16} /> Create Bank Account </>}
+          </button>
         </div>
       </div>
     </div>
