@@ -248,7 +248,7 @@ body {
 /* ── STANDARD LIST-PAGE BUTTONS & HEADER (shared; used by the list pages) ── */
 .oa-btn {
   padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-  line-height: 1.2; font-family: inherit; white-space: nowrap; cursor: pointer;
+  line-height: 1.2; font-family: inherit; white-space: nowrap; cursor: pointer; text-decoration: none;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   background: transparent; color: var(--text-muted);
   border: 1.5px solid var(--border); transition: all 0.2s;
@@ -307,4 +307,25 @@ body {
   [class$="-card-amt"], [class$="-card-amount"], [class$="-card-balance"], [class$="-card-closing"] {
     white-space: nowrap; flex-shrink: 0;
   }
+}
+
+/* ── STANDARD DETAIL-PAGE HEADER & ACTION BUTTONS ── */
+.oa-btn.oa-btn-whatsapp { background: #25D366; color: #fff; border-color: #25D366; }
+.oa-btn.oa-btn-whatsapp:hover { background: #22C55E; }
+.oa-btn.oa-btn-warning { background: #F97316; color: #fff; border-color: #F97316; }
+.oa-btn.oa-btn-warning:hover { background: #EA580C; }
+
+.oa-detail-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+}
+.oa-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+@media (max-width: 640px) {
+  .oa-detail-header { flex-direction: column; align-items: stretch; gap: 12px; }
+  .oa-detail-actions { width: 100%; }
+  .oa-detail-actions > .oa-btn { flex: 1 1 calc(50% - 4px); min-height: 40px; }
+  /* the one main (filled) action goes first and takes the full row */
+  .oa-detail-actions > .oa-btn.oa-btn-primary { flex-basis: 100%; order: -1; }
+  .oa-detail-actions > [class*="badge"] { flex: 1 1 100%; justify-content: center; text-align: center; }
 }

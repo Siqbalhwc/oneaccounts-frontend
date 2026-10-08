@@ -4,7 +4,7 @@ import { fmtQty } from "@/lib/format-number"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, FileText, Download, CheckCircle, Printer } from "lucide-react"
+import { ArrowLeft, FileText, Download, CheckCircle, Printer, Pencil } from "lucide-react"
 import RecordHistory from "@/components/RecordHistory"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
@@ -183,11 +183,6 @@ export default function PurchaseOrderDetailPage() {
         th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
         tr:hover td { background: var(--card-hover); }
-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; text-decoration: none; }
-        .btn:hover { background: var(--card-hover); }
-        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
-        .btn-warning { background: #F97316; color: white; border-color: #F97316; }
-        .btn-warning:hover { background: #EA580C; }
         .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; }
         .badge-draft { background: #FEF3C7; color: #92400E; }
         .badge-approved { background: #D1FAE5; color: #065F46; }
@@ -200,9 +195,9 @@ export default function PurchaseOrderDetailPage() {
         }
       `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+      <div className="oa-detail-header">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="btn" onClick={() => router.push("/dashboard/purchase-orders")}>
+          <button className="oa-btn" onClick={() => router.push("/dashboard/purchase-orders")}>
             <ArrowLeft size={16} />
           </button>
           <div>
@@ -210,19 +205,19 @@ export default function PurchaseOrderDetailPage() {
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{supplierName || "Unknown Supplier"}</p>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {po.status === "Draft" && (
-            <button className="btn" onClick={() => router.push(`/dashboard/purchase-orders/new?id=${po.id}`)}>
-              ✏️ Edit
-            </button>
-          )}
+        <div className="oa-detail-actions">
           {canApprove && po.status === "Draft" && (
-            <button className="btn btn-warning" onClick={handleApprove} disabled={approving}>
+            <button className="oa-btn oa-btn-primary" onClick={handleApprove} disabled={approving}>
               <CheckCircle size={14} /> {approving ? "Approving..." : "Approve"}
             </button>
           )}
-          <button className="btn btn-primary" onClick={handlePrintPDF}>
-            <Printer size={14} /> Print
+          {po.status === "Draft" && (
+            <button className="oa-btn" onClick={() => router.push(`/dashboard/purchase-orders/new?id=${po.id}`)}>
+              <Pencil size={14} /> Edit
+            </button>
+          )}
+          <button className="oa-btn" onClick={handlePrintPDF}>
+            <Printer size={14} /> PDF
           </button>
         </div>
       </div>

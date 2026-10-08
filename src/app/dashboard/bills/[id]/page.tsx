@@ -4,7 +4,7 @@ import { fmtQty } from "@/lib/format-number"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Printer, Send, Package, Eye, Paperclip, FileText } from "lucide-react"
+import { ArrowLeft, Printer, Send, Package, Eye, Paperclip, FileText, Pencil, Undo2 } from "lucide-react"
 import { generateBillPDF } from "@/lib/pdf/billPDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
@@ -259,12 +259,6 @@ export default function BillDetailPage() {
         th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
         tr:hover td { background: var(--card-hover); }
-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; text-decoration: none; }
-        .btn:hover { background: var(--card-hover); }
-        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
-        .btn-primary:hover { background: var(--primary-hover); }
-        .btn-success { background: #25D366; color: white; border-color: #25D366; }
-        .btn-success:hover { background: #22C55E; }
         .badge-returned { background: #1D4ED8; color: #DBEAFE; padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; }
         .btn-asset { color: var(--primary); border-color: var(--primary); padding: 4px 10px; font-size: 11px; }
         .btn-asset:hover { background: var(--primary); color: var(--primary-text); }
@@ -289,9 +283,9 @@ export default function BillDetailPage() {
         }
       `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+      <div className="oa-detail-header">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="btn" onClick={() => router.push("/dashboard/bills")}>
+          <button className="oa-btn" onClick={() => router.push("/dashboard/bills")}>
             <ArrowLeft size={16} />
           </button>
           <div>
@@ -299,25 +293,25 @@ export default function BillDetailPage() {
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{bill.supplier?.name || "Unknown Supplier"}</p>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="oa-detail-actions">
           {!isReturned && (
-            <button className="btn" onClick={() => router.push(`/dashboard/bills/new?id=${bill.id}`)}>
-              ✏️ Edit
+            <button className="oa-btn" onClick={() => router.push(`/dashboard/bills/new?id=${bill.id}`)}>
+              <Pencil size={14} /> Edit
             </button>
           )}
           {!isReturned && canReturn && (
-            <button className="btn" onClick={() => setShowReturn(true)} title="Fully reverse this bill">
-              ↩️ Return
+            <button className="oa-btn" onClick={() => setShowReturn(true)} title="Fully reverse this bill">
+              <Undo2 size={14} /> Return
             </button>
           )}
-          {isReturned && <span className="badge-returned">↩️ Returned</span>}
+          {isReturned && <span className="badge-returned">Returned</span>}
           {waLink && hasFeature("whatsapp_invoice") && (
-            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
-              <Send size={16} /> WhatsApp
+            <a href={waLink} target="_blank" rel="noopener noreferrer" className="oa-btn oa-btn-whatsapp">
+              <Send size={14} /> WhatsApp
             </a>
           )}
-          <button className="btn btn-primary" onClick={handlePrintPDF}>
-            <Printer size={16} /> Print PDF
+          <button className="oa-btn" onClick={handlePrintPDF}>
+            <Printer size={14} /> PDF
           </button>
         </div>
       </div>
@@ -399,7 +393,7 @@ export default function BillDetailPage() {
                       <td style={{ textAlign: "center" }}>
                         {item.asset_id ? (
                           <button
-                            className="btn btn-view-asset"
+                            className="oa-btn btn-view-asset"
                             onClick={() => router.push(`/dashboard/assets/${item.asset_id}`)}
                             title="View linked asset"
                           >
@@ -407,7 +401,7 @@ export default function BillDetailPage() {
                           </button>
                         ) : isReturned ? null : (
                           <button
-                            className="btn btn-asset"
+                            className="oa-btn btn-asset"
                             onClick={() => router.push(`/dashboard/assets/new?billId=${bill.id}&itemId=${item.id}`)}
                             title="Create a fixed asset from this purchase"
                           >

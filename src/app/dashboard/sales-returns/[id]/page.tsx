@@ -202,8 +202,6 @@ export default function SalesReturnDetailPage() {
         th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
         tr:hover td { background: var(--card-hover); }
-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; text-decoration: none; }
-        .btn:hover { background: var(--card-hover); }
         .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; }
         .badge-return { background: #065F46; color: #6EE7B7; }
         .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
@@ -213,9 +211,9 @@ export default function SalesReturnDetailPage() {
         }
       `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+      <div className="oa-detail-header">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="btn" onClick={() => router.push("/dashboard/sales-returns")}>
+          <button className="oa-btn" onClick={() => router.push("/dashboard/sales-returns")}>
             <ArrowLeft size={16} />
           </button>
           <div>
@@ -223,8 +221,8 @@ export default function SalesReturnDetailPage() {
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{ret.customer?.name || "Unknown Customer"}</p>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" onClick={() => window.print()}><Printer size={14} /> Print</button>
+        <div className="oa-detail-actions">
+          <button className="oa-btn" onClick={() => window.print()}><Printer size={14} /> Print</button>
         </div>
       </div>
 

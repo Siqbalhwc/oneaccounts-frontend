@@ -202,15 +202,6 @@ export default function ReceiptDetailPage() {
         .grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         .label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
         .value { font-size: 14px; font-weight: 500; color: var(--text); }
-        .btn {
-          padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
-          display: inline-flex; align-items: center; gap: 6px; transition: 0.2s;
-          border: 1.5px solid var(--border); background: transparent; color: var(--text-muted);
-          font-family: inherit; text-decoration: none;
-        }
-        .btn:hover { background: var(--card-hover); }
-        .btn-success { background: #25D366; color: white; border-color: #25D366; }
-        .btn-success:hover { background: #22C55E; }
         table { width: 100%; border-collapse: collapse; margin-top: 12px; }
         th { text-align: left; padding: 10px 12px; background: var(--card); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid var(--border); }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
@@ -224,9 +215,9 @@ export default function ReceiptDetailPage() {
       `}</style>
 
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+      <div className="oa-detail-header">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="btn" onClick={() => router.push("/dashboard/receipts")}>
+          <button className="oa-btn" onClick={() => router.push("/dashboard/receipts")}>
             <ArrowLeft size={16} />
           </button>
           <div>
@@ -234,13 +225,13 @@ export default function ReceiptDetailPage() {
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{customer?.name || "Unknown Customer"}</p>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" onClick={handlePDF}><Printer size={14} /> PDF</button>
+        <div className="oa-detail-actions">
           {waLink && hasFeature("whatsapp_invoice") && (
-            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
+            <a href={waLink} target="_blank" rel="noopener noreferrer" className="oa-btn oa-btn-whatsapp">
               <Send size={14} /> WhatsApp
             </a>
           )}
+          <button className="oa-btn" onClick={handlePDF}><Printer size={14} /> PDF</button>
         </div>
       </div>
 

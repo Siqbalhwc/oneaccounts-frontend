@@ -6,7 +6,7 @@ import CurrencyTag from "@/components/CurrencyTag"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Printer, Send } from "lucide-react"
+import { ArrowLeft, Printer, Send, Pencil, Undo2, Wallet } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
@@ -242,12 +242,6 @@ export default function CashSaleDetailPage() {
         th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); white-space: nowrap; }
         td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
         tr:hover td { background: var(--card-hover); }
-        .btn { padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: 0.2s; border: 1.5px solid var(--border); background: transparent; color: var(--text-muted); font-family: inherit; text-decoration: none; }
-        .btn:hover { background: var(--card-hover); }
-        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
-        .btn-primary:hover { background: var(--primary-hover); }
-        .btn-success { background: #25D366; color: white; border-color: #25D366; }
-        .btn-success:hover { background: #22C55E; }
         .badge-returned { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: #1D4ED8; color: #DBEAFE; }
         .badge-paid { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: #065F46; color: #6EE7B7; }
         .badge-partial { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; background: #92400E; color: #FDE68A; }
@@ -261,28 +255,28 @@ export default function CashSaleDetailPage() {
         }
       `}</style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+      <div className="oa-detail-header">
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="btn" onClick={() => router.push("/dashboard/cash-sales")}><ArrowLeft size={16} /></button>
+          <button className="oa-btn" onClick={() => router.push("/dashboard/cash-sales")}><ArrowLeft size={16} /></button>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Cash Sale #{sale.sale_no}</h1>
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{sale.customer?.name || "Walk‑in Customer"}</p>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {!isReturned && <button className="btn" onClick={() => router.push(`/dashboard/cash-sales/new?id=${sale.id}`)}>✏️ Edit</button>}
+        <div className="oa-detail-actions">
           {!isReturned && dueAmount > 0 && (
-            <button className="btn btn-primary" onClick={() => setBalanceModal({ mode: "receive" })}>💰 Receive Balance</button>
+            <button className="oa-btn oa-btn-primary" onClick={() => setBalanceModal({ mode: "receive" })}><Wallet size={14} /> Receive Balance</button>
           )}
-          {!isReturned && canReturn && <button className="btn" onClick={() => setShowReturn(true)} title="Fully reverse this cash sale">↩️ Return</button>}
-          {isReturned && <span className="badge-returned">↩️ Returned</span>}
+          {!isReturned && <button className="oa-btn" onClick={() => router.push(`/dashboard/cash-sales/new?id=${sale.id}`)}><Pencil size={14} /> Edit</button>}
+          {!isReturned && canReturn && <button className="oa-btn" onClick={() => setShowReturn(true)} title="Fully reverse this cash sale"><Undo2 size={14} /> Return</button>}
+          {isReturned && <span className="badge-returned">Returned</span>}
           {waLink && hasFeature("whatsapp_invoice") && (
-            <a href={waLink} target="_blank" rel="noopener noreferrer" className="btn btn-success">
+            <a href={waLink} target="_blank" rel="noopener noreferrer" className="oa-btn oa-btn-whatsapp">
               <Send size={14} /> WhatsApp
             </a>
           )}
-          <button className="btn btn-primary" onClick={handlePrintPDF}>
-            <Printer size={14} /> Print PDF
+          <button className="oa-btn" onClick={handlePrintPDF}>
+            <Printer size={14} /> PDF
           </button>
         </div>
       </div>
@@ -415,7 +409,7 @@ export default function CashSaleDetailPage() {
                     <td className="hide-mobile" style={{ textAlign: "right" }}>
                       {p.status !== "reversed" && !isReturned && (
                         <button
-                          className="btn"
+                          className="oa-btn"
                           style={{ padding: "4px 10px", fontSize: 12 }}
                           onClick={() => setBalanceModal({ mode: "edit", payment: p })}
                         >

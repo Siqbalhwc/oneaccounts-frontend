@@ -131,21 +131,11 @@ export default function JournalDetailPage() {
           th { text-align: left; padding: 10px 12px; background: var(--card-hover); font-weight: 700; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
           td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
           tr:hover td { background: var(--card-hover); }
-          .btn {
-            display: inline-flex; align-items: center; gap: 6px;
-            padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
-            cursor: pointer; border: 1.5px solid var(--border); background: transparent;
-            color: var(--text-muted); font-family: inherit; transition: all 0.15s;
-            text-decoration: none;
-          }
-          .btn:hover { background: var(--card-hover); }
-          .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
-          .btn-primary:hover { background: var(--primary-hover); }
           .record-history { background: var(--bg-soft); border-radius: 8px; padding: 8px; }
         `}</style>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-          <button className="btn" onClick={() => router.push("/dashboard/journal")}>
+          <button className="oa-btn" onClick={() => router.push("/dashboard/journal")}>
             <ArrowLeft size={16} />
           </button>
           <div style={{ flex: 1 }}>
@@ -153,7 +143,7 @@ export default function JournalDetailPage() {
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>{entry.entry_no}</p>
           </div>
           {sourceLink && (
-            <a href={sourceLink} target="_blank" rel="noopener noreferrer" className="btn">
+            <a href={sourceLink} target="_blank" rel="noopener noreferrer" className="oa-btn">
               <ExternalLink size={14} /> View Source Document
             </a>
           )}
