@@ -226,6 +226,37 @@ export default function BudgetsPage() {
     fetchStatus()
   }, [companyId, selectedProjectId, fiscalYear])
 
+  // -- Budget year follows the project (project-period budgeting) --
+  // A project's budget is saved under ONE year tag. Always load and save under
+  // that year, so a new calendar year never shows an empty budget or creates
+  // a second set of rows that the database check would add up (double count).
+  useEffect(() => {
+    if (!companyId || !selectedProjectId) return
+    let cancelled = false
+    async function pickBudgetYear() {
+      const { data: rows } = await supabase
+        .from("budgets")
+        .select("fiscal_year")
+        .eq("company_id", companyId)
+        .eq("project_id", Number(selectedProjectId))
+        .is("month", null)
+        .order("fiscal_year", { ascending: true })
+        .limit(1)
+      if (cancelled) return
+      if (rows && rows.length > 0 && rows[0].fiscal_year) {
+        setFiscalYear(Number(rows[0].fiscal_year))
+        return
+      }
+      const project = projects.find(p => p.id == selectedProjectId)
+      if (project?.start_date) {
+        const y = new Date(project.start_date).getFullYear()
+        if (!isNaN(y)) setFiscalYear(y)
+      }
+    }
+    pickBudgetYear()
+    return () => { cancelled = true }
+  }, [companyId, selectedProjectId, projects])
+
   // -- Reset overrides --
   useEffect(() => {
     setMonthBudgetOverrides({})
@@ -898,8 +929,8 @@ export default function BudgetsPage() {
         {/* ------- Row 2: Filters (Year, Project, Activities, Locations, GL/Month, Excel, PDF right-aligned) ------- */}
         <div className="filter-bar" style={{ justifyContent: "space-between" }}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <select className="filter-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
-              {[2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
+            <select className="filter-select" value={fiscalYear} disabled title="A project's budget year is fixed when its budget is first saved" onChange={() => {}}>
+              <option value={fiscalYear}>Budget year {fiscalYear}</option>
             </select>
             <select className="filter-select" value={selectedProjectId} onChange={e => { setSelectedProjectId(e.target.value); setFilterActivityId("") }}>
               <option value="">-- Select Project --</option>

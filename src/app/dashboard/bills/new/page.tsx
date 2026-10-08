@@ -111,7 +111,7 @@ export default function NewBillPage() {
 
   const [inputTaxCodes, setInputTaxCodes] = useState<any[]>([])
 
-  const fiscalYear = new Date().getFullYear()
+  // Budget lookups are project-period based (no fiscal-year filter), same as the database check.
 
   const budgetKey = (actId: number, locId: number | null, accId: number) =>
     `${actId}_${locId ?? "none"}_${accId}`
@@ -169,7 +169,7 @@ export default function NewBillPage() {
       supabase.from("budgets")
         .select("location_id, activity_id, account_id")
         .eq("company_id", cid)
-        .eq("fiscal_year", fiscalYear)
+        // (no fiscal_year filter - budget covers the whole project period)
         .is("month", null)
         .then(({ data: budgetRows }) => {
           const actMap: Record<number, Set<number>> = {}
@@ -495,7 +495,7 @@ export default function NewBillPage() {
       .eq("company_id", companyId)
       .eq("location_id", locId)
       .eq("activity_id", actId)
-      .eq("fiscal_year", fiscalYear)
+      // (no fiscal_year filter - budget covers the whole project period)
       .is("month", null)
 
     if (!rows || rows.length === 0) {
@@ -540,13 +540,13 @@ export default function NewBillPage() {
         .eq("company_id", companyId)
         .eq("activity_id", activityId)
         .eq("account_id", accountId)
-        .eq("fiscal_year", fiscalYear)
+        // (no fiscal_year filter - budget covers the whole project period)
         .is("month", null)
 
       if (locationId) budgetQuery = budgetQuery.eq("location_id", locationId)
       else budgetQuery = budgetQuery.is("location_id", null)
 
-      const { data: budgetRow } = await budgetQuery.maybeSingle()
+      const { data: budgetRows } = await budgetQuery
 
       let spentQuery = supabase.from("journal_lines")
         .select("debit, credit, source_type, source_id")
@@ -568,9 +568,9 @@ export default function NewBillPage() {
           (sum: number, line: any) => sum + (line.debit || 0) - (line.credit || 0),
           0
         )
-      const budget = budgetRow?.budgeted_amount || 0
+      const budget = (budgetRows || []).reduce((s: number, r: any) => s + (Number(r.budgeted_amount) || 0), 0)
       const available = budget - actualSpent
-      const result = { budget, spent: actualSpent, available, hasBudget: budgetRow !== null }
+      const result = { budget, spent: actualSpent, available, hasBudget: !!budgetRows && budgetRows.length > 0 }
 
       setBudgetInfo(prev => ({ ...prev, [key]: result }))
       return result
@@ -578,7 +578,7 @@ export default function NewBillPage() {
       console.error("fetchBudget error:", err)
       return null
     }
-  }, [companyId, budgetInfo, fiscalYear, supabase])
+  }, [companyId, budgetInfo, supabase])
 
   const getLineSoftAvailable = (item: any, bdata: ReturnType<typeof getLineBudgetData>) => {
     if (!bdata) return null
