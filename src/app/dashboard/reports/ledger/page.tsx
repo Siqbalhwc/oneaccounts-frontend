@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Printer } from "lucide-react"
+import { ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Printer, Download } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { useCompany } from "@/contexts/CompanyContext"
 import { generateGeneralLedgerPDF } from "@/lib/pdf/generalLedgerPDF"
@@ -168,9 +168,6 @@ export default function LedgerPage() {
         .sort-btn:hover { color: var(--primary); }
         .date-input { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text); outline: none; font-family: inherit; width: 140px; }
         .date-input:focus { border-color: var(--primary); }
-        .btn { padding: 8px 16px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-        .btn-outline { background: transparent; color: var(--text-muted); border-color: var(--border); }
-        .btn-outline:hover { background: var(--card-hover); }
         .account-select { height: 34px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 10px; font-size: 12px; background: var(--card); color: var(--text); outline: none; font-family: inherit; min-width: 200px; }
         .account-select:focus { border-color: var(--primary); }
         @media (max-width: 640px) { .ledger-header, .ledger-row { grid-template-columns: 70px 90px 1fr 80px 80px 100px; } }
@@ -178,7 +175,7 @@ export default function LedgerPage() {
 
       {/* ── Toolbar ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-        <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}><ArrowLeft size={16} /></button>
+        <button className="oa-btn oa-btn-outline" onClick={() => router.push("/dashboard/reports")}><ArrowLeft size={16} /></button>
         <div style={{ flex: 1, minWidth: 200 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📒 General Ledger</h1>
           <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>Full transaction history for a selected account</p>
@@ -191,8 +188,10 @@ export default function LedgerPage() {
           <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
           <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
           <input type="date" className="date-input" value={endDate}   onChange={e => setEndDate(e.target.value)} />
-          <button className="btn btn-outline" onClick={fetchLedger}>Refresh</button>
-          <button className="btn btn-outline" onClick={handlePrintPDF}><Printer size={16} /> PDF</button>
+          <div className="oa-export-group">
+          <button className="oa-btn oa-btn-outline" onClick={fetchLedger}>Refresh</button>
+          <button className="oa-btn oa-btn-outline" onClick={handlePrintPDF}><Download size={14} /> PDF</button>
+        </div>
         </div>
       </div>
 

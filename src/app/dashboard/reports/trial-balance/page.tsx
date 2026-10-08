@@ -239,20 +239,6 @@ export default function TrialBalancePage() {
         .trial-table { width: 100%; border-collapse: collapse; }
         .trial-table tbody tr:last-child td { border-bottom: none; }
         .trial-table tbody tr:hover td { background: var(--card-hover); }
-        .btn {
-          padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
-          cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-          background: linear-gradient(135deg, #1740C8 0%, #071352 100%);
-          color: white; border: none; transition: all 0.2s;
-        }
-        .btn-outline {
-          background: transparent; color: var(--text-muted); border: 1.5px solid var(--border);
-        }
-        .btn-outline:hover {
-          background: var(--card-hover);
-          transform: translateY(-1px);
-          box-shadow: none;
-        }
         .date-input {
           height: 38px; border: 1.5px solid var(--border);
           border-radius: 8px; padding: 0 12px; font-size: 13px;
@@ -301,7 +287,7 @@ export default function TrialBalancePage() {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
+          <button className="oa-btn oa-btn-outline" onClick={() => router.push("/dashboard/reports")}>
             <ArrowLeft size={16} />
           </button>
           <div>
@@ -309,10 +295,8 @@ export default function TrialBalancePage() {
             <p style={{ color: "var(--text-muted)", fontSize: 13, margin: 0 }}>From {startDate} to {endDate}</p>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-outline" onClick={handleExportPDF}>
-            <Download size={16} /> PDF
-          </button>
+        <div className="oa-export-group">
+          <button className="oa-btn oa-btn-outline" onClick={handleExportPDF}><Download size={14} /> PDF</button>
         </div>
       </div>
 
@@ -328,7 +312,7 @@ export default function TrialBalancePage() {
         <input type="date" className="date-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
         <span style={{ color: "var(--text-muted)", fontSize: 12 }}>to</span>
         <input type="date" className="date-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
-        <button className="btn btn-outline" onClick={fetchTrial}>Refresh</button>
+        <button className="oa-btn oa-btn-outline" onClick={fetchTrial}>Refresh</button>
       </div>
 
       {errorMsg && (

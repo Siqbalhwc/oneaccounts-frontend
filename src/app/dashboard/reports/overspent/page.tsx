@@ -6,7 +6,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import * as XLSX from "xlsx"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Download } from "lucide-react"
 
 export default function OverspentPage() {
   const router = useRouter()
@@ -92,8 +92,6 @@ export default function OverspentPage() {
         .table td { padding: 12px 12px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); }
         .filter-select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: var(--card); color: var(--text); outline: none; }
         .filter-select:focus { border-color: var(--primary); }
-        .btn { padding: 8px 16px; border: none; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-family: inherit; }
-        .btn-secondary { background: var(--card-hover); color: var(--text); border: 1px solid var(--border); }
         .btn-back {
           background: transparent; border: 1px solid var(--border); color: var(--text-muted);
           padding: 6px 12px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
@@ -120,9 +118,9 @@ export default function OverspentPage() {
         <select className="filter-select" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
           {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
         </select>
-        <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
-          <button className="btn btn-secondary" onClick={exportExcel}>📥 Excel</button>
-          <button className="btn btn-secondary" onClick={exportPDF}>📄 PDF</button>
+        <div className="oa-export-group" style={{ marginLeft: "auto" }}>
+          <button className="oa-btn oa-btn-outline" onClick={exportPDF}><Download size={14} /> PDF</button>
+          <button className="oa-btn oa-btn-outline" onClick={exportExcel}><Download size={14} /> Excel</button>
         </div>
       </div>
 

@@ -6,6 +6,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import * as XLSX from "xlsx"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import { Download } from "lucide-react"
 
 export default function BudgetSummaryPage() {
   const router = useRouter()
@@ -184,51 +185,17 @@ export default function BudgetSummaryPage() {
         .filter-select:focus {
           border-color: var(--primary);
         }
-        .btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 8px 16px;
-          border-radius: 8px;
-          border: 1.5px solid var(--border);
-          font-weight: 600;
-          font-size: 13px;
-          cursor: pointer;
-          font-family: inherit;
-          transition: background 0.15s;
-          white-space: nowrap;
-        }
-        .btn-outline {
-          background: transparent;
-          color: var(--text-muted);
-          border-color: var(--border);
-        }
-        .btn-outline:hover {
-          background: var(--card-hover);
-        }
-        .btn-secondary {
-          background: var(--card);
-          color: var(--text-muted);
-          border-color: var(--border);
-        }
-        .btn-secondary:hover {
-          background: var(--card-hover);
-        }
         @media (max-width: 640px) {
           .table th, .table td {
             padding: 8px 6px;
             font-size: 11px;
-          }
-          .btn {
-            padding: 6px 12px;
-            font-size: 12px;
           }
         }
       `}</style>
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-        <button className="btn btn-outline" onClick={() => router.back()}>← Back</button>
+        <button className="oa-btn oa-btn-outline" onClick={() => router.back()}>← Back</button>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>Budget Summary</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>All active budget lines with project, donor, activity, location and account</p>
@@ -244,9 +211,9 @@ export default function BudgetSummaryPage() {
           <option value="">All Projects</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
-          <button className="btn btn-secondary" onClick={exportExcel}>📥 Excel</button>
-          <button className="btn btn-secondary" onClick={exportPDF}>📄 PDF</button>
+        <div className="oa-export-group" style={{ marginLeft: "auto" }}>
+          <button className="oa-btn oa-btn-outline" onClick={exportPDF}><Download size={14} /> PDF</button>
+          <button className="oa-btn oa-btn-outline" onClick={exportExcel}><Download size={14} /> Excel</button>
         </div>
       </div>
 

@@ -415,7 +415,7 @@ export default function ARAgingPage() {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>📅 AR Aging Report</h1>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Accounts Receivable aging analysis as of {asOfDate}</p>
         </div>
-        <button className="ar-btn" onClick={exportPDF}><Download size={14} /> PDF</button>
+        <button className="oa-btn oa-btn-outline" onClick={exportPDF}><Download size={14} /> PDF</button>
       </div>
 
       {/* Filters */}

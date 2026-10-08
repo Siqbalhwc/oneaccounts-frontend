@@ -227,18 +227,6 @@ export default function BudgetVsActualReportPage() {
           padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px;
           background: var(--card); color: var(--text);
         }
-        .bva-btn {
-          display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px;
-          font-size: 13px; font-weight: 600; cursor: pointer; border: none;
-          background: var(--primary); color: var(--primary-text);
-        }
-        .bva-btn:hover { background: var(--primary-hover); }
-        .bva-btn-outline {
-          display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px;
-          font-size: 13px; font-weight: 600; cursor: pointer; background: transparent;
-          border: 1.5px solid var(--border); color: var(--text-muted);
-        }
-        .bva-btn-outline:hover { background: var(--card-hover); }
         .bva-table-wrap {
           background: var(--card); border: 1px solid var(--border); border-radius: 12px;
           overflow: hidden; box-shadow: var(--shadow-sm);
@@ -284,13 +272,9 @@ export default function BudgetVsActualReportPage() {
             Project period: {fmtDate(selectedProject.start_date)} - {fmtDate(selectedProject.end_date)}
           </span>
         )}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <button className="bva-btn-outline" onClick={handleExportPDF} disabled={!selectedProjectId}>
-            <FileText size={14} /> Export PDF
-          </button>
-          <button className="bva-btn" onClick={handleExport} disabled={!selectedProjectId}>
-            <Download size={14} /> Export Excel
-          </button>
+        <div className="oa-export-group" style={{ marginLeft: "auto" }}>
+          <button className="oa-btn oa-btn-outline" onClick={handleExportPDF} disabled={!selectedProjectId}><Download size={14} /> PDF</button>
+          <button className="oa-btn oa-btn-outline" onClick={handleExport} disabled={!selectedProjectId}><Download size={14} /> Excel</button>
         </div>
       </div>
 

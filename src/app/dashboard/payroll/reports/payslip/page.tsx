@@ -148,15 +148,13 @@ export default function PayslipPage() {
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
         .select, .input { width: 100%; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; background: var(--bg); color: var(--text); }
-        .btn { padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: transparent; color: var(--text-muted); }
-        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
         .payslip { max-width: 400px; }
         .line { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--border); }
         .total { font-weight: 700; border-top: 2px solid var(--text); margin-top: 8px; padding-top: 8px; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button className="btn" onClick={() => router.push("/dashboard/payroll/reports")}><ArrowLeft size={16} /></button>
+        <button className="oa-btn" onClick={() => router.push("/dashboard/payroll/reports")}><ArrowLeft size={16} /></button>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🧾 Payslip</h1>
       </div>
 
@@ -193,9 +191,7 @@ export default function PayslipPage() {
           <div className="total line"><span>Gross Pay</span><span>{payslip.gross_amount.toLocaleString()}</span></div>
           <div className="line"><span>Deductions</span><span style={{ color: "#EF4444" }}>{payslip.total_deductions.toLocaleString()}</span></div>
           <div className="total line" style={{ fontSize: 16 }}><span>Net Pay</span><span style={{ color: "#10B981" }}>{payslip.net_amount.toLocaleString()}</span></div>
-          <button className="btn btn-primary" style={{ marginTop: 16, width: "100%", justifyContent: "center" }} onClick={downloadPDF}>
-            <Download size={16} /> Download PDF
-          </button>
+          <button className="oa-btn oa-btn-outline" style={{ marginTop: 16, width: "100%", justifyContent: "center" }} onClick={downloadPDF}><Download size={14} /> PDF</button>
         </div>
       )}
     </div>

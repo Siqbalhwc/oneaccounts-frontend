@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import * as XLSX from "xlsx"
+import { Download } from "lucide-react"
 
 export default function ProjectProfitLossPage() {
   const supabase = createBrowserClient(
@@ -100,9 +101,7 @@ export default function ProjectProfitLossPage() {
         <select style={{ padding: 6, borderRadius: 6 }} value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
           {[2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
         </select>
-        <button onClick={exportExcel} style={{ padding: "8px 16px", background: "#059669", color: "white", border: "none", borderRadius: 6, cursor: "pointer" }}>
-          📥 Export Excel
-        </button>
+        <button className="oa-btn oa-btn-outline" onClick={exportExcel}><Download size={14} /> Excel</button>
       </div>
 
       {loading ? <p>Loading...</p> : data.length === 0 ? (

@@ -6,6 +6,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import * as XLSX from "xlsx"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import { Download } from "lucide-react"
 
 export default function RemainingFundsPage() {
   const router = useRouter()
@@ -81,8 +82,6 @@ export default function RemainingFundsPage() {
         .table th { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; text-align: left; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
         .table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
         .filter-select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; background: white; box-sizing: border-box; }
-        .btn { padding: 8px 16px; border: none; border-radius: 10px; font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-        .btn-secondary { background: #e2e8f0; color: #1e293b; }
       `}</style>
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
         <button onClick={() => router.back()} style={{ background: "none", border: "none", cursor: "pointer" }}>← Back</button>
@@ -99,9 +98,9 @@ export default function RemainingFundsPage() {
           <option value="">All Projects</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
-          <button className="btn btn-secondary" onClick={exportExcel}>📥 Excel</button>
-          <button className="btn btn-secondary" onClick={exportPDF}>📄 PDF</button>
+        <div className="oa-export-group" style={{ marginLeft: "auto" }}>
+          <button className="oa-btn oa-btn-outline" onClick={exportPDF}><Download size={14} /> PDF</button>
+          <button className="oa-btn oa-btn-outline" onClick={exportExcel}><Download size={14} /> Excel</button>
         </div>
       </div>
       <div className="card" style={{ overflowX: "auto" }}>

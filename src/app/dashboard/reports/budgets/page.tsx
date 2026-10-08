@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRole } from "@/contexts/RoleContext"
 import * as XLSX from "xlsx"
+import { Download } from "lucide-react"
 
 export default function BudgetReportPage() {
   const supabase = createBrowserClient(
@@ -131,9 +132,7 @@ if (roleLoading || !role) return <div style={{ padding: 40, textAlign: "center" 
           <option value="">All Locations</option>
           {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
-        <button onClick={handleExport} style={{ padding: "8px 16px", background: "#059669", color: "white", border: "none", borderRadius: 6, cursor: "pointer" }}>
-          📥 Export Excel
-        </button>
+        <button className="oa-btn oa-btn-outline" onClick={handleExport}><Download size={14} /> Excel</button>
       </div>
 
       {loading ? <p>Loading...</p> : (

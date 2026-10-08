@@ -118,8 +118,6 @@ export default function BankTransferSheetPage() {
       <style>{`
         .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
         .input { width: 200px; height: 38px; border: 1.5px solid var(--border); border-radius: 8px; padding: 0 12px; font-size: 13px; background: var(--bg); color: var(--text); }
-        .btn { padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--border); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; background: transparent; color: var(--text-muted); }
-        .btn-primary { background: var(--primary); color: var(--primary-text); border-color: var(--primary); }
         .table { width: 100%; border-collapse: collapse; }
         .table th, .table td { padding: 10px 14px; border-bottom: 1px solid var(--border); text-align: left; font-size: 13px; }
         .table th { background: var(--card-hover); font-weight: 700; font-size: 11px; text-transform: uppercase; color: var(--text-muted); }
@@ -127,7 +125,7 @@ export default function BankTransferSheetPage() {
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <button className="btn" onClick={() => router.push("/dashboard/payroll/reports")}><ArrowLeft size={16} /></button>
+        <button className="oa-btn" onClick={() => router.push("/dashboard/payroll/reports")}><ArrowLeft size={16} /></button>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🏦 Bank Transfer Sheet</h1>
       </div>
 
@@ -162,9 +160,7 @@ export default function BankTransferSheetPage() {
             </tbody>
           </table>
           <div className="totals">Total Net Pay: PKR {totalNet.toLocaleString()}</div>
-          <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={downloadCSV}>
-            <Download size={16} /> Download CSV
-          </button>
+          <button className="oa-btn oa-btn-outline" style={{ marginTop: 16 }} onClick={downloadCSV}><Download size={14} /> CSV</button>
         </div>
       )}
     </div>

@@ -160,8 +160,6 @@ export default function AssetLedgerPage() {
   return (
     <div style={{ padding: 24, background: "var(--bg)", minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "var(--text)" }}>
       <style>{`
-        .btn { display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-family:inherit;transition:all 0.15s;white-space:nowrap; }
-        .btn:hover { background:var(--card-hover); }
         .select { padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--card);color:var(--text); min-width:250px; }
         table { width:100%; border-collapse:collapse; font-size:13px; }
         th { text-align:left; padding:10px 12px; border-bottom:2px solid var(--border); color:var(--text-muted); font-size:10px; text-transform:uppercase; }
@@ -170,7 +168,7 @@ export default function AssetLedgerPage() {
       `}</style>
 
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24, flexWrap:"wrap" }}>
-        <button className="btn" onClick={() => router.push("/dashboard/reports")}><ArrowLeft size={16} /> Back to Reports</button>
+        <button className="oa-btn" onClick={() => router.push("/dashboard/reports")}><ArrowLeft size={16} /> Back to Reports</button>
         <div>
           <h1 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0 }}>📒 Asset Ledger</h1>
           <p style={{ fontSize:13, color:"var(--text-muted)", margin:0 }}>Complete history of purchase, depreciation, and disposal</p>
@@ -193,7 +191,7 @@ export default function AssetLedgerPage() {
           </select>
         </div>
         {selectedAssetId && (
-          <button className="btn" onClick={exportPDF}><Download size={14} /> PDF</button>
+          <button className="oa-btn oa-btn-outline" onClick={exportPDF}><Download size={14} /> PDF</button>
         )}
       </div>
 

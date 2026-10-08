@@ -329,3 +329,10 @@ body {
   .oa-detail-actions > .oa-btn.oa-btn-primary { flex-basis: 100%; order: -1; }
   .oa-detail-actions > [class*="badge"] { flex: 1 1 100%; justify-content: center; text-align: center; }
 }
+
+/* ── REPORT EXPORT BUTTONS (PDF / Excel) ── */
+.oa-export-group { display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; }
+@media (max-width: 640px) {
+  .oa-export-group { width: 100%; margin-left: 0 !important; }
+  .oa-export-group > .oa-btn { flex: 1 1 0; min-height: 40px; }
+}

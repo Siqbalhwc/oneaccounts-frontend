@@ -588,18 +588,6 @@ function BalanceSheetContent() {
           display: flex; align-items: center; gap: 12px;
           padding: 0 32px 20px; flex-wrap: wrap;
         }
-        .btn {
-          padding: 8px 16px; border-radius: 8px;
-          border: 1.5px solid var(--border); font-weight: 600;
-          font-size: 13px; cursor: pointer;
-          display: inline-flex; align-items: center; gap: 6px;
-          font-family: inherit;
-        }
-        .btn-outline {
-          background: transparent; color: var(--text-muted);
-          border-color: var(--border);
-        }
-        .btn-outline:hover { background: var(--card-hover); }
         .date-input {
           height: 34px; border: 1.5px solid var(--border);
           border-radius: 8px; padding: 0 10px; font-size: 12px;
@@ -676,7 +664,7 @@ function BalanceSheetContent() {
 
       <div className="report-header">
         <div className="report-header-left">
-          <button className="btn btn-outline" onClick={() => router.push("/dashboard/reports")}>
+          <button className="oa-btn oa-btn-outline" onClick={() => router.push("/dashboard/reports")}>
             <ArrowLeft size={16} />
           </button>
           {logoUrl ? (
@@ -734,9 +722,9 @@ function BalanceSheetContent() {
       </div>
 
       <div className="filter-bar">
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <button className="btn btn-outline" onClick={handleExportExcel}><Download size={13} /> Excel</button>
-          <button className="btn btn-outline" onClick={handleExportPDF}><Download size={13} /> PDF</button>
+        <div className="oa-export-group" style={{ marginLeft: "auto" }}>
+          <button className="oa-btn oa-btn-outline" onClick={handleExportPDF}><Download size={14} /> PDF</button>
+          <button className="oa-btn oa-btn-outline" onClick={handleExportExcel}><Download size={14} /> Excel</button>
         </div>
       </div>
 
