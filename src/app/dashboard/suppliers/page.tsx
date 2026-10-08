@@ -410,7 +410,7 @@ export default function SuppliersPage() {
           .header-row .title-area { margin-bottom: 8px; text-align: left; }
           .header-row .actions { width: 100%; justify-content: space-between; }
           .search-section { max-width: 100%; }
-          .search-section { flex-wrap: wrap !important; gap: 8px 16px !important; } .search-box { flex: 1 1 100% !important; max-width: 100% !important; } .summary-grid { grid-template-columns: 1fr 1fr; } .summary-item { padding: 12px; } .summary-value { font-size: 18px; overflow-wrap: anywhere; }
+          .search-section { flex-wrap: wrap !important; gap: 8px 16px !important; } .search-box { flex: 1 1 100% !important; max-width: 100% !important; } .summary-grid { grid-template-columns: 1fr 1fr; } .summary-item { padding: 12px; }
         }
 
         /* -- Mobile card list: hidden by default (desktop/tablet shows the table) -- */

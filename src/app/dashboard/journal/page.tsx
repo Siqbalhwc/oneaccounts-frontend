@@ -349,7 +349,6 @@ export default function JournalPage() {
           .summary-grid { grid-template-columns: 1fr 1fr !important; }
           .summary-item:first-child { grid-column: 1 / -1; }
           .summary-item { padding: 12px; }
-          .summary-value { font-size: 16px; overflow-wrap: anywhere; }
         }
       `}</style>
 

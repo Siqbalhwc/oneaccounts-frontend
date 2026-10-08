@@ -247,6 +247,22 @@ export default function BankTransfersPage() {
           .page-wrap { padding: 12px !important; }
           .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
+
+        /* -- Mobile card list: hidden by default (desktop/tablet shows the table) -- */
+        .list-cards { display: none; flex-direction: column; gap: 10px; }
+        .list-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow-sm); }
+        .list-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        .list-card-no { font-size: 13px; font-weight: 700; color: var(--primary); }
+        .list-card-date { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+        .list-card-amt { font-size: 15px; font-weight: 800; white-space: nowrap; text-align: right; color: var(--text); }
+        .list-card-name { font-size: 14px; color: var(--text); margin-top: 6px; }
+        .list-card-sub { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+        .list-card-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+        .list-card-empty { text-align: center; color: var(--text-muted); padding: 32px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+        @media (max-width: 640px) {
+          .desktop-table { display: none; }
+          .list-cards { display: flex; }
+        }
       `}</style>
 
       <div className="oa-list-header">
@@ -277,7 +293,7 @@ export default function BankTransfersPage() {
         <input className="search-input" placeholder="Search account name, code, or reference..." value={search} onChange={e => setSearch(e.target.value)} />
       </div>
 
-      <div className="card">
+      <div className="card desktop-table">
         <div className="table-scroll">
           <table className="transfer-table">
             <colgroup>
@@ -317,7 +333,7 @@ export default function BankTransfersPage() {
                     <td style={{ ...tdStyle, maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {t.to_code} - {t.to_name}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowwrap" }}>
+                    <td style={{ ...tdStyle, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>
                       PKR {t.amount.toLocaleString()}
                     </td>
                     <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{t.reference || "—"}</td>
@@ -328,6 +344,36 @@ export default function BankTransfersPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* -- MOBILE: card list, shown instead of the table below 640px -- */}
+      <div className="list-cards">
+        {loading ? (
+          [1, 2, 3, 4].map(i => (
+            <div className="list-card" key={i}>
+              <div style={{ width: "55%", height: 14, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite", marginBottom: 8 }} />
+              <div style={{ width: "35%", height: 12, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite" }} />
+            </div>
+          ))
+        ) : sortedFiltered.length === 0 ? (
+          <div className="list-card-empty">
+            No transfers recorded yet. {canEdit && 'Tap "New Transfer" to record one.'}
+          </div>
+        ) : (
+          sortedFiltered.map((t) => (
+            <div key={t.id} className="list-card">
+              <div className="list-card-top">
+                <div>
+                  <div className="list-card-no">{new Date(t.transfer_date).toLocaleDateString()}</div>
+                  {t.reference && <div className="list-card-date">Ref: {t.reference}</div>}
+                </div>
+                <div className="list-card-amt">PKR {t.amount.toLocaleString()}</div>
+              </div>
+              <div className="list-card-name">From: {t.from_code} - {t.from_name}</div>
+              <div className="list-card-name" style={{ marginTop: 2 }}>To: {t.to_code} - {t.to_name}</div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   )

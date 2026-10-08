@@ -281,3 +281,30 @@ body {
   .oa-list-header > .oa-btn.oa-btn-primary { flex: 1 1 100%; }
   .oa-list-actions > .oa-btn.oa-btn-primary { order: -1; flex: 1 1 100%; }
 }
+
+/* ── MOBILE OVERFLOW GUARD (phones, under 640px) ──
+   Stops summary cards and list cards running past the screen edge, and keeps
+   amounts on ONE line (they shrink to fit instead of splitting across lines). */
+@media (max-width: 640px) {
+  /* minmax(0,1fr): lets a column shrink below its content width (plain 1fr cannot) */
+  body .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  body .summary-grid > .summary-item {
+    min-width: 0; padding: 12px !important; container-type: inline-size;
+  }
+  /* an odd last card (e.g. the 3rd of 3) uses the full row */
+  body .summary-grid > .summary-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  body .summary-grid .summary-value {
+    font-size: 15px !important;
+    font-size: clamp(13px, calc(100cqw / 10), 18px) !important;
+    white-space: nowrap !important; overflow-wrap: normal !important; word-break: normal !important;
+    flex-wrap: nowrap !important; min-width: 0;
+  }
+  body .summary-grid .summary-label { overflow-wrap: break-word; }
+
+  /* list cards: left block may shrink and wrap, the amount never gets pushed out */
+  [class$="-card-top"] > :first-child { min-width: 0; overflow-wrap: anywhere; }
+  [class$="-card-top"] > :last-child { flex-shrink: 0; }
+  [class$="-card-amt"], [class$="-card-amount"], [class$="-card-balance"], [class$="-card-closing"] {
+    white-space: nowrap; flex-shrink: 0;
+  }
+}

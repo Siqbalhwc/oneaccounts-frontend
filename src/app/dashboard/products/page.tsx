@@ -480,17 +480,28 @@ export default function StockRegisterPage() {
           .header-row .title-area {
             margin-bottom: 8px;
           }
+          /* search and category stay on ONE row to save vertical space */
           .filter-row {
-            flex-direction: column;
-            align-items: stretch;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            align-items: center;
+            gap: 8px;
           }
           .filter-row .search-group {
-            max-width: 100%;
+            flex: 1 1 0;
+            min-width: 0;
+            max-width: none;
           }
           .filter-row .filter-group {
-            width: 100%;
-            justify-content: flex-end;
+            flex: 0 0 auto;
+            width: auto;
           }
+          .filter-row .filter-select {
+            min-width: 0 !important;
+            width: 120px;
+            max-width: 120px;
+          }
+          .prod-card-prices, .prod-card-flow { flex-wrap: wrap; row-gap: 2px; }
         }
 
         /* -- Mobile card list: hidden by default (desktop/tablet shows the table) -- */

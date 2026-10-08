@@ -152,6 +152,17 @@ export default function InventoryAdjustmentsPage() {
     textOverflow: "ellipsis",
   }
 
+  const deleteAdjustment = async (adj: Adjustment) => {
+    if (confirm("Delete this adjustment?")) {
+      await supabase
+        .from("stock_moves")
+        .delete()
+        .eq("id", adj.id)
+        .eq("company_id", companyId)
+      setAdjustments(prev => prev.filter(a => a.id !== adj.id))
+    }
+  }
+
   const SortTh = ({ field, children, style }: { field: SortField; children: React.ReactNode; style?: React.CSSProperties }) => (
     <th style={{ ...thStyle, ...style }}>
       <button
@@ -228,6 +239,22 @@ export default function InventoryAdjustmentsPage() {
             .page-wrap { padding: 12px !important; }
             .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
           }
+
+            /* -- Mobile card list: hidden by default (desktop/tablet shows the table) -- */
+          .list-cards { display: none; flex-direction: column; gap: 10px; }
+          .list-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow-sm); }
+          .list-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+          .list-card-no { font-size: 13px; font-weight: 700; color: var(--primary); }
+          .list-card-date { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+          .list-card-amt { font-size: 15px; font-weight: 800; white-space: nowrap; text-align: right; color: var(--text); }
+          .list-card-name { font-size: 14px; color: var(--text); margin-top: 6px; }
+          .list-card-sub { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+          .list-card-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+          .list-card-empty { text-align: center; color: var(--text-muted); padding: 32px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+          @media (max-width: 640px) {
+            .desktop-table { display: none; }
+            .list-cards { display: flex; }
+          }
         `}</style>
 
         <div className="oa-list-header">
@@ -249,7 +276,7 @@ export default function InventoryAdjustmentsPage() {
           <div className="summary-item"><div className="summary-label">Net Quantity Change</div><div className="summary-value" style={{ color: netQuantityChange >= 0 ? "#10B981" : "#EF4444" }}>{netQuantityChange > 0 ? "+" : ""}{netQuantityChange}</div></div>
         </div>
 
-        <div className="card">
+        <div className="card desktop-table">
           <div className="table-scroll">
             <table className="adj-table">
               <colgroup>
@@ -301,16 +328,7 @@ export default function InventoryAdjustmentsPage() {
                               <button
                                 className="btn-icon"
                                 style={{ color: "#EF4444" }}
-                                onClick={async () => {
-                                  if (confirm("Delete this adjustment?")) {
-                                    await supabase
-                                      .from("stock_moves")
-                                      .delete()
-                                      .eq("id", adj.id)
-                                      .eq("company_id", companyId)
-                                    setAdjustments(prev => prev.filter(a => a.id !== adj.id))
-                                  }
-                                }}
+                                onClick={() => deleteAdjustment(adj)}
                                 title="Delete"
                               >
                                 <Trash2 size={13} />
@@ -325,6 +343,48 @@ export default function InventoryAdjustmentsPage() {
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* -- MOBILE: card list, shown instead of the table below 640px -- */}
+        <div className="list-cards">
+          {loading ? (
+            [1, 2, 3, 4].map(i => (
+              <div className="list-card" key={i}>
+                <div style={{ width: "55%", height: 14, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite", marginBottom: 8 }} />
+                <div style={{ width: "35%", height: 12, background: "var(--bg-soft)", borderRadius: 4, animation: "shimmer 1.5s ease-in-out infinite" }} />
+              </div>
+            ))
+          ) : adjustments.length === 0 ? (
+            <div className="list-card-empty">
+              No adjustments yet. {canEdit && 'Tap "New Adjustment" to create one.'}
+            </div>
+          ) : (
+            sortedAdjustments.map((adj) => (
+              <div key={adj.id} className="list-card">
+                <div className="list-card-top">
+                  <div>
+                    <div className="list-card-no">{adj.product?.code || "—"}</div>
+                    <div className="list-card-date">{new Date(adj.date).toLocaleDateString()}</div>
+                  </div>
+                  <div className="list-card-amt" style={{ color: adj.qty >= 0 ? "#10B981" : "#EF4444" }}>
+                    {adj.qty > 0 ? "+" : ""}{fmtQty(adj.qty)}
+                  </div>
+                </div>
+                <div className="list-card-name">{adj.product?.name || "—"}</div>
+                {adj.reason && <div className="list-card-sub">{adj.reason}</div>}
+                {canEdit && (
+                  <div className="list-card-actions">
+                    <button className="btn-icon" onClick={() => router.push(`/dashboard/inventory/adjustments/new?id=${adj.id}`)} title="Edit">
+                      <Pencil size={13} />
+                    </button>
+                    <button className="btn-icon" style={{ color: "#EF4444" }} onClick={() => deleteAdjustment(adj)} title="Delete">
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
       </div>
     </RoleGuard>

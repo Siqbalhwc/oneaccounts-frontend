@@ -321,7 +321,6 @@ export default function BillsPage() {
           .list-cards { display: flex; }
           .summary-grid { grid-template-columns: 1fr 1fr !important; }
           .summary-item { padding: 12px; }
-          .summary-value { font-size: 18px; overflow-wrap: anywhere; }
         }
       `}</style>
 
