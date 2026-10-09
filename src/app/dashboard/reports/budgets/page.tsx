@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createBrowserClient } from "@supabase/ssr"
+import { loadYearBudgetRows } from "@/lib/budgetPeriod"
 import { useRole } from "@/contexts/RoleContext"
 import * as XLSX from "xlsx"
 import { Download } from "lucide-react"
@@ -58,8 +59,8 @@ export default function BudgetReportPage() {
     let query = supabase.from("budgets")
       .select("*, projects(name), donors(name), activities(name), locations(name), accounts(code,name)")
       .eq("company_id", companyId)
-      .eq("fiscal_year", fiscalYear)
-      .is("month", null)
+      // (no fiscal_year filter - monthly rows of the whole project; the year is sliced out by loadYearBudgetRows)
+      .not("month", "is", null)
       .not("activity_id", "is", null)   // only rows with activity
 
     if (selectedProjectId) query = query.eq("project_id", selectedProjectId)
@@ -67,7 +68,7 @@ export default function BudgetReportPage() {
     if (selectedActivityId) query = query.eq("activity_id", selectedActivityId)
     if (selectedLocationId) query = query.eq("location_id", selectedLocationId)
 
-    query.then(({ data }) => {
+    loadYearBudgetRows(query, supabase, companyId, fiscalYear).then(({ data }) => {
       if (data) {
         setRows(data.map((r: any) => ({
           ...r,

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
+import { loadYearBudgetRows } from "@/lib/budgetPeriod"
 import * as XLSX from "xlsx"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -41,16 +42,16 @@ export default function BudgetSummaryPage() {
     // Step 1: get budget rows without joins
     let query = supabase
       .from("budgets")
-      .select("id, account_id, project_id, activity_id, location_id, donor_id, budgeted_amount")
+      .select("id, account_id, project_id, activity_id, location_id, donor_id, budgeted_amount, month, fiscal_year")
       .eq("company_id", companyId)
-      .eq("fiscal_year", fiscalYear)
-      .is("month", null)
+      // (no fiscal_year filter - monthly rows of the whole project; the year is sliced out by loadYearBudgetRows)
+      .not("month", "is", null)
       .is("deleted_at", null)
       .order("id")
 
     if (selectedProjectId) query = query.eq("project_id", selectedProjectId)
 
-    query.then(async ({ data: budgetRows }) => {
+    loadYearBudgetRows(query, supabase, companyId, fiscalYear).then(async ({ data: budgetRows }) => {
       if (!budgetRows || budgetRows.length === 0) {
         setRows([])
         setLoading(false)

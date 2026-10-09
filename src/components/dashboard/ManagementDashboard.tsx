@@ -582,7 +582,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           <div className="hero-filters">
             <span className="filter-label">Period:</span>
             <select className="filter-pill" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
-              {[2024,2025,2026,2027].map((y: number) => <option key={y} value={y}>FY {y}</option>)}
+              {Array.from({ length: new Date().getFullYear() - 2023 + 1 }, (_, i) => 2024 + i).map((y: number) => <option key={y} value={y}>FY {y}</option>)}
             </select>
             <span className="filter-label">Projects:</span>
             <select className="filter-pill" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>

@@ -118,7 +118,7 @@ export default function NewJournalPage() {
         .select("donor_id, donors(name)")
         .eq("company_id", companyId)
         .eq("activity_id", activityId)
-        .eq("fiscal_year", new Date().getFullYear())
+        // (no fiscal_year filter - the budget covers the whole project period)
         .is("month", null)
         .order("budgeted_amount", { ascending: false })
         .limit(1)

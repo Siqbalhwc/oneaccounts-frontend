@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { createBrowserClient } from "@supabase/ssr"
+import { loadYearBudgetRows, fetchAllFromBuilder } from "@/lib/budgetPeriod"
 
 async function fetchDashboardData(companyId: string, fiscalYear: number) {
   const supabase = createBrowserClient(
@@ -33,24 +34,24 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
     prevMonthlySpendingRpc,
     overdueInvoices,
   ] = await Promise.all([
-    supabase.from("budgets")
-      .select("id, project_id, activity_id, account_id, donor_id, location_id, budgeted_amount")
+    loadYearBudgetRows(supabase.from("budgets")
+      .select("id, project_id, activity_id, account_id, donor_id, location_id, budgeted_amount, month, fiscal_year")
       .eq("company_id", companyId)
-      .eq("fiscal_year", fiscalYear)
-      .is("month", null)
-      .not("activity_id", "is", null),
+      // (no fiscal_year filter - monthly rows of the whole project; the year is sliced out by loadYearBudgetRows)
+      .not("month", "is", null)
+      .not("activity_id", "is", null), supabase, companyId, fiscalYear),
 
-    supabase.from("journal_lines")
+    fetchAllFromBuilder(supabase.from("journal_lines")
       .select("debit, credit, project_id, donor_id, activity_id, account_id, location_id, journal_entries!inner(date)")
       .eq("company_id", companyId)
       .gte("journal_entries.date", `${fiscalYear}-01-01`)
-      .lte("journal_entries.date", `${fiscalYear}-12-31`),
+      .lte("journal_entries.date", `${fiscalYear}-12-31`)),
 
-    supabase.from("donors").select("id, name").eq("company_id", companyId),
+    supabase.from("donors").select("id, name").eq("company_id", companyId).is("deleted_at", null),
 
-    supabase.from("projects").select("id, name, donor_id, start_date, end_date").eq("company_id", companyId),
+    supabase.from("projects").select("id, name, donor_id, start_date, end_date").eq("company_id", companyId).is("deleted_at", null),
 
-    supabase.from("activities").select("id, name").eq("company_id", companyId),
+    supabase.from("activities").select("id, name").eq("company_id", companyId).is("deleted_at", null),
 
     supabase.from("customers").select("balance").eq("company_id", companyId),
 
