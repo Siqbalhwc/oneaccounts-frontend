@@ -632,8 +632,8 @@ export default function BudgetsPage() {
       })
       const result = await res.json()
       if (!result.success) { setFlash("Error: " + (result.error || "Failed")); setMonthlySaving(false); return }
-      setMonthlyVerified(true)
-      setFlash("Monthly budget confirmed and saved!")
+      setMonthlyVerified(result.monthlyVerified !== false)
+      setFlash(result.monthlyVerified === false ? "Monthly budget saved, but other budget lines still need a complete monthly split." : "Monthly budget confirmed and saved!")
       setTimeout(() => setFlash(""), 4000)
     } catch (err: any) {
       setFlash("Error: " + err.message)

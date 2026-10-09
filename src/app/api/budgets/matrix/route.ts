@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+import { resolveBudgetActor } from '@/lib/budgetServer'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,8 +30,9 @@ export async function GET(request: NextRequest) {
   const { data: { user }, error: userError } = await supabase.auth.getUser()
   if (userError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const companyId = user.app_metadata?.company_id
-  if (!companyId) return NextResponse.json({ error: 'No company' }, { status: 400 })
+  const { actor, response } = await resolveBudgetActor(user, supabaseAdmin)
+  if (!actor) return response!
+  const companyId = actor.companyId
 
   const { searchParams } = new URL(request.url)
   const fiscalYear = parseInt(searchParams.get('fiscalYear') || '2026')
