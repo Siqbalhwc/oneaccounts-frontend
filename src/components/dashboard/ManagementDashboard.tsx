@@ -51,6 +51,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
   )
 
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear())
+  const [allPeriods, setAllPeriods] = useState(false)
+  const [showAllDonors, setShowAllDonors] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [selectedDonorId, setSelectedDonorId] = useState<string>("")
   const [userDisplayName, setUserDisplayName] = useState("")
@@ -88,7 +90,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
       })
   }, [companyId])
 
-  const { data: dashData, isLoading, isError } = useDashboardData(companyId, fiscalYear)
+  const { data: dashData, isLoading, isError } = useDashboardData(companyId, fiscalYear, allPeriods)
 
   // Raw arrays from hook
   const allBudgets = dashData?.allBudgets || []
@@ -96,6 +98,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
   const allDonors = dashData?.allDonors || []
   const allProjects = dashData?.allProjects || []
   const allActivities = dashData?.allActivities || []
+  const allBudgetsLifetime = dashData?.allBudgetsLifetime || []
+  const monthlyMissingLines = dashData?.monthlyMissingLines || 0
 
   const now = new Date()
   const currentMonth = now.getMonth() + 1
@@ -113,6 +117,17 @@ export default function ManagementDashboard({ role }: { role: string }) {
       return true
     })
   }, [allBudgets, selectedProjectId, selectedDonorId, isFiltered])
+
+  // Project total budget (whole project life, the lump sum) - same filters as the cards
+  const filteredBudgetsLifetime = useMemo(() => {
+    if (!isFiltered) return allBudgetsLifetime
+    return allBudgetsLifetime.filter((b: any) => {
+      if (selectedProjectId && String(b.project_id) !== selectedProjectId) return false
+      if (selectedDonorId && String(b.donor_id) !== selectedDonorId) return false
+      return true
+    })
+  }, [allBudgetsLifetime, selectedProjectId, selectedDonorId, isFiltered])
+  const projectTotalBudget = filteredBudgetsLifetime.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0)
 
   const filteredJournalLines = useMemo(() => {
     if (!isFiltered) return allJournalLines
@@ -186,7 +201,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
   })
 
   const donorBalances = useMemo(() => {
-    return Object.keys(budgetByDonor).map((donorId) => {
+    return Array.from(new Set([...Object.keys(budgetByDonor), ...Object.keys(actualByDonor)])).filter((donorId) => !!donorNameMap[donorId]).map((donorId) => {
       const budget = budgetByDonor[donorId] || 0
       const actual = actualByDonor[donorId] || 0
       const percentSpent = budget ? (actual / budget) * 100 : 0
@@ -243,14 +258,14 @@ export default function ManagementDashboard({ role }: { role: string }) {
   allProjects.forEach((p: any) => { projectNameMap[String(p.id)] = p.name })
 
   const projectRows = useMemo(() => {
-    return Object.keys(budgetByProject).map((pid) => {
+    return Array.from(new Set([...Object.keys(budgetByProject), ...Object.keys(actualByProject)])).filter((pid) => !!projectNameMap[pid]).map((pid) => {
       const budget = budgetByProject[pid] || 0
       const actual = actualByProject[pid] || 0
       const pct = budget ? Math.round((actual / budget) * 100) : (actual > 0 ? 100 : 0)
       return { id: pid, name: projectNameMap[pid] || "Unknown", budget, actual, pct }
     }).sort((a, b) => b.pct - a.pct).map((p) => ({
       ...p,
-      status: p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : (now.getMonth() > 2 && p.pct < 10) ? "At Risk" : "On Track",
+      status: (p.budget === 0 && p.actual > 0) ? "No Budget" : p.pct > 100 ? "Overspent" : p.pct > 80 ? "Review" : (now.getMonth() > 2 && p.pct < 10) ? "At Risk" : "On Track",
     }))
   }, [budgetByProject, actualByProject, projectNameMap, now])
 
@@ -581,8 +596,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </div>
           <div className="hero-filters">
             <span className="filter-label">Period:</span>
-            <select className="filter-pill" value={fiscalYear} onChange={e => setFiscalYear(Number(e.target.value))}>
-              {Array.from({ length: new Date().getFullYear() - 2023 + 1 }, (_, i) => 2024 + i).map((y: number) => <option key={y} value={y}>FY {y}</option>)}
+            <select className="filter-pill" value={allPeriods ? "all" : String(fiscalYear)} onChange={e => { if (e.target.value === "all") { setAllPeriods(true) } else { setAllPeriods(false); setFiscalYear(Number(e.target.value)) } }}>
+              <option value="all">All periods</option>{Array.from({ length: new Date().getFullYear() - 2023 + 2 }, (_, i) => 2024 + i).map((y: number) => <option key={y} value={y}>FY {y}</option>)}
             </select>
             <span className="filter-label">Projects:</span>
             <select className="filter-pill" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)}>
@@ -613,14 +628,20 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
         )}
 
+                {!allPeriods && monthlyMissingLines > 0 && (
+          <div style={{ background: "var(--card)", border: "1px solid var(--kpi-warn)", borderRadius: 12, padding: "0.5rem 1rem", marginBottom: "0.8rem", fontSize: "0.78rem", color: "var(--text)", display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+            <span>{monthlyMissingLines} budget {monthlyMissingLines === 1 ? "line has" : "lines have"} no monthly split, so {monthlyMissingLines === 1 ? "it is" : "they are"} not in the FY {fiscalYear} figures. Choose "All periods" to see the full project budget.</span>
+            <button className="warning-btn" style={{ background: "transparent", color: "var(--kpi-link)", border: "1px solid var(--border)", padding: "2px 10px" }} onClick={() => router.push("/dashboard/settings/budgets")}>Complete monthly budget</button>
+          </div>
+        )}
         {/* KPI cards */}
         <div className="dashboard-grid">
           {[
-            { label: "Total Budget",   money: true, value: fmtM(animBudget),   meta: `${projectRows.length} projects`, color: "var(--text)", link: "/dashboard/reports/budget-summary" },
+            { label: "Total Budget",   money: true, value: fmtM(animBudget),   meta: allPeriods ? `All periods - ${projectRows.length} projects` : `FY ${fiscalYear} (project total ${formatPKR(projectTotalBudget)})`, color: "var(--text)", link: "/dashboard/reports/budget-summary" },
             { label: "Total Spent",     money: true, value: fmtM(animSpent),    meta: `${spentPct}% of budget`, color: "var(--text)", link: "/dashboard/reports/spending-detail" },
             { label: remainingFunds < 0 ? "Overspent" : "Remaining", money: true, value: fmtM(animRemaining), meta: `${Math.abs(Math.round((remainingFunds / Math.max(totalBudget, 1)) * 100))}% ${remainingFunds < 0 ? "over" : "left"}`, color: remainingFunds >= 0 ? "var(--text)" : "var(--kpi-negative)", link: remainingFunds < 0 ? "/dashboard/reports/overspent" : null },
             { label: "Portfolio Health", value: overspentCount > 0 ? "⚠️ Needs Attention" : "Healthy", meta: `${Math.round((1 - overspentCount / Math.max(projectRows.length, 1)) * 100)}% health score`, color: overspentCount > 0 ? "var(--kpi-warn)" : "var(--kpi-positive)", link: "/dashboard/reports/overspent" },
-            { label: "📆 Monthly Spending", money: monthlySpending > 0, value: monthlySpending > 0 ? fmtM(animMonthly) : "—", meta: monthlySpending === 0 ? "No transactions this month" : `vs. PKR ${formatPKR(lastMonthSpending)} last month`, color: "var(--text)", link: "/dashboard/reports/spending-detail" },
+            { label: "📆 Monthly Spending", money: monthlySpending > 0, value: monthlySpending > 0 ? fmtM(animMonthly) : "—", meta: monthlySpending === 0 ? (lastMonthSpending > 0 ? `None this month - last month PKR ${formatPKR(lastMonthSpending)}` : "No transactions this month") : `vs. PKR ${formatPKR(lastMonthSpending)} last month`, color: "var(--text)", link: "/dashboard/reports/spending-detail" },
           ].map((kpi: any, i: number) => (
             <motion.div key={kpi.label} className="card" custom={i} initial="hidden" animate="visible" variants={cardVariant} {...hoverScale} onClick={() => kpi.link && router.push(kpi.link + detailQuery())}>
               <div className="kpi-label">{kpi.label}</div>
@@ -644,12 +665,12 @@ export default function ManagementDashboard({ role }: { role: string }) {
             <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>📊 Top 5 Project Utilization <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text-muted)" }}>(PKR)</span></div>
             {projectRows.slice(0, 5).map((p: any, idx: number) => (
               <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?project=${p.id}&fy=${fiscalYear}`)} style={{ display: "flex", alignItems: "center", gap: "0.8rem", background: "var(--card)", borderRadius: "12px", padding: "0.5rem 1rem", border: "1px solid var(--border)", cursor: "pointer", marginBottom: "0.5rem", flexWrap: "wrap" }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.status === "Overspent" ? "var(--kpi-negative)" : p.status === "Review" ? "var(--kpi-warn)" : p.status === "At Risk" ? "var(--kpi-warn)" : "var(--kpi-positive)", flexShrink: 0 }}></div>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.status === "Overspent" ? "var(--kpi-negative)" : (p.status === "Review" || p.status === "No Budget") ? "var(--kpi-warn)" : p.status === "At Risk" ? "var(--kpi-warn)" : "var(--kpi-positive)", flexShrink: 0 }}></div>
                 <span style={{ flex: 1, fontWeight: 600, fontSize: "0.85rem", color: "var(--text)" }}>{p.name}</span>
                 <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 600, minWidth: 60, fontSize: "0.8rem", color: "var(--text)" }}>{formatPKR(p.actual)}</span>
                   <span style={{ minWidth: 50, color: p.pct > 100 ? "var(--kpi-negative)" : p.pct > 80 ? "var(--kpi-warn)" : "var(--kpi-positive)", fontSize: "0.8rem" }}>{p.pct}%</span>
-                  <span style={{ padding: "0.1rem 0.6rem", borderRadius: "12px", fontSize: "0.7rem", fontWeight: 700, background: p.status === "Overspent" ? "#fee2e2" : p.status === "Review" ? "#fef3c7" : p.status === "At Risk" ? "#fef3c7" : "#dcfce7", color: p.status === "Overspent" ? "#991b1b" : p.status === "Review" ? "#92400e" : p.status === "At Risk" ? "#92400e" : "#166534" }}>{p.status}</span>
+                  <span style={{ padding: "0.1rem 0.6rem", borderRadius: "12px", fontSize: "0.7rem", fontWeight: 700, background: p.status === "Overspent" ? "#fee2e2" : (p.status === "Review" || p.status === "No Budget") ? "#fef3c7" : p.status === "At Risk" ? "#fef3c7" : "#dcfce7", color: p.status === "Overspent" ? "#991b1b" : (p.status === "Review" || p.status === "No Budget") ? "#92400e" : p.status === "At Risk" ? "#92400e" : "#166534" }}>{p.status}</span>
                 </div>
               </div>
             ))}
@@ -661,8 +682,8 @@ export default function ManagementDashboard({ role }: { role: string }) {
           </motion.div>
 
           <motion.div className="card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.5 }}>
-            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>💧 Donor Balances <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text-muted)" }}>(PKR)</span></div>
-            {donorBalances.map((d: any, idx: number) => (
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>💧 Donor Balances <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text-muted)" }}>(PKR)</span>{donorBalances.length > 5 && (<button onClick={() => setShowAllDonors((v: boolean) => !v)} style={{ float: "right", background: "transparent", border: "none", color: "var(--kpi-link)", fontSize: "0.72rem", fontWeight: 600, cursor: "pointer" }}>{showAllDonors ? "Show top 5" : `View all (${donorBalances.length})`}</button>)}</div>
+            {(showAllDonors ? donorBalances : donorBalances.slice(0, 5)).map((d: any, idx: number) => (
               <div key={idx} onClick={() => router.push(`/dashboard/settings/budgets?donor=${d.donor_id}&fy=${fiscalYear}`)} style={{ display: "flex", alignItems: "center", gap: "0.8rem", background: "var(--card)", borderRadius: "12px", padding: "0.5rem 1rem", border: "1px solid var(--border)", cursor: "pointer", marginBottom: "0.5rem", flexWrap: "wrap" }}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.overspent ? "var(--kpi-negative)" : "var(--kpi-info)", flexShrink: 0 }}></div>
                 <div style={{ flex: 1 }}>
@@ -681,7 +702,7 @@ export default function ManagementDashboard({ role }: { role: string }) {
           <motion.div className="card" style={{ gridColumn: "span 3" }} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6, duration: 0.5 }}>
             <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text)", marginBottom: "0.8rem" }}>💡 Top 5 Underspend Activities</div>
             {underspentActivities.length === 0 ? (
-              <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>No activities with remaining budget this month.</div>
+              <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>No activities with remaining budget in this period.</div>
             ) : (
               <>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 100px", gap: 8, fontSize: "0.65rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", paddingBottom: 6, borderBottom: "1px solid var(--border)", marginBottom: 6 }}>

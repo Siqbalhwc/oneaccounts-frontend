@@ -7,6 +7,11 @@
 
 const PAGE_SIZE = 1000
 
+// Same key the screens use to say "this is the same budget line".
+export function budgetLineKey(r: any): string {
+  return [r.project_id, r.activity_id, r.account_id, r.location_id, r.donor_id].join("|")
+}
+
 // Reads every page of a Supabase query (the API returns max 1000 rows per request).
 export async function fetchAllFromBuilder(query: any): Promise<{ data: any[]; error: any }> {
   const all: any[] = []
@@ -61,7 +66,7 @@ export function aggregateBudgetForYear(rows: any[], startDateByProject: Record<s
 // Takes a ready-made query on the budgets table that selects MONTHLY rows
 // (month is not null, must include project_id, month, fiscal_year), reads all pages,
 // drops rows of deleted projects, and returns the budget for the calendar `year`.
-export async function loadYearBudgetRows(query: any, supabase: any, companyId: string, year: number): Promise<{ data: any[]; error: any }> {
+export async function loadYearBudgetRows(query: any, supabase: any, companyId: string, year: number): Promise<{ data: any[]; error: any; monthlyKeys?: Set<string> }> {
   const [rows, projRes] = await Promise.all([
     fetchAllFromBuilder(query),
     supabase.from("projects").select("id, start_date").eq("company_id", companyId).is("deleted_at", null),
@@ -74,5 +79,5 @@ export async function loadYearBudgetRows(query: any, supabase: any, companyId: s
     live.add(String(p.id))
   }
   const liveRows = rows.data.filter((r: any) => live.has(String(r.project_id)))
-  return { data: aggregateBudgetForYear(liveRows, startMap, year), error: null }
+  return { data: aggregateBudgetForYear(liveRows, startMap, year), error: null, monthlyKeys: new Set<string>(liveRows.map(budgetLineKey)) }
 }

@@ -2,9 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { createBrowserClient } from "@supabase/ssr"
-import { loadYearBudgetRows, fetchAllFromBuilder } from "@/lib/budgetPeriod"
+import { loadYearBudgetRows, fetchAllFromBuilder, budgetLineKey } from "@/lib/budgetPeriod"
 
-async function fetchDashboardData(companyId: string, fiscalYear: number) {
+async function fetchDashboardData(companyId: string, fiscalYear: number, allPeriods: boolean) {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -23,6 +23,7 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
 
   const [
     budgetsRes,
+    lifetimeRes,
     journalLinesRes,
     donorsRes,
     projectsRes,
@@ -41,11 +42,20 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
       .not("month", "is", null)
       .not("activity_id", "is", null), supabase, companyId, fiscalYear),
 
+    // Whole-project budget (annual lump sum rows) - used for "project total" and the "All periods" view
+    fetchAllFromBuilder(supabase.from("budgets")
+      .select("id, project_id, activity_id, account_id, donor_id, location_id, budgeted_amount")
+      .eq("company_id", companyId)
+      .is("month", null)
+      .is("deleted_at", null)
+      .not("activity_id", "is", null)),
+
     fetchAllFromBuilder(supabase.from("journal_lines")
       .select("debit, credit, project_id, donor_id, activity_id, account_id, location_id, journal_entries!inner(date)")
+      .or("project_id.not.is.null,donor_id.not.is.null,activity_id.not.is.null")
       .eq("company_id", companyId)
-      .gte("journal_entries.date", `${fiscalYear}-01-01`)
-      .lte("journal_entries.date", `${fiscalYear}-12-31`)),
+      .gte("journal_entries.date", allPeriods ? "1900-01-01" : `${fiscalYear}-01-01`)
+      .lte("journal_entries.date", allPeriods ? "2999-12-31" : `${fiscalYear}-12-31`)),
 
     supabase.from("donors").select("id, name").eq("company_id", companyId).is("deleted_at", null),
 
@@ -57,7 +67,7 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
 
     supabase.from("suppliers").select("balance").eq("company_id", companyId),
 
-    supabase.rpc("total_spent", { cid: companyId, fy: fiscalYear }),
+    supabase.rpc("get_period_spending", { cid: companyId, start_d: allPeriods ? "1900-01-01" : `${fiscalYear}-01-01`, end_d: allPeriods ? "2999-12-31" : `${fiscalYear}-12-31` }),
 
     supabase.rpc("get_period_spending", { cid: companyId, start_d: startOfMonthISO, end_d: todayISO }),
 
@@ -67,15 +77,22 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
       .select("id").eq("company_id", companyId).eq("type", "sale").eq("status", "Unpaid").lt("due_date", todayISO),
   ])
 
-  const totalBudget = budgetsRes.data?.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0) || 0
-  const totalSpent = totalSpentRpc.data?.[0]?.total || 0
+  // Budget for the chosen period = monthly rows inside the year (or whole-project lump sum for "All periods")
+  const liveProjectIds = new Set((projectsRes.data || []).map((p: any) => String(p.id)))
+  const lifetimeRows = (lifetimeRes.data || []).filter((b: any) => liveProjectIds.has(String(b.project_id)))
+  const budgetRows: any[] = allPeriods ? lifetimeRows : (budgetsRes.data || [])
+  // Budget lines that exist as a lump sum but have no monthly split at all
+  const monthlyKeys = (budgetsRes as any).monthlyKeys as Set<string> | undefined
+  const monthlyMissingLines = monthlyKeys ? lifetimeRows.filter((b: any) => !monthlyKeys.has(budgetLineKey(b))).length : 0
+  const totalBudget = budgetRows.reduce((s: number, b: any) => s + (b.budgeted_amount || 0), 0)
+  const totalSpent = Number(totalSpentRpc.data) || 0
 
   // ── Donor balances ──────────────────────────────────
   const donorNameMap: Record<string, string> = {}
   donorsRes.data?.forEach((d: any) => { donorNameMap[String(d.id)] = d.name })
 
   const budgetByDonor: Record<string, number> = {}
-  budgetsRes.data?.forEach((b: any) => {
+  budgetRows.forEach((b: any) => {
     if (b.donor_id) {
       const key = String(b.donor_id)
       budgetByDonor[key] = (budgetByDonor[key] || 0) + (b.budgeted_amount || 0)
@@ -141,7 +158,7 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
   // ── Project utilization ────────────────────────────────────────────
   const budgetByProject: Record<string, number> = {}
   const actualByProject: Record<string, number> = {}
-  budgetsRes.data?.forEach((b: any) => {
+  budgetRows.forEach((b: any) => {
     if (b.project_id) {
       const key = String(b.project_id)
       budgetByProject[key] = (budgetByProject[key] || 0) + (b.budgeted_amount || 0)
@@ -204,7 +221,9 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
     lastUpdated: new Date().toLocaleTimeString(),
 
     // ✅ Raw arrays for filtered calculations in Management Dashboard
-    allBudgets: budgetsRes.data || [],
+    allBudgets: budgetRows,
+    allBudgetsLifetime: lifetimeRows,
+    monthlyMissingLines,
     allJournalLines: journalLinesRes.data || [],
     allDonors: donorsRes.data || [],
     allProjects: projectsRes.data || [],
@@ -212,10 +231,10 @@ async function fetchDashboardData(companyId: string, fiscalYear: number) {
   }
 }
 
-export function useDashboardData(companyId: string | null, fiscalYear: number) {
+export function useDashboardData(companyId: string | null, fiscalYear: number, allPeriods: boolean = false) {
   return useQuery({
-    queryKey: ["dashboard", companyId, fiscalYear],
-    queryFn: () => fetchDashboardData(companyId!, fiscalYear),
+    queryKey: ["dashboard", companyId, fiscalYear, allPeriods],
+    queryFn: () => fetchDashboardData(companyId!, fiscalYear, allPeriods),
     enabled: !!companyId,
     staleTime: 30_000,
     refetchOnWindowFocus: false,
