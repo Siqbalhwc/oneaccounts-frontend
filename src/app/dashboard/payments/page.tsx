@@ -253,9 +253,14 @@ export default function PaymentsPage() {
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>{canEdit ? "Record supplier payments" : "View payments"}</p>
         </div>
         {canEdit && (
-          <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/payments/new")}>
-            <Plus size={16} /> New Payment
-          </button>
+          <div className="oa-list-actions">
+            <button className="oa-btn" onClick={() => router.push("/dashboard/receipts/apply-advance?type=supplier")}>
+              Apply Advance
+            </button>
+            <button className="oa-btn oa-btn-primary" onClick={() => router.push("/dashboard/payments/new")}>
+              <Plus size={16} /> New Payment
+            </button>
+          </div>
         )}
       </div>
 

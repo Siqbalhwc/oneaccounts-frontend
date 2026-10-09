@@ -4,7 +4,7 @@ import { fmtQty } from "@/lib/format-number"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Printer, Send, Package, Eye, Paperclip, FileText, Pencil, Undo2 } from "lucide-react"
+import { ArrowLeft, Printer, Send, Package, Eye, Paperclip, FileText, Pencil, Undo2, Wallet } from "lucide-react"
 import { generateBillPDF } from "@/lib/pdf/billPDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
@@ -83,6 +83,7 @@ export default function BillDetailPage() {
   const { role } = useRole()
   const canReturn = role === "admin" || role === "accountant"
   const [showReturn, setShowReturn] = useState(false)
+  const [partyAdvance, setPartyAdvance] = useState(0)
   const [returnDoc, setReturnDoc] = useState<{ id: number; invoice_no: string } | null>(null)
 
   useEffect(() => {
@@ -175,6 +176,12 @@ export default function BillDetailPage() {
     supabase.rpc("get_bill_attachments", { p_company_id: companyId, p_bill_id: Number(billId) })
       .then(({ data }) => { if (data) setAttachments(data) })
   }, [companyId, billId])
+
+  useEffect(() => {
+    if (!companyId || !bill?.party_id) return
+    supabase.rpc("get_supplier_advance", { p_company_id: companyId, p_supplier_id: bill.party_id })
+      .then(({ data }) => setPartyAdvance(Number(data) || 0))
+  }, [companyId, bill?.party_id, bill?.paid])
 
   const waLink = bill && bill.supplier
     ? getWhatsAppLink(
@@ -309,6 +316,11 @@ export default function BillDetailPage() {
             <a href={waLink} target="_blank" rel="noopener noreferrer" className="oa-btn oa-btn-whatsapp">
               <Send size={14} /> WhatsApp
             </a>
+          )}
+          {!isReturned && canReturn && partyAdvance > 0.004 && balanceDue > 0.004 && (
+            <button className="oa-btn oa-btn-primary" onClick={() => router.push(`/dashboard/receipts/apply-advance?type=supplier&party=${bill.party_id}&doc=${bill.id}`)}>
+              <Wallet size={14} /> Apply Advance
+            </button>
           )}
           <button className="oa-btn" onClick={handlePrintPDF}>
             <Printer size={14} /> PDF

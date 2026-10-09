@@ -4,7 +4,7 @@ import { fmtQty } from "@/lib/format-number"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Printer, Send, Paperclip, FileText, Pencil, Undo2 } from "lucide-react"
+import { ArrowLeft, Printer, Send, Paperclip, FileText, Pencil, Undo2, Wallet } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
@@ -87,6 +87,7 @@ export default function InvoiceDetailPage() {
   const { role } = useRole()
   const canReturn = role === "admin" || role === "accountant"
   const [showReturn, setShowReturn] = useState(false)
+  const [partyAdvance, setPartyAdvance] = useState(0)
   const [returnDoc, setReturnDoc] = useState<{ id: number; invoice_no: string } | null>(null)
 
   useEffect(() => {
@@ -179,6 +180,12 @@ export default function InvoiceDetailPage() {
     supabase.rpc("get_invoice_attachments", { p_company_id: companyId, p_invoice_id: Number(invoiceId) })
       .then(({ data }) => { if (data) setAttachments(data) })
   }, [companyId, invoiceId])
+
+  useEffect(() => {
+    if (!companyId || !invoice?.party_id) return
+    supabase.rpc("get_customer_advance", { p_company_id: companyId, p_customer_id: invoice.party_id })
+      .then(({ data }) => setPartyAdvance(Number(data) || 0))
+  }, [companyId, invoice?.party_id, invoice?.paid])
 
   const waLink = invoice && invoice.customer
     ? getWhatsAppLink(invoice.customer.phone || "", `Dear ${invoice.customer.name},\n\nYour invoice ${invoice.invoice_no} of PKR ${fmtMoney(invoice.total)} has been generated.\n\n📄 View Online: https://app.oneaccountsbysiqbal.com/invoice/${invoice.id}\n📅 Date: ${invoice.date}\n📆 Due: ${invoice.due_date}\n\nThank you for your business.\n— OneAccounts by Siqbal`)
@@ -279,6 +286,7 @@ export default function InvoiceDetailPage() {
           {waLink && hasFeature("whatsapp_invoice") && <a href={waLink} target="_blank" rel="noopener noreferrer" className="oa-btn oa-btn-whatsapp"><Send size={14} /> WhatsApp</a>}
           {reminderLink && hasFeature("payment_reminders") && isOverdue && !isReturned && <a href={reminderLink} target="_blank" rel="noopener noreferrer" className="oa-btn oa-btn-warning"><Send size={14} /> Remind</a>}
           <button className="oa-btn" onClick={handlePrintPDF}><Printer size={14} /> PDF</button>
+          {!isReturned && canReturn && partyAdvance > 0.004 && balanceDue > 0.004 && <button className="oa-btn oa-btn-primary" onClick={() => router.push(`/dashboard/receipts/apply-advance?type=customer&party=${invoice.party_id}&doc=${invoice.id}`)}><Wallet size={14} /> Apply Advance</button>}
         </div>
       </div>
 
