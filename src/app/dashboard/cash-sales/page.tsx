@@ -3,11 +3,12 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { Plus, Eye, Edit, Search, ArrowUpDown, ArrowUp, ArrowDown, FileText, Send, Undo2 } from "lucide-react"
+import { Plus, Eye, Edit, Search, ArrowUpDown, ArrowUp, ArrowDown, FileText, Send, Undo2, Receipt } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import { getWhatsAppLink } from "@/lib/whatsapp"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
+import { generateCashSaleSlipPDF, openCashSaleSlip, SlipWidth } from "@/lib/pdf/cashSaleSlipPDF"
 import { useCompany } from "@/contexts/CompanyContext"
 import ActionSlots from "@/components/ActionSlots"
 import CashSaleReturnModal from "@/components/CashSaleReturnModal"
@@ -319,6 +320,53 @@ export default function CashSalesListPage() {
     }
   }
 
+  const handlePrintSlip = async (sale: any, width: SlipWidth) => {
+    try {
+      await openCashSaleSlip(async () => {
+        const cust = customerMap[sale.party_id]
+        const { data: items } = await supabase
+          .from("cash_sale_items")
+          .select("*")
+          .eq("cash_sale_id", sale.id)
+          .eq("company_id", companyId)
+
+        const rows: any[] = items || []
+        const productIds = rows.map((i: any) => i.product_id).filter((id: any) => id != null)
+        const productMap: Record<number, any> = {}
+        if (productIds.length > 0) {
+          const { data: products } = await supabase.from("products")
+            .select("id, name").in("id", productIds)
+          if (products) products.forEach((p: any) => { productMap[p.id] = p })
+        }
+
+        const f = saleFigures(sale)
+        return generateCashSaleSlipPDF({
+          companyName: companyName || "",
+          companyTagline: companyTagline || "",
+          logoUrl,
+          saleNo: sale.sale_no,
+          date: sale.date,
+          customerName: cust?.name || "Walk-in Customer",
+          returned: f.key === "returned",
+          items: rows.map((item: any) => ({
+            name: productMap[item.product_id]?.name || item.description || "",
+            qty: item.qty || 0,
+            rate: item.unit_price || 0,
+            total: item.total || 0,
+          })),
+          subtotal: round2(sale.total || 0),
+          discount: round2(sale.discount_amount || 0),
+          net: f.net,
+          received: f.received,
+          due: f.due,
+        }, width)
+      }, `CashSaleSlip_${sale.sale_no}.pdf`)
+    } catch (err) {
+      alert("Failed to generate the slip. Please try again.")
+      console.error(err)
+    }
+  }
+
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>
 
@@ -400,6 +448,18 @@ export default function CashSalesListPage() {
           label: "PDF",
           icon: <FileText size={14} />,
           onClick: () => handlePrintPDF(sale),
+        },
+        {
+          key: "slip80",
+          label: "Slip 80 mm",
+          icon: <Receipt size={14} />,
+          onClick: () => handlePrintSlip(sale, 80),
+        },
+        {
+          key: "slip58",
+          label: "Slip 58 mm",
+          icon: <Receipt size={14} />,
+          onClick: () => handlePrintSlip(sale, 58),
         },
       ]}
     />

@@ -6,8 +6,9 @@ import CurrencyTag from "@/components/CurrencyTag"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
-import { ArrowLeft, Printer, Send, Pencil, Undo2, Wallet } from "lucide-react"
+import { ArrowLeft, Printer, Send, Pencil, Undo2, Wallet, Receipt } from "lucide-react"
 import { generateInvoicePDF } from "@/lib/pdf/invoicePDF"
+import { generateCashSaleSlipPDF, openCashSaleSlip, SlipWidth } from "@/lib/pdf/cashSaleSlipPDF"
 import RecordHistory from "@/components/RecordHistory"
 import { usePlan } from "@/contexts/PlanContext"
 import { useCompany } from "@/contexts/CompanyContext"
@@ -77,6 +78,19 @@ export default function CashSaleDetailPage() {
   const [bankAccounts, setBankAccounts] = useState<{ id: number; bank_name: string; account_number?: string }[]>([])
   const [balanceModal, setBalanceModal] = useState<{ mode: "receive" | "edit"; payment?: ExistingBalancePayment } | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+
+  // Thermal slip width (80 mm / 58 mm) - remembered in this browser
+  const [slipWidth, setSlipWidth] = useState<SlipWidth>(80)
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("oa_slip_width")
+      if (saved === "58" || saved === "80") setSlipWidth(Number(saved) as SlipWidth)
+    } catch {}
+  }, [])
+  const changeSlipWidth = (w: SlipWidth) => {
+    setSlipWidth(w)
+    try { window.localStorage.setItem("oa_slip_width", String(w)) } catch {}
+  }
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -227,6 +241,38 @@ export default function CashSaleDetailPage() {
     doc.save(`CashSale_${sale.sale_no}.pdf`)
   }
 
+  const handlePrintSlip = async () => {
+    if (!sale) return
+    try {
+      await openCashSaleSlip(
+        () => generateCashSaleSlipPDF({
+          companyName: companyName || "",
+          companyTagline: companyTagline || "",
+          logoUrl,
+          saleNo: sale.sale_no,
+          date: sale.date,
+          customerName: sale.customer?.name || "Walk-in Customer",
+          returned: isReturned,
+          items: (sale.items || []).map(item => ({
+            name: item.product_name || item.description || "",
+            qty: item.qty || 0,
+            rate: item.unit_price || 0,
+            total: item.total || 0,
+          })),
+          subtotal: round2(sale.total || 0),
+          discount: round2(sale.discount_amount || 0),
+          net: netTotal,
+          received: amountReceived,
+          due: dueAmount,
+        }, slipWidth),
+        `CashSaleSlip_${sale.sale_no}.pdf`
+      )
+    } catch (err) {
+      alert("Failed to generate the slip. Please try again.")
+      console.error(err)
+    }
+  }
+
   if (loading) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Loading…</div>
   if (!sale) return <div style={{ padding: 24, textAlign: "center", background: "var(--bg)", minHeight: "100vh", color: "var(--text-muted)" }}>Cash sale not found</div>
 
@@ -277,6 +323,19 @@ export default function CashSaleDetailPage() {
           )}
           <button className="oa-btn" onClick={handlePrintPDF}>
             <Printer size={14} /> PDF
+          </button>
+          <select
+            className="oa-btn"
+            value={slipWidth}
+            onChange={e => changeSlipWidth(Number(e.target.value) as SlipWidth)}
+            title="Slip paper width"
+            style={{ paddingRight: 4 }}
+          >
+            <option value={80}>80 mm</option>
+            <option value={58}>58 mm</option>
+          </select>
+          <button className="oa-btn" onClick={handlePrintSlip} title="Print on thermal roll">
+            <Receipt size={14} /> Slip
           </button>
         </div>
       </div>
