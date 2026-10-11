@@ -308,7 +308,7 @@ export default function UpgradePage() {
                 <div className="r" key={r.name} title={r.note}><span className="nm">{r.name}</span><div className="tr"><div className="fl" style={{ width: `${(r.pkr / max) * 100}%`, background: "#8a94a0" }}>about Rs {fmtNum(r.pkr)}{r.plusTax ? " + tax" : ""}</div></div></div>
               ))}
               {isNgo ? (
-                <p className="oup-note">NGO needs budgets and projects. Zoho P is the Zoho Books plan with budgeting, per organisation (up to 10 users), US list price. QuickBooks is its entry plan. Odoo is per user, plus tax, and its donor and budget-control setup is extra work. OneAccounts NGO includes donors, projects, budgets and a budget check on every bill. Per month, billed yearly. Checked {comp.asOf}, at Rs {comp.usdToPkr} per US dollar.</p>
+                <p className="oup-note">NGO needs budgets and projects. Zoho Books is shown at the plan with budgeting, per organisation (up to 10 users), US list price. QuickBooks is its entry plan. Odoo is per user, plus tax, and its donor and budget-control setup is extra work. OneAccounts NGO includes donors, projects, budgets and a budget check on every bill. Per month, billed yearly. Checked {comp.asOf}, at Rs {comp.usdToPkr} per US dollar.</p>
               ) : (
                 <p className="oup-note">Entry plan, per month, billed yearly. Odoo at the price paid per user, plus tax. Others at US list price. Checked {comp.asOf}, at Rs {comp.usdToPkr} per US dollar.</p>
               )}
