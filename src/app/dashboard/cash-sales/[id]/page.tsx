@@ -324,6 +324,7 @@ export default function CashSaleDetailPage() {
           <button className="oa-btn" onClick={handlePrintPDF}>
             <Printer size={14} /> PDF
           </button>
+          {hasFeature("thermal_slip") && (<>
           <select
             className="oa-btn"
             value={slipWidth}
@@ -337,6 +338,7 @@ export default function CashSaleDetailPage() {
           <button className="oa-btn" onClick={handlePrintSlip} title="Print on thermal roll">
             <Receipt size={14} /> Slip
           </button>
+          </>)}
         </div>
       </div>
 

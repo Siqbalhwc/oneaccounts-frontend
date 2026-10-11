@@ -452,12 +452,14 @@ export default function CashSalesListPage() {
         {
           key: "slip80",
           label: "Slip 80 mm",
+          hidden: !hasFeature("thermal_slip"),
           icon: <Receipt size={14} />,
           onClick: () => handlePrintSlip(sale, 80),
         },
         {
           key: "slip58",
           label: "Slip 58 mm",
+          hidden: !hasFeature("thermal_slip"),
           icon: <Receipt size={14} />,
           onClick: () => handlePrintSlip(sale, 58),
         },

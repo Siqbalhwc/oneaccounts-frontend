@@ -18,6 +18,7 @@ const FEATURE_CODES = [
   "tax_management",
   "payroll",
   "material_management",
+  "thermal_slip",
 ]
 
 interface PlanContextType {

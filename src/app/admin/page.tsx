@@ -16,7 +16,7 @@ const FEATURE_CODES = [
   "invoice_automation","profit_allocation","inventory","investors",
   "balance_sheet","whatsapp_invoice","payment_reminders",
   "csv_import_export","email_reports","purchase_orders","tax_management",
-  "payroll","material_management",
+  "payroll","material_management","thermal_slip",
 ]
 const FEATURE_LABELS: Record<string, string> = {
   asset_management: "Fixed Asset Management",   // ← added
@@ -24,7 +24,7 @@ const FEATURE_LABELS: Record<string, string> = {
   inventory:"Inventory", investors:"Investors", balance_sheet:"Balance Sheet",
   whatsapp_invoice:"WhatsApp Invoice", payment_reminders:"Payment Reminders",
   csv_import_export:"CSV Import/Export", tax_management: "Tax Management", email_reports:"Email Reports",
-  purchase_orders:"Purchase Orders", payroll: "Payroll", material_management: "Material Management",
+  purchase_orders:"Purchase Orders", payroll: "Payroll", material_management: "Material Management", thermal_slip: "Thermal Slip Printing (80/58 mm)",
 }
 const ADDON_FEATURES = ["whatsapp_invoice", "inventory", "purchase_orders"]
 const ADDON_LABELS: Record<string, string> = {
