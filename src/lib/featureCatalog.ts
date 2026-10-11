@@ -99,8 +99,9 @@ export const COMPETITORS_NGO = {
   asOf: 'Oct 2026',
   usdToPkr: 277,
   items: [
-    { name: 'Zoho Books Premium', usd: 60,    note: 'Premium plan is the first with budgeting (projects start at Professional). Per organisation, up to 10 users.' },
+    { name: 'Zoho P',             usd: 60,    note: 'Premium plan is the first with budgeting (projects start at Professional). Per organisation, up to 10 users.' },
     { name: 'Odoo',               usd: 20,    note: 'Price actually paid per user per month, plus tax. Setup for donors and budget control is extra.', plusTax: true },
+    { name: 'QuickBooks',         usd: 38,    note: 'Simple Start, 1 user' },
   ] as Competitor[],
 }
 
