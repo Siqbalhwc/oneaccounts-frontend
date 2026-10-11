@@ -5,14 +5,14 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import {
   Check, Plus, Users, MessageCircle, Package, Warehouse, ClipboardList, Receipt,
-  Building2, Repeat, TrendingUp, PieChart, Mail, FileSpreadsheet, BellRing, Box,
+  Building2, Repeat, TrendingUp, PieChart, Mail, FileSpreadsheet, BellRing, Box, Printer,
   type LucideIcon,
 } from "lucide-react"
 import { useCompany } from "@/contexts/CompanyContext"
 import { fmtLongDate, type AccessStatus } from "@/lib/access"
 import {
   FEATURES, PERIODS, PERIOD_META, PLAN_PRICING, ADDON_PRICE_MONTHLY, addonPrice,
-  bestForLabel, featureName, SUPPORT, fmtNum, COMPETITORS, competitorPkr, type BillingPeriod,
+  bestForLabel, featureName, SUPPORT, fmtNum, COMPETITORS, COMPETITORS_NGO, competitorPkr, type BillingPeriod,
 } from "@/lib/featureCatalog"
 import { UPGRADE_CSS } from "@/lib/upgradeStyles"
 
@@ -21,7 +21,7 @@ const ICONS: Record<string, LucideIcon> = {
   material_management: Warehouse, purchase_orders: ClipboardList, tax_management: Receipt,
   asset_management: Building2, invoice_automation: Repeat, investors: TrendingUp,
   profit_allocation: PieChart, email_reports: Mail, csv_import_export: FileSpreadsheet,
-  payment_reminders: BellRing,
+  payment_reminders: BellRing, thermal_slip: Printer,
 }
 
 const CORE_CHIPS = [
@@ -294,7 +294,9 @@ export default function UpgradePage() {
       <div className="oup-card oup-cmp sm">
         {(() => {
           const mine = basePrice("monthly")
-          const rows = COMPETITORS.items.map(c => ({ ...c, pkr: competitorPkr(c.usd) }))
+          const isNgo = businessType === "ngo"
+          const comp = isNgo ? COMPETITORS_NGO : COMPETITORS
+          const rows = comp.items.map(c => ({ ...c, pkr: competitorPkr(c.usd) }))
           const max = Math.max(mine, ...rows.map(r => r.pkr))
           const maxRow = rows.reduce((m, r) => (r.pkr > m.pkr ? r : m), rows[0])
           const cut = Math.round((1 - mine / maxRow.pkr) * 100)
@@ -303,9 +305,13 @@ export default function UpgradePage() {
               <div className="oup-lbl">Why OneAccounts{cut > 0 ? ` - up to ${cut}% less than ${maxRow.name}` : ""}</div>
               <div className="r"><span className="nm">OneAccounts</span><div className="tr"><div className="fl" style={{ width: `${Math.max(18, (mine / max) * 100)}%`, background: "var(--primary)" }}>Rs {fmtNum(mine)}</div></div></div>
               {rows.map(r => (
-                <div className="r" key={r.name} title={r.note}><span className="nm">{r.name}</span><div className="tr"><div className="fl" style={{ width: `${(r.pkr / max) * 100}%`, background: "#8a94a0" }}>about Rs {fmtNum(r.pkr)}</div></div></div>
+                <div className="r" key={r.name} title={r.note}><span className="nm">{r.name}</span><div className="tr"><div className="fl" style={{ width: `${(r.pkr / max) * 100}%`, background: "#8a94a0" }}>about Rs {fmtNum(r.pkr)}{r.plusTax ? " + tax" : ""}</div></div></div>
               ))}
-              <p className="oup-note">Entry plan, per month, billed yearly. Odoo at its Pakistan price, others at US list price. Checked {COMPETITORS.asOf}, at Rs {COMPETITORS.usdToPkr} per US dollar.</p>
+              {isNgo ? (
+                <p className="oup-note">NGO needs budgets and projects, so this compares the plans that include them. Zoho Books Premium is per organisation (up to 10 users), US list price. Odoo is per user, plus tax, and its donor and budget-control setup is extra work. OneAccounts NGO includes donors, projects, budgets and a budget check on every bill. Per month, billed yearly. Checked {comp.asOf}, at Rs {comp.usdToPkr} per US dollar.</p>
+              ) : (
+                <p className="oup-note">Entry plan, per month, billed yearly. Odoo at the price paid per user, plus tax. Others at US list price. Checked {comp.asOf}, at Rs {comp.usdToPkr} per US dollar.</p>
+              )}
             </>
           )
         })()}

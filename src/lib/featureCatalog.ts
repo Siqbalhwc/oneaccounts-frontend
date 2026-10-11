@@ -49,6 +49,7 @@ export const FEATURES: CatalogFeature[] = [
   { code: 'email_reports',        name: 'Email reports',         short: 'Reports by email' },
   { code: 'csv_import_export',    name: 'CSV import and export', short: 'Bulk upload and download' },
   { code: 'payment_reminders',    name: 'Payment reminders',     short: 'Chase overdue payments' },
+  { code: 'thermal_slip',         name: 'Thermal slip printing', short: 'Cash sale slips on 80 mm and 58 mm rolls' },
 ]
 
 export const FEATURE_CODES = FEATURES.map(f => f.code)
@@ -78,17 +79,31 @@ export function fmtNum(n: number): string {
   return Math.round(n).toLocaleString('en-US')
 }
 
-// Competitor entry prices, billed yearly, USD per month (Odoo at its Pakistan price).
-// Checked October 2026. Refresh these numbers from time to time.
+export interface Competitor { name: string; usd: number; note: string; plusTax?: boolean }
+
+// Competitor prices, billed yearly, USD per month. Checked October 2026. Refresh from time to time.
+// Odoo is the price Shahid actually pays per user (about 20 USD, plus tax). Zoho Books is the US list price (per organisation).
 export const COMPETITORS = {
   asOf: 'Oct 2026',
   usdToPkr: 277,
   items: [
     { name: 'Zoho Books',  usd: 15,    note: 'Standard plan, 3 users included' },
-    { name: 'Odoo',        usd: 17,    note: 'Standard plan, all apps, per user (Pakistan price)' },
+    { name: 'Odoo',        usd: 20,    note: 'Price actually paid per user per month, plus tax', plusTax: true },
     { name: 'QuickBooks',  usd: 38,    note: 'Simple Start, 1 user' },
-  ],
+  ] as Competitor[],
 }
+
+// NGO companies need budgets and projects, which the entry plans above do not include.
+// So for NGO the comparison uses the plans that do have them.
+export const COMPETITORS_NGO = {
+  asOf: 'Oct 2026',
+  usdToPkr: 277,
+  items: [
+    { name: 'Zoho Books Premium', usd: 60,    note: 'Premium plan is the first with budgeting (projects start at Professional). Per organisation, up to 10 users.' },
+    { name: 'Odoo',               usd: 20,    note: 'Price actually paid per user per month, plus tax. Setup for donors and budget control is extra.', plusTax: true },
+  ] as Competitor[],
+}
+
 export function competitorPkr(usd: number): number {
   return Math.round((usd * COMPETITORS.usdToPkr) / 50) * 50
 }
