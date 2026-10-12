@@ -48,6 +48,8 @@ export default function EmployeeLoansPage() {
   const [formPrincipal, setFormPrincipal] = useState("")
   const [formInstallment, setFormInstallment] = useState("")
   const [formStartDate, setFormStartDate] = useState(new Date().toISOString().split("T")[0])
+  const [formPaidFrom, setFormPaidFrom] = useState<number | null>(null)
+  const [payAccounts, setPayAccounts] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState("")
@@ -61,6 +63,16 @@ export default function EmployeeLoansPage() {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
+
+        // Bank and cash accounts the money can be paid from
+        supabase
+          .from("accounts")
+          .select("id, code, name")
+          .eq("company_id", cid)
+          .eq("type", "Asset")
+          .like("code", "10%")
+          .order("code")
+          .then(({ data }) => setPayAccounts(data || []))
 
         // Fetch departments and employees (without join, then merge)
         supabase
@@ -178,6 +190,7 @@ export default function EmployeeLoansPage() {
     setFormEmployeeId(null)
     setFormPrincipal("")
     setFormInstallment("")
+    setFormPaidFrom(null)
     setFormStartDate(new Date().toISOString().split("T")[0])
     setShowForm(true)
     setError("")
@@ -195,41 +208,38 @@ export default function EmployeeLoansPage() {
 
   const handleSave = async () => {
     if (!formEmployeeId) { setError("Select an employee"); return }
-    if (!formPrincipal || isNaN(Number(formPrincipal))) { setError("Valid principal amount required"); return }
-    if (!formInstallment || isNaN(Number(formInstallment))) { setError("Valid installment required"); return }
+    if (!formPrincipal || isNaN(Number(formPrincipal)) || Number(formPrincipal) <= 0) { setError("Valid principal amount required"); return }
+    if (!formInstallment || isNaN(Number(formInstallment)) || Number(formInstallment) <= 0) { setError("Valid installment required"); return }
+    if (Number(formInstallment) > Number(formPrincipal)) { setError("Monthly amount cannot be more than the total amount"); return }
+    if (!editingId && !formPaidFrom) { setError("Select the Bank or Cash account the money is paid from"); return }
 
     setSaving(true)
     setError("")
     const { data: { user } } = await supabase.auth.getUser()
 
     if (editingId) {
-      // Update
+      // Only the repayment terms can change. The amount and the balance are never touched here.
       const { error: updateErr } = await supabase
         .from("employee_loans")
         .update({
-          principal_amount: Number(formPrincipal),
           monthly_installment: Number(formInstallment),
           start_date: formStartDate,
-          balance: Number(formPrincipal),   // reset balance on edit
         })
         .eq("id", editingId)
       if (updateErr) { setError(updateErr.message); setSaving(false); return }
       setFlash("Loan updated")
     } else {
-      // Insert
-      const { error: insertErr } = await supabase
-        .from("employee_loans")
-        .insert({
-          employee_id: formEmployeeId,
-          principal_amount: Number(formPrincipal),
-          monthly_installment: Number(formInstallment),
-          balance: Number(formPrincipal),
-          start_date: formStartDate,
-          status: "active",
-          created_by: user?.id,
-        })
-      if (insertErr) { setError(insertErr.message); setSaving(false); return }
-      setFlash("Loan created")
+      // Issuing posts the accounting entry: Dr Employee Loans & Advances, Cr Bank/Cash
+      const { error: issueErr } = await supabase.rpc("issue_employee_loan", {
+        p_company_id: companyId,
+        p_employee_id: formEmployeeId,
+        p_amount: Number(formPrincipal),
+        p_installment: Number(formInstallment),
+        p_start_date: formStartDate,
+        p_paid_from_account_id: formPaidFrom,
+      })
+      if (issueErr) { setError(issueErr.message); setSaving(false); return }
+      setFlash("Loan issued")
     }
 
     setSaving(false)
@@ -516,7 +526,7 @@ export default function EmployeeLoansPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div>
                 <label className="kpi-label" style={{ display: "block", marginBottom: 4 }}>Principal Amount *</label>
-                <input className="input" type="number" value={formPrincipal} onChange={e => setFormPrincipal(e.target.value)} placeholder="e.g. 100000" />
+                <input className="input" type="number" value={formPrincipal} onChange={e => setFormPrincipal(e.target.value)} placeholder="e.g. 100000" disabled={!!editingId} />
               </div>
               <div>
                 <label className="kpi-label" style={{ display: "block", marginBottom: 4 }}>Monthly Installment *</label>
@@ -526,6 +536,21 @@ export default function EmployeeLoansPage() {
             {formPrincipal && formInstallment && Number(formInstallment) > 0 && (
               <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
                 Estimated duration: {Math.ceil(Number(formPrincipal) / Number(formInstallment))} months
+              </div>
+            )}
+            {!editingId ? (
+              <div style={{ marginBottom: 12 }}>
+                <label className="kpi-label" style={{ display: "block", marginBottom: 4 }}>Paid From (Bank / Cash) *</label>
+                <select className="select" value={formPaidFrom ?? ""} onChange={e => setFormPaidFrom(e.target.value ? Number(e.target.value) : null)}>
+                  <option value="">Select account...</option>
+                  {payAccounts.map(a => (
+                    <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
+                The amount cannot be changed after it is issued. You can change the monthly amount and the start date.
               </div>
             )}
             <div style={{ marginBottom: 20 }}>

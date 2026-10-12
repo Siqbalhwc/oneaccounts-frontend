@@ -55,7 +55,7 @@ export async function POST(
   // 3. Get the original journal entry lines
   const { data: originalLines } = await supabase
     .from('journal_lines')
-    .select('account_id, debit, credit, project_id, activity_id, location_id, donor_id')
+    .select('account_id, debit, credit, project_id, activity_id, location_id, donor_id, employee_id')
     .eq('entry_id', run.journal_entry_id)
 
   if (!originalLines || originalLines.length === 0) {
@@ -77,6 +77,8 @@ export async function POST(
       entry_no: entryNo,
       date: new Date().toISOString().split('T')[0],
       description: `Reversal of Payroll ${reason}`,
+      source_type: 'payroll_reversal',
+      source_id: runId,
     })
     .select('id')
     .single()
@@ -96,6 +98,7 @@ export async function POST(
     activity_id: line.activity_id,
     location_id: line.location_id,
     donor_id: line.donor_id,
+    employee_id: line.employee_id,
     source_type: 'payroll_reversal',
     source_id: runId,
   }))

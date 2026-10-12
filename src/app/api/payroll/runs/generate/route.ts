@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
         amount: absenceDeduction,
         type: 'deduction',
         gl_account_id: null,
-        source_type: null,
+        source_type: 'absence',
         source_id: null,
       })
       deductions += absenceDeduction
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
         amount: overtimeTotal,
         type: 'earning',
         gl_account_id: null,
-        source_type: null,
+        source_type: 'overtime',
         source_id: null,
       })
       gross += overtimeTotal
@@ -185,14 +185,17 @@ export async function POST(request: NextRequest) {
     // ----- Employee Loans Integration (with source tracking) -----
     const { data: activeLoans } = await supabase
       .from('employee_loans')
-      .select('id, monthly_installment')
+      .select('id, monthly_installment, balance, start_date')
       .eq('employee_id', emp.id)
       .eq('status', 'active')
+      .gt('balance', 0)
+      .or(`start_date.is.null,start_date.lte.${endDate}`)
       .order('created_at', { ascending: false })
 
     if (activeLoans) {
       for (const loan of activeLoans) {
-        const installment = Number(loan.monthly_installment || 0)
+        // Never recover more than what is still owed (last installment is the remaining balance)
+        const installment = Math.min(Number(loan.monthly_installment || 0), Number(loan.balance || 0))
         if (installment > 0) {
           lineComponents.push({
             salary_component_id: null,
@@ -211,14 +214,16 @@ export async function POST(request: NextRequest) {
     // ----- Salary Advances Integration (with source tracking) -----
     const { data: activeAdvances } = await supabase
       .from('salary_advances')
-      .select('id, monthly_recovery')
+      .select('id, monthly_recovery, balance, start_date')
       .eq('employee_id', emp.id)
       .eq('status', 'active')
+      .gt('balance', 0)
+      .or(`start_date.is.null,start_date.lte.${endDate}`)
       .order('created_at', { ascending: false })
 
     if (activeAdvances) {
       for (const adv of activeAdvances) {
-        const recovery = Number(adv.monthly_recovery || 0)
+        const recovery = Math.min(Number(adv.monthly_recovery || 0), Number(adv.balance || 0))
         if (recovery > 0) {
           lineComponents.push({
             salary_component_id: null,

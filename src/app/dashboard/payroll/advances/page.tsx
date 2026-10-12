@@ -42,6 +42,8 @@ export default function SalaryAdvancesPage() {
   const [formAdvance, setFormAdvance] = useState("")
   const [formRecovery, setFormRecovery] = useState("")
   const [formStartDate, setFormStartDate] = useState(new Date().toISOString().split("T")[0])
+  const [formPaidFrom, setFormPaidFrom] = useState<number | null>(null)
+  const [payAccounts, setPayAccounts] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState("")
@@ -54,6 +56,15 @@ export default function SalaryAdvancesPage() {
       const cid = (user?.app_metadata as any)?.company_id
       if (cid) {
         setCompanyId(cid)
+        // Bank and cash accounts the money can be paid from
+        supabase
+          .from("accounts")
+          .select("id, code, name")
+          .eq("company_id", cid)
+          .eq("type", "Asset")
+          .like("code", "10%")
+          .order("code")
+          .then(({ data }) => setPayAccounts(data || []))
         // Fetch employees without join
         supabase
           .from("employees")
@@ -138,6 +149,7 @@ export default function SalaryAdvancesPage() {
     setFormEmployeeId(null)
     setFormAdvance("")
     setFormRecovery("")
+    setFormPaidFrom(null)
     setFormStartDate(new Date().toISOString().split("T")[0])
     setShowForm(true)
     setError("")
@@ -155,39 +167,38 @@ export default function SalaryAdvancesPage() {
 
   const handleSave = async () => {
     if (!formEmployeeId) { setError("Select an employee"); return }
-    if (!formAdvance || isNaN(Number(formAdvance))) { setError("Valid advance amount required"); return }
-    if (!formRecovery || isNaN(Number(formRecovery))) { setError("Valid monthly recovery required"); return }
+    if (!formAdvance || isNaN(Number(formAdvance)) || Number(formAdvance) <= 0) { setError("Valid advance amount required"); return }
+    if (!formRecovery || isNaN(Number(formRecovery)) || Number(formRecovery) <= 0) { setError("Valid monthly recovery required"); return }
+    if (Number(formRecovery) > Number(formAdvance)) { setError("Monthly amount cannot be more than the total amount"); return }
+    if (!editingId && !formPaidFrom) { setError("Select the Bank or Cash account the money is paid from"); return }
 
     setSaving(true)
     setError("")
     const { data: { user } } = await supabase.auth.getUser()
 
     if (editingId) {
+      // Only the repayment terms can change. The amount and the balance are never touched here.
       const { error: updateErr } = await supabase
         .from("salary_advances")
         .update({
-          advance_amount: Number(formAdvance),
           monthly_recovery: Number(formRecovery),
           start_date: formStartDate,
-          balance: Number(formAdvance),
         })
         .eq("id", editingId)
       if (updateErr) { setError(updateErr.message); setSaving(false); return }
       setFlash("Advance updated")
     } else {
-      const { error: insertErr } = await supabase
-        .from("salary_advances")
-        .insert({
-          employee_id: formEmployeeId,
-          advance_amount: Number(formAdvance),
-          monthly_recovery: Number(formRecovery),
-          balance: Number(formAdvance),
-          start_date: formStartDate,
-          status: "active",
-          created_by: user?.id,
-        })
-      if (insertErr) { setError(insertErr.message); setSaving(false); return }
-      setFlash("Advance created")
+      // Issuing posts the accounting entry: Dr Employee Loans & Advances, Cr Bank/Cash
+      const { error: issueErr } = await supabase.rpc("issue_salary_advance", {
+        p_company_id: companyId,
+        p_employee_id: formEmployeeId,
+        p_amount: Number(formAdvance),
+        p_installment: Number(formRecovery),
+        p_start_date: formStartDate,
+        p_paid_from_account_id: formPaidFrom,
+      })
+      if (issueErr) { setError(issueErr.message); setSaving(false); return }
+      setFlash("Advance issued")
     }
 
     setSaving(false)
@@ -472,7 +483,7 @@ export default function SalaryAdvancesPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div>
                 <label className="kpi-label" style={{ display: "block", marginBottom: 4 }}>Advance Amount *</label>
-                <input className="input" type="number" value={formAdvance} onChange={e => setFormAdvance(e.target.value)} placeholder="e.g. 25000" />
+                <input className="input" type="number" value={formAdvance} onChange={e => setFormAdvance(e.target.value)} placeholder="e.g. 25000" disabled={!!editingId} />
               </div>
               <div>
                 <label className="kpi-label" style={{ display: "block", marginBottom: 4 }}>Monthly Recovery *</label>
@@ -482,6 +493,21 @@ export default function SalaryAdvancesPage() {
             {formAdvance && formRecovery && Number(formRecovery) > 0 && (
               <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
                 Estimated duration: {Math.ceil(Number(formAdvance) / Number(formRecovery))} months
+              </div>
+            )}
+            {!editingId ? (
+              <div style={{ marginBottom: 12 }}>
+                <label className="kpi-label" style={{ display: "block", marginBottom: 4 }}>Paid From (Bank / Cash) *</label>
+                <select className="select" value={formPaidFrom ?? ""} onChange={e => setFormPaidFrom(e.target.value ? Number(e.target.value) : null)}>
+                  <option value="">Select account...</option>
+                  {payAccounts.map(a => (
+                    <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
+                The amount cannot be changed after it is issued. You can change the monthly amount and the start date.
               </div>
             )}
             <div style={{ marginBottom: 20 }}>
