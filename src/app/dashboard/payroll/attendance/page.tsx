@@ -45,6 +45,7 @@ export default function UnifiedAttendancePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const dirtyKeys = useRef<Set<string>>(new Set())
   const [error, setError] = useState("")
   const [flash, setFlash] = useState("")
 
@@ -99,23 +100,38 @@ export default function UnifiedAttendancePage() {
     if (!companyId) return
     const startDate = `${year}-${String(month + 1).padStart(2, "0")}-01`
     const endDate = `${year}-${String(month + 1).padStart(2, "0")}-${daysInMonth}`
-    supabase
-      .from("attendance_records")
-      .select("employee_id, date, raw_status, check_in, check_out, verified_status")
-      .eq("company_id", companyId)
-      .gte("date", startDate)
-      .lte("date", endDate)
-      .then(({ data }) => {
-        const map: Record<string, any> = {}
-        if (data) {
-          data.forEach((row: any) => {
-            const key = `${row.employee_id}_${row.date}`
-            map[key] = row
-          })
-        }
-        setAttendanceData(map)
-        setLoading(false)
+    let cancelled = false
+    const load = async () => {
+      // Read in pages of 1000 so a big company is never cut off silently
+      const all: any[] = []
+      const PAGE = 1000
+      for (let from = 0; ; from += PAGE) {
+        const { data, error: fetchErr } = await supabase
+          .from("attendance_records")
+          .select("employee_id, date, raw_status, check_in, check_out, verified_status")
+          .eq("company_id", companyId)
+          .gte("date", startDate)
+          .lte("date", endDate)
+          .order("employee_id")
+          .order("date")
+          .range(from, from + PAGE - 1)
+        if (fetchErr) { if (!cancelled) setError(fetchErr.message); break }
+        if (!data || data.length === 0) break
+        all.push(...data)
+        if (data.length < PAGE) break
+      }
+      if (cancelled) return
+      const map: Record<string, any> = {}
+      all.forEach((row: any) => {
+        map[`${row.employee_id}_${row.date}`] = row
       })
+      setAttendanceData(map)
+      dirtyKeys.current = new Set()
+      setDirty(false)
+      setLoading(false)
+    }
+    load()
+    return () => { cancelled = true }
   }, [companyId, month, year, daysInMonth])
 
   // --- Helpers ---
@@ -126,10 +142,14 @@ export default function UnifiedAttendancePage() {
 
   const setCell = (empId: number, dateStr: string, field: string, value: any) => {
     const key = `${empId}_${dateStr}`
-    setAttendanceData(prev => ({
-      ...prev,
-      [key]: { ...(prev[key] || { raw_status: "present", verified_status: "pending" }), [field]: value }
-    }))
+    dirtyKeys.current.add(key)
+    setAttendanceData(prev => {
+      const base = prev[key] || { raw_status: "present", verified_status: "pending" }
+      const next = { ...base, [field]: value }
+      // Any change to a day that was already approved or rejected sends it back for verification
+      if (base.verified_status === "approved" || base.verified_status === "rejected") next.verified_status = "pending"
+      return { ...prev, [key]: next }
+    })
     setDirty(true)
   }
 
@@ -163,26 +183,33 @@ export default function UnifiedAttendancePage() {
   // --- Save ---
   const handleSave = async () => {
     if (!companyId) { setError("Company not loaded"); return }
+    if (frozen) { setError("This month is frozen. Changes are not allowed."); return }
     setSaving(true)
     setError("")
 
+    // Save ONLY the days the user actually changed (whatever the search or filter shows)
     const records: any[] = []
-    filteredEmployees.forEach(emp => {
-      for (let d = 1; d <= daysInMonth; d++) {
-        const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`
-        const cell = getCell(emp.id, dateStr)
-        records.push({
-          company_id: companyId,
-          employee_id: emp.id,
-          date: dateStr,
-          raw_status: cell.raw_status,
-          check_in: cell.check_in || null,
-          check_out: cell.check_out || null,
-          source: "manual",
-          verified_status: cell.verified_status || "pending",
-        })
-      }
+    dirtyKeys.current.forEach(key => {
+      const sep = key.indexOf("_")
+      const empId = Number(key.slice(0, sep))
+      const dateStr = key.slice(sep + 1)
+      const cell = getCell(empId, dateStr)
+      records.push({
+        company_id: companyId,
+        employee_id: empId,
+        date: dateStr,
+        raw_status: cell.raw_status,
+        check_in: cell.check_in || null,
+        check_out: cell.check_out || null,
+        source: "manual",
+        verified_status: cell.verified_status || "pending",
+      })
     })
+    if (records.length === 0) {
+      setDirty(false)
+      setSaving(false)
+      return
+    }
 
     const { error: upsertErr } = await supabase
       .from("attendance_records")
@@ -194,14 +221,15 @@ export default function UnifiedAttendancePage() {
       return
     }
 
+    dirtyKeys.current = new Set()
     setDirty(false)
     setFlash(`Attendance saved for ${monthLabel}`)
     setSaving(false)
   }
 
   // --- Navigation ---
-  const goToPrevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1) } else setMonth(m => m - 1) }
-  const goToNextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
+  const goToPrevMonth = () => { if (dirtyKeys.current.size > 0) { setError("Save your changes before changing the month."); return }; if (month === 0) { setMonth(11); setYear(y => y - 1) } else setMonth(m => m - 1) }
+  const goToNextMonth = () => { if (dirtyKeys.current.size > 0) { setError("Save your changes before changing the month."); return }; if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
 
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!canView) return <div style={{ padding: 24, textAlign: "center", color: "var(--text)" }}><h2>Access Denied</h2></div>

@@ -76,6 +76,7 @@ export default function NewPayrollRunPage() {
           .from("employees")
           .select("id")
           .eq("company_id", companyId)
+          .eq("status", "active")
 
         if (departmentId) {
           employeeQuery = employeeQuery.eq("department_id", departmentId)
@@ -97,7 +98,8 @@ export default function NewPayrollRunPage() {
           const { data: revisions } = await supabase
             .from("employee_salary_revisions")
             .select("employee_id, effective_date")
-            .eq("company_id", companyId)
+            .in("employee_id", allEmployees.map(e => e.id))
+            .lte("effective_date", `${selectedMonth}-01`)
             .order("effective_date", { ascending: false })
 
           if (revisions) {
@@ -118,21 +120,39 @@ export default function NewPayrollRunPage() {
         let { count: loansCount } = await supabase
           .from("employee_loans")
           .select("*", { count: "exact", head: true })
-          .eq("company_id", companyId)
+          .in("employee_id", allEmployees.map(e => e.id))
           .eq("status", "active")
+          .gt("balance", 0)
         loansCount = loansCount || 0
 
         // 4. Active advances
         let { count: advancesCount } = await supabase
           .from("salary_advances")
           .select("*", { count: "exact", head: true })
-          .eq("company_id", companyId)
+          .in("employee_id", allEmployees.map(e => e.id))
           .eq("status", "active")
+          .gt("balance", 0)
         advancesCount = advancesCount || 0
 
         const warnings: string[] = []
         if (missingStructureCount > 0) {
           warnings.push(`${missingStructureCount} employee(s) have no salary structure assigned.`)
+        }
+
+        // Attendance that is not approved yet is ignored by payroll
+        const [py, pm] = selectedMonth.split("-").map(Number)
+        const lastDay = new Date(py, pm, 0).getDate()
+        let attQuery = supabase
+          .from("attendance_records")
+          .select("id, employees!inner(department_id)", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .gte("date", `${selectedMonth}-01`)
+          .lte("date", `${selectedMonth}-${String(lastDay).padStart(2, "0")}`)
+          .neq("verified_status", "approved")
+        if (departmentId) attQuery = attQuery.eq("employees.department_id", departmentId)
+        const { count: pendingAtt } = await attQuery
+        if ((pendingAtt || 0) > 0) {
+          warnings.push(`${pendingAtt} attendance record(s) for this month are not approved yet. Absences and overtime in them will NOT be counted. Approve them in Attendance Verification first.`)
         }
 
         setPreview({

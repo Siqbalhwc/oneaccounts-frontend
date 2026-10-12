@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 
-const STATUS_OPTIONS = ["all", "pending", "approved"]
+const STATUS_OPTIONS = ["all", "pending", "approved", "rejected"]
 const RECORD_STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   present:       { bg: "#DCFCE7", text: "#166534", label: "Present" },
   absent:        { bg: "#FEE2E2", text: "#991B1B", label: "Absent" },
@@ -78,7 +78,7 @@ export default function AttendanceApprovalPage() {
     if (statusFilter !== "all") {
       query = query.eq("verified_status", statusFilter)
     }
-    if (pendingOnly) {
+    if (pendingOnly && (statusFilter === "all" || statusFilter === "pending")) {
       query = query.eq("verified_status", "pending")
     }
     if (dateFrom) query = query.gte("date", dateFrom)

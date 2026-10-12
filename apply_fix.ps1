@@ -1,408 +1,332 @@
-# apply_fix.ps1 - Payroll Batch 3 (accounting: overtime, absence, loans, advances)
+# apply_fix.ps1 - Payroll Batch 2a (safe version: checks EVERYTHING first, changes NOTHING unless every patch matches)
 # Run from: C:\Users\Shahid Iqbal\Desktop\OneAccounts\frontend
 $ErrorActionPreference = 'Stop'
 $enc = New-Object System.Text.UTF8Encoding($false)
-function Write-Target($rel, $content) {
-  $full = Join-Path (Get-Location).Path $rel
-  $dir = Split-Path $full -Parent
-  if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-  [System.IO.File]::WriteAllText($full, $content, $enc)
-  Write-Host ("WROTE   " + $rel)
-}
-function Patch-Target($rel, $old, $new) {
-  $full = Join-Path (Get-Location).Path $rel
-  if (-not (Test-Path -LiteralPath $full)) { throw "File not found: $rel" }
-  $t = [System.IO.File]::ReadAllText($full)
+$root = (Get-Location).Path
+$script:files = @{}
+$script:failed = @()
+$script:count = 0
+
+function Add-Patch($rel, $old, $new) {
+  $full = Join-Path $root $rel
+  if (-not $script:files.ContainsKey($rel)) {
+    if (-not (Test-Path -LiteralPath $full)) { $script:failed += "MISSING FILE: $rel"; $script:files[$rel] = $null; return }
+    $script:files[$rel] = [System.IO.File]::ReadAllText($full)
+  }
+  $t = $script:files[$rel]
+  if ($t -eq $null) { return }
   $nl = if ($t.Contains("`r`n")) { "`r`n" } else { "`n" }
   $o = $old.Replace("`r`n","`n").Replace("`n",$nl)
   $n = $new.Replace("`r`n","`n").Replace("`n",$nl)
   $i = $t.IndexOf($o)
-  if ($i -lt 0) { throw "PATCH FAILED (text not found): $rel" }
-  if ($t.IndexOf($o, $i + 1) -ge 0) { throw "PATCH FAILED (text found twice): $rel" }
-  $t = $t.Substring(0,$i) + $n + $t.Substring($i + $o.Length)
-  [System.IO.File]::WriteAllText($full, $t, $enc)
-  Write-Host ("PATCHED " + $rel)
+  if ($i -lt 0) {
+    $first = (($old -split "`n") | Where-Object { $_.Trim() -ne '' } | Select-Object -First 1).Trim()
+    $msg = "NOT MATCHED in $rel`n  looking for: $first"
+    $lines = $t -split "`r?`n"
+    $hit = -1
+    for ($k = 0; $k -lt $lines.Count; $k++) { if ($lines[$k].Contains($first)) { $hit = $k; break } }
+    if ($hit -ge 0) {
+      $msg += "`n  first line found at line $($hit+1); the file has this there:"
+      $to = [Math]::Min($hit + 14, $lines.Count - 1)
+      for ($k = $hit; $k -le $to; $k++) { $msg += "`n  | " + $lines[$k] }
+    } else { $msg += "`n  (that first line does not exist in your file at all)" }
+    $script:failed += $msg
+    return
+  }
+  if ($t.IndexOf($o, $i + 1) -ge 0) { $script:failed += "FOUND TWICE in $rel : $($old.Substring(0, [Math]::Min(60,$old.Length)))"; return }
+  $script:files[$rel] = $t.Substring(0,$i) + $n + $t.Substring($i + $o.Length)
+  $script:count++
 }
 
 
-Patch-Target 'src\app\api\payroll\runs\generate\route.ts' @'
-        type: 'deduction',
-        gl_account_id: null,
-        source_type: null,
-        source_id: null,
+Add-Patch 'src\app\dashboard\payroll\attendance\page.tsx' @'
+  const [dirty, setDirty] = useState(false)
+
+'@ @'
+  const [dirty, setDirty] = useState(false)
+  const dirtyKeys = useRef<Set<string>>(new Set())
+
+'@
+
+Add-Patch 'src\app\dashboard\payroll\attendance\page.tsx' @'
+    supabase
+      .from("attendance_records")
+      .select("employee_id, date, raw_status, check_in, check_out, verified_status")
+      .eq("company_id", companyId)
+      .gte("date", startDate)
+      .lte("date", endDate)
+      .then(({ data }) => {
+        const map: Record<string, any> = {}
+        if (data) {
+          data.forEach((row: any) => {
+            const key = `${row.employee_id}_${row.date}`
+            map[key] = row
+          })
+        }
+        setAttendanceData(map)
+        setLoading(false)
       })
-      deductions += absenceDeduction
+  }, [companyId, month, year, daysInMonth])
 '@ @'
-        type: 'deduction',
-        gl_account_id: null,
-        source_type: 'absence',
-        source_id: null,
+    let cancelled = false
+    const load = async () => {
+      // Read in pages of 1000 so a big company is never cut off silently
+      const all: any[] = []
+      const PAGE = 1000
+      for (let from = 0; ; from += PAGE) {
+        const { data, error: fetchErr } = await supabase
+          .from("attendance_records")
+          .select("employee_id, date, raw_status, check_in, check_out, verified_status")
+          .eq("company_id", companyId)
+          .gte("date", startDate)
+          .lte("date", endDate)
+          .order("employee_id")
+          .order("date")
+          .range(from, from + PAGE - 1)
+        if (fetchErr) { if (!cancelled) setError(fetchErr.message); break }
+        if (!data || data.length === 0) break
+        all.push(...data)
+        if (data.length < PAGE) break
+      }
+      if (cancelled) return
+      const map: Record<string, any> = {}
+      all.forEach((row: any) => {
+        map[`${row.employee_id}_${row.date}`] = row
       })
-      deductions += absenceDeduction
+      setAttendanceData(map)
+      dirtyKeys.current = new Set()
+      setDirty(false)
+      setLoading(false)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [companyId, month, year, daysInMonth])
 '@
 
-Patch-Target 'src\app\api\payroll\runs\generate\route.ts' @'
-        type: 'earning',
-        gl_account_id: null,
-        source_type: null,
-        source_id: null,
-      })
-      gross += overtimeTotal
+Add-Patch 'src\app\dashboard\payroll\attendance\page.tsx' @'
+    const key = `${empId}_${dateStr}`
+    setAttendanceData(prev => ({
+      ...prev,
+      [key]: { ...(prev[key] || { raw_status: "present", verified_status: "pending" }), [field]: value }
+    }))
+    setDirty(true)
 '@ @'
-        type: 'earning',
-        gl_account_id: null,
-        source_type: 'overtime',
-        source_id: null,
-      })
-      gross += overtimeTotal
-'@
-
-Patch-Target 'src\app\api\payroll\runs\generate\route.ts' @'
-      .select('id, monthly_installment')
-      .eq('employee_id', emp.id)
-      .eq('status', 'active')
-'@ @'
-      .select('id, monthly_installment, balance, start_date')
-      .eq('employee_id', emp.id)
-      .eq('status', 'active')
-      .gt('balance', 0)
-      .or(`start_date.is.null,start_date.lte.${endDate}`)
-'@
-
-Patch-Target 'src\app\api\payroll\runs\generate\route.ts' @'
-        const installment = Number(loan.monthly_installment || 0)
-        if (installment > 0) {
-'@ @'
-        // Never recover more than what is still owed (last installment is the remaining balance)
-        const installment = Math.min(Number(loan.monthly_installment || 0), Number(loan.balance || 0))
-        if (installment > 0) {
-'@
-
-Patch-Target 'src\app\api\payroll\runs\generate\route.ts' @'
-      .select('id, monthly_recovery')
-      .eq('employee_id', emp.id)
-      .eq('status', 'active')
-'@ @'
-      .select('id, monthly_recovery, balance, start_date')
-      .eq('employee_id', emp.id)
-      .eq('status', 'active')
-      .gt('balance', 0)
-      .or(`start_date.is.null,start_date.lte.${endDate}`)
-'@
-
-Patch-Target 'src\app\api\payroll\runs\generate\route.ts' @'
-        const recovery = Number(adv.monthly_recovery || 0)
-        if (recovery > 0) {
-'@ @'
-        const recovery = Math.min(Number(adv.monthly_recovery || 0), Number(adv.balance || 0))
-        if (recovery > 0) {
-'@
-
-Patch-Target 'src\app\api\payroll\runs\[runId]\reverse\route.ts' @'
-    .select('account_id, debit, credit, project_id, activity_id, location_id, donor_id')
-'@ @'
-    .select('account_id, debit, credit, project_id, activity_id, location_id, donor_id, employee_id')
-'@
-
-Patch-Target 'src\app\api\payroll\runs\[runId]\reverse\route.ts' @'
-      description: `Reversal of Payroll ${reason}`,
+    const key = `${empId}_${dateStr}`
+    dirtyKeys.current.add(key)
+    setAttendanceData(prev => {
+      const base = prev[key] || { raw_status: "present", verified_status: "pending" }
+      const next = { ...base, [field]: value }
+      // Any change to a day that was already approved or rejected sends it back for verification
+      if (base.verified_status === "approved" || base.verified_status === "rejected") next.verified_status = "pending"
+      return { ...prev, [key]: next }
     })
+    setDirty(true)
+'@
+
+Add-Patch 'src\app\dashboard\payroll\attendance\page.tsx' @'
+    if (!companyId) { setError("Company not loaded"); return }
+    setSaving(true)
+    setError("")
+
 '@ @'
-      description: `Reversal of Payroll ${reason}`,
-      source_type: 'payroll_reversal',
-      source_id: runId,
+    if (!companyId) { setError("Company not loaded"); return }
+    if (frozen) { setError("This month is frozen. Changes are not allowed."); return }
+    setSaving(true)
+    setError("")
+
+'@
+
+Add-Patch 'src\app\dashboard\payroll\attendance\page.tsx' @'
+    const records: any[] = []
+    filteredEmployees.forEach(emp => {
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`
+        const cell = getCell(emp.id, dateStr)
+        records.push({
+          company_id: companyId,
+          employee_id: emp.id,
+          date: dateStr,
+          raw_status: cell.raw_status,
+          check_in: cell.check_in || null,
+          check_out: cell.check_out || null,
+          source: "manual",
+          verified_status: cell.verified_status || "pending",
+        })
+      }
     })
-'@
-
-Patch-Target 'src\app\api\payroll\runs\[runId]\reverse\route.ts' @'
-    donor_id: line.donor_id,
-    source_type: 'payroll_reversal',
-'@ @'
-    donor_id: line.donor_id,
-    employee_id: line.employee_id,
-    source_type: 'payroll_reversal',
-'@
-
-Patch-Target 'src\app\dashboard\payroll\loans\page.tsx' @'
-  const [saving, setSaving] = useState(false)
 
 '@ @'
-  const [formPaidFrom, setFormPaidFrom] = useState<number | null>(null)
-  const [payAccounts, setPayAccounts] = useState<any[]>([])
-  const [saving, setSaving] = useState(false)
-
-'@
-
-Patch-Target 'src\app\dashboard\payroll\loans\page.tsx' @'
-        setCompanyId(cid)
-
-        // Fetch departments and employees (without join, then merge)
-
-'@ @'
-        setCompanyId(cid)
-
-        // Bank and cash accounts the money can be paid from
-        supabase
-          .from("accounts")
-          .select("id, code, name")
-          .eq("company_id", cid)
-          .eq("type", "Asset")
-          .like("code", "10%")
-          .order("code")
-          .then(({ data }) => setPayAccounts(data || []))
-
-        // Fetch departments and employees (without join, then merge)
-
-'@
-
-Patch-Target 'src\app\dashboard\payroll\loans\page.tsx' @'
-    setFormInstallment("")
-    setFormStartDate(new Date().toISOString().split("T")[0])
-    setShowForm(true)
-'@ @'
-    setFormInstallment("")
-    setFormPaidFrom(null)
-    setFormStartDate(new Date().toISOString().split("T")[0])
-    setShowForm(true)
-'@
-
-Patch-Target 'src\app\dashboard\payroll\loans\page.tsx' @'
-    if (!formPrincipal || isNaN(Number(formPrincipal))) { setError("Valid principal amount required"); return }
-    if (!formInstallment || isNaN(Number(formInstallment))) { setError("Valid installment required"); return }
-
-'@ @'
-    if (!formPrincipal || isNaN(Number(formPrincipal)) || Number(formPrincipal) <= 0) { setError("Valid principal amount required"); return }
-    if (!formInstallment || isNaN(Number(formInstallment)) || Number(formInstallment) <= 0) { setError("Valid installment required"); return }
-    if (Number(formInstallment) > Number(formPrincipal)) { setError("Monthly amount cannot be more than the total amount"); return }
-    if (!editingId && !formPaidFrom) { setError("Select the Bank or Cash account the money is paid from"); return }
-
-'@
-
-Patch-Target 'src\app\dashboard\payroll\loans\page.tsx' @'
-    if (editingId) {
-      // Update
-      const { error: updateErr } = await supabase
-        .from("employee_loans")
-        .update({
-          principal_amount: Number(formPrincipal),
-          monthly_installment: Number(formInstallment),
-          start_date: formStartDate,
-          balance: Number(formPrincipal),   // reset balance on edit
-        })
-        .eq("id", editingId)
-      if (updateErr) { setError(updateErr.message); setSaving(false); return }
-      setFlash("Loan updated")
-    } else {
-      // Insert
-      const { error: insertErr } = await supabase
-        .from("employee_loans")
-        .insert({
-          employee_id: formEmployeeId,
-          principal_amount: Number(formPrincipal),
-          monthly_installment: Number(formInstallment),
-          balance: Number(formPrincipal),
-          start_date: formStartDate,
-          status: "active",
-          created_by: user?.id,
-        })
-      if (insertErr) { setError(insertErr.message); setSaving(false); return }
-      setFlash("Loan created")
-    }
-
-'@ @'
-    if (editingId) {
-      // Only the repayment terms can change. The amount and the balance are never touched here.
-      const { error: updateErr } = await supabase
-        .from("employee_loans")
-        .update({
-          monthly_installment: Number(formInstallment),
-          start_date: formStartDate,
-        })
-        .eq("id", editingId)
-      if (updateErr) { setError(updateErr.message); setSaving(false); return }
-      setFlash("Loan updated")
-    } else {
-      // Issuing posts the accounting entry: Dr Employee Loans & Advances, Cr Bank/Cash
-      const { error: issueErr } = await supabase.rpc("issue_employee_loan", {
-        p_company_id: companyId,
-        p_employee_id: formEmployeeId,
-        p_amount: Number(formPrincipal),
-        p_installment: Number(formInstallment),
-        p_start_date: formStartDate,
-        p_paid_from_account_id: formPaidFrom,
+    // Save ONLY the days the user actually changed (whatever the search or filter shows)
+    const records: any[] = []
+    dirtyKeys.current.forEach(key => {
+      const sep = key.indexOf("_")
+      const empId = Number(key.slice(0, sep))
+      const dateStr = key.slice(sep + 1)
+      const cell = getCell(empId, dateStr)
+      records.push({
+        company_id: companyId,
+        employee_id: empId,
+        date: dateStr,
+        raw_status: cell.raw_status,
+        check_in: cell.check_in || null,
+        check_out: cell.check_out || null,
+        source: "manual",
+        verified_status: cell.verified_status || "pending",
       })
-      if (issueErr) { setError(issueErr.message); setSaving(false); return }
-      setFlash("Loan issued")
+    })
+    if (records.length === 0) {
+      setDirty(false)
+      setSaving(false)
+      return
     }
 
 '@
 
-Patch-Target 'src\app\dashboard\payroll\loans\page.tsx' @'
-onChange={e => setFormPrincipal(e.target.value)} placeholder="e.g. 100000" />
+Add-Patch 'src\app\dashboard\payroll\attendance\page.tsx' @'
+    setDirty(false)
+    setFlash(`Attendance saved for ${monthLabel}`)
 '@ @'
-onChange={e => setFormPrincipal(e.target.value)} placeholder="e.g. 100000" disabled={!!editingId} />
+    dirtyKeys.current = new Set()
+    setDirty(false)
+    setFlash(`Attendance saved for ${monthLabel}`)
 '@
 
-Patch-Target 'src\app\dashboard\payroll\loans\page.tsx' @'
-            <div style={{ marginBottom: 20 }}>
-              <label className="kpi-label" style={{ display: "block", marginBottom: 4 }}>Start Date *</label>
+Add-Patch 'src\app\dashboard\payroll\attendance\page.tsx' @'
+  const goToPrevMonth = () => { if (month === 0)
 '@ @'
-            {!editingId ? (
-              <div style={{ marginBottom: 12 }}>
-                <label className="kpi-label" style={{ display: "block", marginBottom: 4 }}>Paid From (Bank / Cash) *</label>
-                <select className="select" value={formPaidFrom ?? ""} onChange={e => setFormPaidFrom(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">Select account...</option>
-                  {payAccounts.map(a => (
-                    <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
-                The amount cannot be changed after it is issued. You can change the monthly amount and the start date.
-              </div>
-            )}
-            <div style={{ marginBottom: 20 }}>
-              <label className="kpi-label" style={{ display: "block", marginBottom: 4 }}>Start Date *</label>
+  const goToPrevMonth = () => { if (dirtyKeys.current.size > 0) { setError("Save your changes before changing the month."); return }; if (month === 0)
 '@
 
-Patch-Target 'src\app\dashboard\payroll\advances\page.tsx' @'
-  const [saving, setSaving] = useState(false)
-
+Add-Patch 'src\app\dashboard\payroll\attendance\page.tsx' @'
+  const goToNextMonth = () => { if (month === 11)
 '@ @'
-  const [formPaidFrom, setFormPaidFrom] = useState<number | null>(null)
-  const [payAccounts, setPayAccounts] = useState<any[]>([])
-  const [saving, setSaving] = useState(false)
-
+  const goToNextMonth = () => { if (dirtyKeys.current.size > 0) { setError("Save your changes before changing the month."); return }; if (month === 11)
 '@
 
-Patch-Target 'src\app\dashboard\payroll\advances\page.tsx' @'
-        setCompanyId(cid)
-        // Fetch employees without join
+Add-Patch 'src\app\dashboard\payroll\runs\new\page.tsx' @'
+          .select("id")
+          .eq("company_id", companyId)
 
+        if (departmentId) {
 '@ @'
-        setCompanyId(cid)
-        // Bank and cash accounts the money can be paid from
-        supabase
-          .from("accounts")
-          .select("id, code, name")
-          .eq("company_id", cid)
-          .eq("type", "Asset")
-          .like("code", "10%")
-          .order("code")
-          .then(({ data }) => setPayAccounts(data || []))
-        // Fetch employees without join
+          .select("id")
+          .eq("company_id", companyId)
+          .eq("status", "active")
 
+        if (departmentId) {
 '@
 
-Patch-Target 'src\app\dashboard\payroll\advances\page.tsx' @'
-    setFormRecovery("")
-    setFormStartDate(new Date().toISOString().split("T")[0])
-    setShowForm(true)
+Add-Patch 'src\app\dashboard\payroll\runs\new\page.tsx' @'
+            .select("employee_id, effective_date")
+            .eq("company_id", companyId)
+            .order("effective_date", { ascending: false })
 '@ @'
-    setFormRecovery("")
-    setFormPaidFrom(null)
-    setFormStartDate(new Date().toISOString().split("T")[0])
-    setShowForm(true)
+            .select("employee_id, effective_date")
+            .in("employee_id", allEmployees.map(e => e.id))
+            .lte("effective_date", `${selectedMonth}-01`)
+            .order("effective_date", { ascending: false })
 '@
 
-Patch-Target 'src\app\dashboard\payroll\advances\page.tsx' @'
-    if (!formAdvance || isNaN(Number(formAdvance))) { setError("Valid advance amount required"); return }
-    if (!formRecovery || isNaN(Number(formRecovery))) { setError("Valid monthly recovery required"); return }
-
+Add-Patch 'src\app\dashboard\payroll\runs\new\page.tsx' @'
+          .from("employee_loans")
+          .select("*", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .eq("status", "active")
 '@ @'
-    if (!formAdvance || isNaN(Number(formAdvance)) || Number(formAdvance) <= 0) { setError("Valid advance amount required"); return }
-    if (!formRecovery || isNaN(Number(formRecovery)) || Number(formRecovery) <= 0) { setError("Valid monthly recovery required"); return }
-    if (Number(formRecovery) > Number(formAdvance)) { setError("Monthly amount cannot be more than the total amount"); return }
-    if (!editingId && !formPaidFrom) { setError("Select the Bank or Cash account the money is paid from"); return }
-
+          .from("employee_loans")
+          .select("*", { count: "exact", head: true })
+          .in("employee_id", allEmployees.map(e => e.id))
+          .eq("status", "active")
+          .gt("balance", 0)
 '@
 
-Patch-Target 'src\app\dashboard\payroll\advances\page.tsx' @'
-    if (editingId) {
-      const { error: updateErr } = await supabase
-        .from("salary_advances")
-        .update({
-          advance_amount: Number(formAdvance),
-          monthly_recovery: Number(formRecovery),
-          start_date: formStartDate,
-          balance: Number(formAdvance),
-        })
-        .eq("id", editingId)
-      if (updateErr) { setError(updateErr.message); setSaving(false); return }
-      setFlash("Advance updated")
-    } else {
-      const { error: insertErr } = await supabase
-        .from("salary_advances")
-        .insert({
-          employee_id: formEmployeeId,
-          advance_amount: Number(formAdvance),
-          monthly_recovery: Number(formRecovery),
-          balance: Number(formAdvance),
-          start_date: formStartDate,
-          status: "active",
-          created_by: user?.id,
-        })
-      if (insertErr) { setError(insertErr.message); setSaving(false); return }
-      setFlash("Advance created")
-    }
+Add-Patch 'src\app\dashboard\payroll\runs\new\page.tsx' @'
+          .from("salary_advances")
+          .select("*", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .eq("status", "active")
+'@ @'
+          .from("salary_advances")
+          .select("*", { count: "exact", head: true })
+          .in("employee_id", allEmployees.map(e => e.id))
+          .eq("status", "active")
+          .gt("balance", 0)
+'@
+
+Add-Patch 'src\app\dashboard\payroll\runs\new\page.tsx' @'
+          warnings.push(`${missingStructureCount} employee(s) have no salary structure assigned.`)
+        }
 
 '@ @'
-    if (editingId) {
-      // Only the repayment terms can change. The amount and the balance are never touched here.
-      const { error: updateErr } = await supabase
-        .from("salary_advances")
-        .update({
-          monthly_recovery: Number(formRecovery),
-          start_date: formStartDate,
-        })
-        .eq("id", editingId)
-      if (updateErr) { setError(updateErr.message); setSaving(false); return }
-      setFlash("Advance updated")
-    } else {
-      // Issuing posts the accounting entry: Dr Employee Loans & Advances, Cr Bank/Cash
-      const { error: issueErr } = await supabase.rpc("issue_salary_advance", {
-        p_company_id: companyId,
-        p_employee_id: formEmployeeId,
-        p_amount: Number(formAdvance),
-        p_installment: Number(formRecovery),
-        p_start_date: formStartDate,
-        p_paid_from_account_id: formPaidFrom,
-      })
-      if (issueErr) { setError(issueErr.message); setSaving(false); return }
-      setFlash("Advance issued")
-    }
+          warnings.push(`${missingStructureCount} employee(s) have no salary structure assigned.`)
+        }
+
+        // Attendance that is not approved yet is ignored by payroll
+        const [py, pm] = selectedMonth.split("-").map(Number)
+        const lastDay = new Date(py, pm, 0).getDate()
+        let attQuery = supabase
+          .from("attendance_records")
+          .select("id, employees!inner(department_id)", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .gte("date", `${selectedMonth}-01`)
+          .lte("date", `${selectedMonth}-${String(lastDay).padStart(2, "0")}`)
+          .neq("verified_status", "approved")
+        if (departmentId) attQuery = attQuery.eq("employees.department_id", departmentId)
+        const { count: pendingAtt } = await attQuery
+        if ((pendingAtt || 0) > 0) {
+          warnings.push(`${pendingAtt} attendance record(s) for this month are not approved yet. Absences and overtime in them will NOT be counted. Approve them in Attendance Verification first.`)
+        }
 
 '@
 
-Patch-Target 'src\app\dashboard\payroll\advances\page.tsx' @'
-onChange={e => setFormAdvance(e.target.value)} placeholder="e.g. 25000" />
+Add-Patch 'src\app\dashboard\payroll\reports\payroll-register\page.tsx' @'
+<input type="date" className="input" value={month} onChange={e => setMonth(e.target.value)} />
 '@ @'
-onChange={e => setFormAdvance(e.target.value)} placeholder="e.g. 25000" disabled={!!editingId} />
+<input type="month" className="input" value={month ? month.slice(0, 7) : ""} onChange={e => setMonth(e.target.value ? e.target.value + "-01" : "")} />
 '@
 
-Patch-Target 'src\app\dashboard\payroll\advances\page.tsx' @'
-            <div style={{ marginBottom: 20 }}>
-              <label className="kpi-label" style={{ display: "block", marginBottom: 4 }}>Start Date *</label>
+Add-Patch 'src\app\dashboard\payroll\reports\tax-deduction\page.tsx' @'
+<input type="date" className="input" value={month} onChange={e => setMonth(e.target.value)} />
 '@ @'
-            {!editingId ? (
-              <div style={{ marginBottom: 12 }}>
-                <label className="kpi-label" style={{ display: "block", marginBottom: 4 }}>Paid From (Bank / Cash) *</label>
-                <select className="select" value={formPaidFrom ?? ""} onChange={e => setFormPaidFrom(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">Select account...</option>
-                  {payAccounts.map(a => (
-                    <option key={a.id} value={a.id}>{a.code} - {a.name}</option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
-                The amount cannot be changed after it is issued. You can change the monthly amount and the start date.
-              </div>
-            )}
-            <div style={{ marginBottom: 20 }}>
-              <label className="kpi-label" style={{ display: "block", marginBottom: 4 }}>Start Date *</label>
+<input type="month" className="input" value={month ? month.slice(0, 7) : ""} onChange={e => setMonth(e.target.value ? e.target.value + "-01" : "")} />
 '@
 
+Add-Patch 'src\app\dashboard\payroll\reports\bank-transfer\page.tsx' @'
+<input type="date" className="input" value={month} onChange={e => setMonth(e.target.value)} />
+'@ @'
+<input type="month" className="input" value={month ? month.slice(0, 7) : ""} onChange={e => setMonth(e.target.value ? e.target.value + "-01" : "")} />
+'@
+
+Add-Patch 'src\app\dashboard\payroll\reports\salary-summary\page.tsx' @'
+<input type="date" className="input" value={month} onChange={e => setMonth(e.target.value)} />
+'@ @'
+<input type="month" className="input" value={month ? month.slice(0, 7) : ""} onChange={e => setMonth(e.target.value ? e.target.value + "-01" : "")} />
+'@
+
+Add-Patch 'src\app\dashboard\payroll\reports\attendance-register\page.tsx' @'
+<input type="date" className="input" value={month} onChange={e => setMonth(e.target.value)} />
+'@ @'
+<input type="month" className="input" value={month ? month.slice(0, 7) : ""} onChange={e => setMonth(e.target.value ? e.target.value + "-01" : "")} />
+'@
+
+Add-Patch 'src\app\dashboard\payroll\reports\payslip\page.tsx' @'
+<input type="date" className="input" style={{ width: 200 }} value={month} onChange={e => setMonth(e.target.value)} />
+'@ @'
+<input type="month" className="input" style={{ width: 200 }} value={month ? month.slice(0, 7) : ""} onChange={e => setMonth(e.target.value ? e.target.value + "-01" : "")} />
+'@
+
+
+if ($script:failed.Count -gt 0) {
+  Write-Host ''
+  Write-Host "NOTHING WAS CHANGED. $($script:failed.Count) patch(es) did not match your files:" -ForegroundColor Red
+  foreach ($f in $script:failed) { Write-Host ''; Write-Host $f -ForegroundColor Yellow }
+  Write-Host ''
+  Write-Host 'Copy everything above and send it to Claude.' -ForegroundColor Red
+  exit 1
+}
+foreach ($rel in $script:files.Keys) {
+  [System.IO.File]::WriteAllText((Join-Path $root $rel), $script:files[$rel], $enc)
+  Write-Host ("PATCHED " + $rel)
+}
 Write-Host ''
-Write-Host 'Batch 3 applied. Next: npm run build' -ForegroundColor Green
+Write-Host ("Batch 2a applied: " + $script:count + " patches. Next: npm run build") -ForegroundColor Green
