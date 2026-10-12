@@ -1,58 +1,54 @@
-import { createServerClient } from "@supabase/ssr"
-import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
+import { NextResponse } from 'next/server'
+import {
+  createRouteClient, resolvePayrollActor, logPayrollEvent,
+} from '@/lib/payrollServer'
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const cookieStore = await cookies()
+  const supabase = await createRouteClient()
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
-        },
-      },
-    }
-  )
+  // Must be a logged-in admin/accountant of a company that has Payroll enabled
+  const { actor, response } = await resolvePayrollActor(supabase)
+  if (!actor) return response!
+  const companyId = actor.companyId
 
   const { id } = await params
   const structureId = Number(id)
-  const { name } = await request.json()
+  if (!structureId) return NextResponse.json({ error: 'Invalid structure ID' }, { status: 400 })
 
+  const body = await request.json().catch(() => ({}))
+  const name = String(body?.name || '').trim()
   if (!name) {
-    return NextResponse.json({ error: "Name is required" }, { status: 400 })
+    return NextResponse.json({ error: 'Name is required' }, { status: 400 })
   }
 
-  // Get original structure with components
+  // The structure must belong to THIS company
   const { data: structure, error: structErr } = await supabase
-    .from("salary_structures")
-    .select("*")
-    .eq("id", structureId)
-    .single()
+    .from('salary_structures')
+    .select('id, company_id')
+    .eq('id', structureId)
+    .eq('company_id', companyId)
+    .maybeSingle()
 
   if (structErr || !structure) {
-    return NextResponse.json({ error: "Structure not found" }, { status: 404 })
+    return NextResponse.json({ error: 'Structure not found' }, { status: 404 })
   }
 
   const { data: components, error: compErr } = await supabase
-    .from("salary_structure_components")
-    .select("*")
-    .eq("salary_structure_id", structureId)
+    .from('salary_structure_components')
+    .select('salary_component_id, calculation_type, value')
+    .eq('salary_structure_id', structureId)
 
   if (compErr) {
-    return NextResponse.json({ error: "Failed to fetch components" }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch components' }, { status: 500 })
   }
 
-  // Insert new structure
   const { data: newStructure, error: insertErr } = await supabase
-    .from("salary_structures")
+    .from('salary_structures')
     .insert({
-      company_id: structure.company_id,
+      company_id: companyId,
       name,
       is_active: true,
       updated_at: new Date().toISOString(),
@@ -61,12 +57,11 @@ export async function POST(
     .single()
 
   if (insertErr || !newStructure) {
-    return NextResponse.json({ error: insertErr?.message || "Failed to duplicate structure" }, { status: 500 })
+    return NextResponse.json({ error: insertErr?.message || 'Failed to duplicate structure' }, { status: 500 })
   }
 
-  // Insert components
   if (components && components.length > 0) {
-    const newComponents = components.map(c => ({
+    const newComponents = components.map((c: any) => ({
       salary_structure_id: newStructure.id,
       salary_component_id: c.salary_component_id,
       calculation_type: c.calculation_type,
@@ -74,13 +69,20 @@ export async function POST(
     }))
 
     const { error: compInsertErr } = await supabase
-      .from("salary_structure_components")
+      .from('salary_structure_components')
       .insert(newComponents)
 
     if (compInsertErr) {
-      return NextResponse.json({ error: "Structure duplicated but component copy failed: " + compInsertErr.message }, { status: 500 })
+      // Do not leave an empty half-copy behind
+      await supabase.from('salary_structures').delete().eq('id', newStructure.id).eq('company_id', companyId)
+      return NextResponse.json({ error: 'Could not copy components: ' + compInsertErr.message }, { status: 500 })
     }
   }
+
+  await logPayrollEvent({
+    companyId, userId: actor.userId, tableName: 'salary_structures', recordId: String(newStructure.id), action: 'INSERT',
+    newValues: { name, copied_from: structureId },
+  })
 
   return NextResponse.json(newStructure)
 }

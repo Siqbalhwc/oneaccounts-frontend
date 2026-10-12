@@ -211,17 +211,16 @@ export default function SalaryStructuresPage() {
       return
     }
     setModalError("")
-    const { error } = await supabase.functions.invoke("duplicate-salary-structure", {
-      body: { id: duplicateTarget.id, name: duplicateName.trim() },
-    }) // We'll use a serverless function? Better to call an API route. We'll create the route, but for now we'll do a direct POST.
-    // I'll implement duplication via fetch to our new API route.
     try {
       const res = await fetch(`/api/payroll/salary-structures/${duplicateTarget.id}/duplicate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: duplicateName.trim() }),
       })
-      if (!res.ok) throw new Error("Duplication failed")
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody?.error || "Duplication failed")
+      }
       showToast("Structure duplicated", "success")
       setDuplicateTarget(null)
       // Refresh list

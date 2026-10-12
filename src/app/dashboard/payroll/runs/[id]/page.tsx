@@ -249,8 +249,10 @@ export default function PayrollRunDetailPage() {
 
   // ---------- Role‑based buttons ----------
   const canSubmit = run?.status === "draft" && approvalLevels === "3" && submitRoles.includes(role ?? "")
-  const canApprove = run && (run.status === "draft" || run.status === "submitted") &&
-    (approvalLevels === "2" || approvalLevels === "3") && approveRoles.includes(role ?? "")
+  const canApprove = run && (
+    (approvalLevels === "2" && (run.status === "draft" || run.status === "submitted")) ||
+    (approvalLevels === "3" && run.status === "submitted")
+  ) && approveRoles.includes(role ?? "")
   const canPost = run && (
     (approvalLevels === "1" && run.status === "draft" && postRoles.includes(role ?? "")) ||
     (approvalLevels === "2" && run.status === "approved" && postRoles.includes(role ?? "")) ||

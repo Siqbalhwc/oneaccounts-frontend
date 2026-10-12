@@ -1,42 +1,27 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  createRouteClient, resolvePayrollActor, loadApprovalSettings, logPayrollEvent, forbidden,
+} from '@/lib/payrollServer'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ runId: string }> }
 ) {
   const { runId: runIdStr } = await params
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
+  const supabase = await createRouteClient()
 
-  // 1. Auth & company
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: roleData } = await supabase
-    .from('user_roles')
-    .select('company_id')
-    .eq('user_id', user.id)
-    .maybeSingle()
-  if (!roleData?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
-  const companyId = roleData.company_id
+  // 1. Auth, company, role
+  const { actor, response } = await resolvePayrollActor(supabase)
+  if (!actor) return response!
+  const companyId = actor.companyId
 
   const runId = parseInt(runIdStr, 10)
   if (isNaN(runId)) return NextResponse.json({ error: 'Invalid run ID' }, { status: 400 })
+
+  const settings = await loadApprovalSettings(companyId)
+  if (!settings.postRoles.includes(actor.role)) {
+    return forbidden('Your role is not allowed to reverse payroll runs')
+  }
 
   // 2. Fetch the run
   const { data: run } = await supabase
@@ -55,6 +40,18 @@ export async function POST(
     return NextResponse.json({ error: 'No journal entry found for this run' }, { status: 400 })
   }
 
+  // Never reverse twice
+  const entryNo = `JE-REV-${runId}`
+  const { data: existingRev } = await supabase
+    .from('journal_entries')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('entry_no', entryNo)
+    .limit(1)
+  if (existingRev && existingRev.length > 0) {
+    return NextResponse.json({ error: 'A reversal entry already exists for this run' }, { status: 409 })
+  }
+
   // 3. Get the original journal entry lines
   const { data: originalLines } = await supabase
     .from('journal_lines')
@@ -65,16 +62,19 @@ export async function POST(
     return NextResponse.json({ error: 'No journal lines found for this entry' }, { status: 400 })
   }
 
-  // 4. Read reason from body
-  const body = await request.json()
-  const reason = body?.reason?.trim() || 'Reversal'
+  // 4. Reason (required)
+  const body = await request.json().catch(() => ({}))
+  const reason = String(body?.reason || '').trim()
+  if (!reason) {
+    return NextResponse.json({ error: 'A reason is required to reverse a payroll run' }, { status: 400 })
+  }
 
   // 5. Create a new reversing journal entry
   const { data: reverseEntry, error: entryErr } = await supabase
     .from('journal_entries')
     .insert({
       company_id: companyId,
-      entry_no: `JE-REV-${runId}`,
+      entry_no: entryNo,
       date: new Date().toISOString().split('T')[0],
       description: `Reversal of Payroll ${reason}`,
     })
@@ -109,10 +109,10 @@ export async function POST(
     return NextResponse.json({ error: linesErr.message }, { status: 500 })
   }
 
-  // 7. Update account balances – aggregate deltas per account
+  // 7. Update account balances - aggregate deltas per account
   const deltaMap: Record<number, number> = {}
   for (const line of reversalLines) {
-    const delta = line.debit - line.credit
+    const delta = Number(line.debit) - Number(line.credit)
     deltaMap[line.account_id] = (deltaMap[line.account_id] || 0) + delta
   }
 
@@ -141,15 +141,20 @@ export async function POST(
     return NextResponse.json({ error: updateErr.message }, { status: 500 })
   }
 
-  // 9. Insert into payroll_reversals table
+  // 9. Reversal record
   await supabase
     .from('payroll_reversals')
     .insert({
       payroll_run_id: runId,
       reversal_journal_entry_id: reverseEntry.id,
       reason,
-      created_by: user.id,
+      created_by: actor.userId,
     })
+
+  await logPayrollEvent({
+    companyId, userId: actor.userId, tableName: 'payroll_runs', recordId: String(runId), action: 'UPDATE',
+    oldValues: { status: run.status }, newValues: { status: 'reversed', reason, reversal_entry_id: reverseEntry.id },
+  })
 
   return NextResponse.json({ success: true, reversal_entry_id: reverseEntry.id })
 }

@@ -1,70 +1,54 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
+import { createRouteClient, resolvePayrollActor, logPayrollEvent } from '@/lib/payrollServer'
 
 export async function POST(request: NextRequest) {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
+  const supabase = await createRouteClient()
 
-  // 1. Auth & company
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // 1. Auth, company, role (admin/accountant) and payroll feature
+  const { actor, response } = await resolvePayrollActor(supabase)
+  if (!actor) return response!
+  const companyId = actor.companyId
 
-  const { data: roleData } = await supabase
-    .from('user_roles')
-    .select('company_id')
-    .eq('user_id', user.id)
-    .maybeSingle()
-  if (!roleData?.company_id) return NextResponse.json({ error: 'No company found' }, { status: 400 })
-  const companyId = roleData.company_id
+  const body = await request.json().catch(() => ({}))
+  const rawMonth = String(body?.month || '')
+  const department_id = body?.department_id || null
 
-  // 2. Safe feature check
-  const { data: payrollFeature } = await supabase
-    .from('features')
-    .select('id')
-    .eq('code', 'payroll')
-    .maybeSingle()
-  if (!payrollFeature) {
-    return NextResponse.json({ error: 'Payroll feature not configured' }, { status: 403 })
+  const mm = rawMonth.match(/^(\d{4})-(\d{2})(?:-\d{2})?$/)
+  if (!mm || Number(mm[2]) < 1 || Number(mm[2]) > 12) {
+    return NextResponse.json({ error: 'A valid month is required' }, { status: 400 })
   }
-  const { data: cfRow } = await supabase
-    .from('company_features')
-    .select('enabled')
-    .eq('company_id', companyId)
-    .eq('feature_id', payrollFeature.id)
-    .maybeSingle()
-  if (!cfRow?.enabled) {
-    return NextResponse.json({ error: 'Payroll feature not enabled' }, { status: 403 })
-  }
+  // Runs are always stored against the 1st of the month (reports rely on this)
+  const month = `${mm[1]}-${mm[2]}-01`
 
-  const body = await request.json()
-  const { month, department_id } = body
-
-  if (!month) return NextResponse.json({ error: 'Month is required' }, { status: 400 })
-
-  // 3. Check for existing run
-  const { data: existingRun } = await supabase
+  // 2. Existing run check (all-department runs are matched with IS NULL, not = null)
+  let sameQuery = supabase
     .from('payroll_runs')
     .select('id')
     .eq('company_id', companyId)
     .eq('month', month)
-    .eq('department_id', department_id || null)
-    .maybeSingle()
-  if (existingRun) {
-    return NextResponse.json({ error: 'A payroll run already exists for this month and department', run_id: existingRun.id }, { status: 409 })
+  sameQuery = department_id ? sameQuery.eq('department_id', department_id) : sameQuery.is('department_id', null)
+  const { data: sameRows } = await sameQuery.limit(1)
+  if (sameRows && sameRows.length > 0) {
+    return NextResponse.json({ error: 'A payroll run already exists for this month and department', run_id: sameRows[0].id }, { status: 409 })
+  }
+
+  // 3. An all-employee run and a department run for the same month would pay people twice
+  const { data: monthRuns } = await supabase
+    .from('payroll_runs')
+    .select('id, department_id, status')
+    .eq('company_id', companyId)
+    .eq('month', month)
+    .neq('status', 'reversed')
+  if (monthRuns && monthRuns.length > 0) {
+    const overlaps = !department_id ? true : monthRuns.some((r: any) => r.department_id === null)
+    if (overlaps) {
+      return NextResponse.json({
+        error: !department_id
+          ? 'Department runs already exist for this month. An all-employee run would pay those employees twice.'
+          : 'An all-employee run already exists for this month. A department run would pay those employees twice.',
+        run_id: monthRuns[0].id,
+      }, { status: 409 })
+    }
   }
 
   // 4. Fetch active employees
@@ -147,7 +131,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ───── Attendance Integration ─────
+    // ----- Attendance Integration -----
     let absentDays = 0
     let halfDays = 0
     let overtimeTotal = 0
@@ -198,7 +182,7 @@ export async function POST(request: NextRequest) {
       gross += overtimeTotal
     }
 
-    // ───── Employee Loans Integration (with source tracking) ─────
+    // ----- Employee Loans Integration (with source tracking) -----
     const { data: activeLoans } = await supabase
       .from('employee_loans')
       .select('id, monthly_installment')
@@ -224,7 +208,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ───── Salary Advances Integration (with source tracking) ─────
+    // ----- Salary Advances Integration (with source tracking) -----
     const { data: activeAdvances } = await supabase
       .from('salary_advances')
       .select('id, monthly_recovery')
@@ -358,6 +342,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: compErr.message }, { status: 500 })
     }
   }
+
+  await logPayrollEvent({
+    companyId, userId: actor.userId, tableName: 'payroll_runs', recordId: String(run.id), action: 'INSERT',
+    newValues: { month, department_id, employees: runLines.length },
+  })
 
   return NextResponse.json({ success: true, run_id: run.id })
 }
