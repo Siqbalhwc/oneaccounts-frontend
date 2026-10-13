@@ -5,15 +5,18 @@ import { useRouter, useParams } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Save, Plus, Trash2, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
+import SalaryPreview from "@/components/payroll/SalaryPreview"
+import { describeCalc, normalizeCalcType, computeSalary, type StructureLine } from "@/lib/payrollCalc"
 
 type ComponentRecord = {
   id: number
   salary_structure_id: number
   salary_component_id: number
-  calculation_type: "percentage" | "fixed"
+  calculation_type: string
   value: number
   component_name?: string
   component_type?: string
+  component_is_basic?: boolean
 }
 
 export default function SalaryStructureDetailPage() {
@@ -45,8 +48,11 @@ export default function SalaryStructureDetailPage() {
 
   // New component form
   const [newComponentId, setNewComponentId] = useState<number | null>(null)
-  const [newCalcType, setNewCalcType] = useState<"percentage" | "fixed">("fixed")
+  const [newCalcType, setNewCalcType] = useState<string>("fixed")
   const [newValue, setNewValue] = useState("")
+  const [editingLineId, setEditingLineId] = useState<number | null>(null)
+  const [salaryBasis, setSalaryBasis] = useState<"gross" | "basic">("gross")
+  const [sampleAmount, setSampleAmount] = useState("100000")
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -58,18 +64,20 @@ export default function SalaryStructureDetailPage() {
             if (data) {
               setStructure(data)
               setName(data.name)
+              setSalaryBasis(data.salary_basis === "basic" ? "basic" : "gross")
             }
           })
-        supabase.from("salary_structure_components").select("*, salary_components!inner(name, type)").eq("salary_structure_id", structureId)
+        supabase.from("salary_structure_components").select("*, salary_components!inner(name, type, is_basic)").eq("salary_structure_id", structureId)
           .then(({ data: comps }) => {
             const mapped = (comps || []).map((c: any) => ({
               ...c,
               component_name: c.salary_components?.name,
               component_type: c.salary_components?.type,
+              component_is_basic: !!c.salary_components?.is_basic,
             }))
             setComponents(mapped)
           })
-        supabase.from("salary_components").select("id, name, type").eq("company_id", cid).eq("is_active", true).order("name")
+        supabase.from("salary_components").select("id, name, type, is_basic").eq("company_id", cid).eq("is_active", true).order("name")
           .then(({ data: available }) => setAvailableComponents(available || []))
 
         // Employee count for this structure (latest revisions)
@@ -107,43 +115,93 @@ export default function SalaryStructureDetailPage() {
     setError("")
     const { error: updateErr } = await supabase
       .from("salary_structures")
-      .update({ name: name.trim(), updated_at: new Date().toISOString() })
+      .update({ name: name.trim(), salary_basis: salaryBasis, updated_at: new Date().toISOString() })
       .eq("id", structureId)
       .eq("company_id", companyId)
     if (updateErr) setError(updateErr.message)
     else {
-      setFlash("Structure name updated")
-      setStructure({ ...structure, name: name.trim() })
+      setFlash("Structure saved")
+      setStructure({ ...structure, name: name.trim(), salary_basis: salaryBasis })
     }
     setSaving(false)
   }
 
-  const handleAddComponent = async () => {
-    if (!newComponentId || !newValue) { setError("Select a component and enter a value"); return }
-    setError("")
-    const { error: insertErr } = await supabase
-      .from("salary_structure_components")
-      .insert({
-        salary_structure_id: structureId,
-        salary_component_id: newComponentId,
-        calculation_type: newCalcType,
-        value: Number(newValue),
-      })
-    if (insertErr) { setError(insertErr.message); return }
+  const resetLineForm = () => {
+    setEditingLineId(null)
+    setNewComponentId(null)
+    setNewCalcType("fixed")
+    setNewValue("")
+  }
+
+  const startEditLine = (c: ComponentRecord) => {
+    setEditingLineId(c.id)
+    setNewComponentId(c.salary_component_id)
+    setNewCalcType(normalizeCalcType(c.calculation_type))
+    setNewValue(String(c.value))
+    setShowAddForm(true)
+  }
+
+  const reloadLines = async () => {
     const { data: comps } = await supabase
       .from("salary_structure_components")
-      .select("*, salary_components!inner(name, type)")
+      .select("*, salary_components!inner(name, type, is_basic)")
       .eq("salary_structure_id", structureId)
     const mapped = (comps || []).map((c: any) => ({
       ...c,
       component_name: c.salary_components?.name,
       component_type: c.salary_components?.type,
+      component_is_basic: !!c.salary_components?.is_basic,
     }))
     setComponents(mapped)
-    setNewComponentId(null)
-    setNewValue("")
+  }
+
+  const handleAddComponent = async () => {
+    if (!newComponentId || newValue === "") { setError("Select a component and enter a value"); return }
+    if (Number(newValue) < 0) { setError("The value cannot be negative"); return }
+    const picked = availableComponents.find(a => a.id === newComponentId)
+    if (newCalcType === "percentage_gross" && picked?.type === "earning" && salaryBasis === "basic") {
+      setError('"% of Gross" earnings need a structure where the salary is entered as Gross. Change "Employee salary is entered as" to Gross first.')
+      return
+    }
+    if (newCalcType !== "fixed" && Number(newValue) > 100) { setError("A percentage cannot be more than 100"); return }
+    setError("")
+    if (editingLineId) {
+      const { error: updErr } = await supabase
+        .from("salary_structure_components")
+        .update({ calculation_type: newCalcType, value: Number(newValue) })
+        .eq("id", editingLineId)
+      if (updErr) { setError(updErr.message); return }
+      setFlash("Line updated")
+    } else {
+      if (components.some(c => c.salary_component_id === newComponentId)) {
+        setError("This component is already in the structure. Edit its line instead.")
+        return
+      }
+      const { error: insertErr } = await supabase
+        .from("salary_structure_components")
+        .insert({
+          salary_structure_id: structureId,
+          salary_component_id: newComponentId,
+          calculation_type: newCalcType,
+          value: Number(newValue),
+        })
+      if (insertErr) { setError(insertErr.message); return }
+      setFlash("Component added")
+    }
+    await reloadLines()
+    resetLineForm()
     setShowAddForm(false)
-    setFlash("Component added")
+  }
+
+  // Pre-fill the form with the Basic Salary component (one click)
+  const prefillBasic = () => {
+    const basic = availableComponents.find(a => a.is_basic)
+    if (!basic) { setError("No component is marked as the Basic Salary yet. Open Salary Components and tick \"This is the Basic Salary\" on one earning."); return }
+    setEditingLineId(null)
+    setNewComponentId(basic.id)
+    if (salaryBasis === "gross") { setNewCalcType("percentage_gross"); setNewValue("60") }
+    else { setNewCalcType("percentage_basic"); setNewValue("100") }
+    setShowAddForm(true)
   }
 
   const confirmRemoveComponent = async () => {
@@ -159,6 +217,17 @@ export default function SalaryStructureDetailPage() {
     }
     setRemoveTarget(null)
   }
+
+  const lineDefs: StructureLine[] = components.map(c => ({
+    key: c.salary_component_id,
+    name: c.component_name || "Component",
+    type: c.component_type === "earning" ? "earning" : "deduction",
+    isBasic: !!c.component_is_basic,
+    calcType: c.calculation_type,
+    value: Number(c.value),
+  }))
+  const check = computeSalary(lineDefs, salaryBasis, Number(sampleAmount) || 100000)
+  const hasBasicLine = components.some(c => c.component_is_basic)
 
   if (loading) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
   if (!role) return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
@@ -223,17 +292,29 @@ export default function SalaryStructureDetailPage() {
         </div>
       </div>
 
-      {/* Name Edit */}
+      {/* Name and how the employee's salary figure is entered */}
       <div className="card">
-        <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
-          <div style={{ flex: 1 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
             <label className="label">Structure Name</label>
             <input className="input" value={name} onChange={e => setName(e.target.value)} />
           </div>
-          <button className="btn btn-primary" onClick={handleSaveName} disabled={saving}>
-            <Save size={16} /> {saving ? "Saving..." : "Save Name"}
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <label className="label">Employee salary is entered as</label>
+            <select className="select" value={salaryBasis} onChange={e => setSalaryBasis(e.target.value as any)} disabled={!canEdit}>
+              <option value="gross">Gross salary (the system splits it)</option>
+              <option value="basic">Basic salary (allowances are added on top)</option>
+            </select>
+          </div>
+          <button className="btn btn-primary" onClick={handleSaveName} disabled={saving || !canEdit}>
+            <Save size={16} /> {saving ? "Saving..." : "Save"}
           </button>
         </div>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "10px 0 0" }}>
+          {salaryBasis === "gross"
+            ? "Example: you enter Gross 100,000. Basic is 60% of Gross, House Rent 30% of Gross, and so on. Provident Fund can be a % of Basic."
+            : "Example: you enter Basic 50,000. House Rent is 40% of Basic, and so on. Deductions can be a % of Basic or of the Gross total."}
+        </p>
       </div>
 
       {/* Components list */}
@@ -248,6 +329,15 @@ export default function SalaryStructureDetailPage() {
           )}
         </div>
 
+        {canEdit && !hasBasicLine && (
+          <div style={{ background: "var(--card-hover)", border: "1px solid #F59E0B", borderRadius: 8, padding: "10px 12px", fontSize: 12, marginBottom: 12 }}>
+            <strong>Basic Salary line missing.</strong>{" "}
+            {salaryBasis === "basic"
+              ? "Without it the basic salary itself is NOT paid - only the allowances."
+              : 'Without it every "% of Basic" amount will be 0.'}{" "}
+            <button className="btn" style={{ padding: "3px 10px", marginLeft: 6 }} onClick={prefillBasic}>Add Basic Salary line</button>
+          </div>
+        )}
         {components.length === 0 && !showAddForm ? (
           <p style={{ color: "var(--text-muted)", fontSize: 13 }}>No components added yet. Click "Add Component" to get started.</p>
         ) : (
@@ -256,20 +346,21 @@ export default function SalaryStructureDetailPage() {
               <tr>
                 <th>Component</th>
                 <th>Type</th>
-                <th>Calc</th>
-                <th>Value</th>
-                {canEdit && <th style={{ width: 40 }}></th>}
+                <th>How it is calculated</th>
+                <th style={{ textAlign: "right" }}>Sample amount</th>
+                {canEdit && <th style={{ width: 80 }}></th>}
               </tr>
             </thead>
             <tbody>
               {components.map(c => (
                 <tr key={c.id}>
-                  <td style={{ fontWeight: 600 }}>{c.component_name || `ID ${c.salary_component_id}`}</td>
-                  <td style={{ textTransform: "capitalize" }}>{c.component_type || "—"}</td>
-                  <td style={{ textTransform: "capitalize" }}>{c.calculation_type}</td>
-                  <td>{c.calculation_type === "percentage" ? `${c.value}%` : c.value}</td>
+                  <td style={{ fontWeight: 600 }}>{c.component_name || `ID ${c.salary_component_id}`}{c.component_is_basic ? " (Basic)" : ""}</td>
+                  <td style={{ textTransform: "capitalize" }}>{c.component_type || "-"}</td>
+                  <td>{describeCalc(c.calculation_type, Number(c.value))}</td>
+                  <td style={{ textAlign: "right" }}>{(check.lines.find(l => l.key === c.salary_component_id)?.amount ?? 0).toLocaleString()}</td>
                   {canEdit && (
-                    <td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button className="btn" style={{ padding: "4px 8px", marginRight: 4 }} onClick={() => startEditLine(c)}>Edit</button>
                       <button className="btn btn-danger" style={{ padding: "4px 8px" }} onClick={() => setRemoveTarget(c)}>
                         <Trash2 size={12} />
                       </button>
@@ -286,27 +377,38 @@ export default function SalaryStructureDetailPage() {
           <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 16, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
             <div style={{ flex: 1, minWidth: 150 }}>
               <label className="label">Component</label>
-              <select className="select" value={newComponentId ?? ""} onChange={e => setNewComponentId(e.target.value ? Number(e.target.value) : null)}>
+              <select className="select" value={newComponentId ?? ""} disabled={!!editingLineId} onChange={e => setNewComponentId(e.target.value ? Number(e.target.value) : null)}>
                 <option value="">Select…</option>
                 {availableComponents.map(c => (
                   <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
                 ))}
               </select>
             </div>
-            <div style={{ width: 120 }}>
-              <label className="label">Type</label>
-              <select className="select" value={newCalcType} onChange={e => setNewCalcType(e.target.value as any)}>
-                <option value="fixed">Fixed</option>
-                <option value="percentage">Percentage</option>
+            <div style={{ width: 200 }}>
+              <label className="label">How it is calculated</label>
+              <select className="select" value={newCalcType} onChange={e => setNewCalcType(e.target.value)}>
+                <option value="fixed">Fixed amount</option>
+                <option value="percentage_gross">% of Gross</option>
+                <option value="percentage_basic">% of Basic</option>
               </select>
             </div>
-            <div style={{ width: 100 }}>
-              <label className="label">Value</label>
+            <div style={{ width: 110 }}>
+              <label className="label">{newCalcType === "fixed" ? "Amount" : "Percent (%)"}</label>
               <input className="input" type="number" step="any" value={newValue} onChange={e => setNewValue(e.target.value)} placeholder="0" />
             </div>
-            <button className="btn btn-primary" onClick={handleAddComponent}><Plus size={16} /> Add</button>
+            <button className="btn btn-primary" onClick={handleAddComponent}><Plus size={16} /> {editingLineId ? "Update" : "Add"}</button>
+            {editingLineId && <button className="btn" onClick={() => { resetLineForm(); setShowAddForm(false) }}>Cancel</button>}
           </div>
         )}
+      </div>
+
+      {/* Live example */}
+      <div className="card">
+        <h2 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px" }}>Try it with a sample salary</h2>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 12px" }}>
+          This shows exactly what an employee on this structure would get. Change the figure to test.
+        </p>
+        <SalaryPreview structureId={structureId} amount={sampleAmount} onAmountChange={setSampleAmount} refreshKey={components.length + ":" + components.map(c => c.calculation_type + c.value).join(",") + salaryBasis} title="Sample payslip" />
       </div>
     </div>
   )

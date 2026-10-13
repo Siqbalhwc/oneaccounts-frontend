@@ -27,7 +27,7 @@ export default function EditSalaryComponentPage() {
   const [type, setType] = useState("earning")
   const [isTaxable, setIsTaxable] = useState(false)
   const [glAccountId, setGlAccountId] = useState<number | null>(null)
-  const [formula, setFormula] = useState("")
+  const [isBasic, setIsBasic] = useState(false)
   const [isActive, setIsActive] = useState(true)
 
   const [loading, setLoading] = useState(false)
@@ -51,7 +51,7 @@ export default function EditSalaryComponentPage() {
             setType(data.type)
             setIsTaxable(data.is_taxable)
             setGlAccountId(data.gl_account_id)
-            setFormula(data.formula || "")
+            setIsBasic(!!data.is_basic)
             setIsActive(data.is_active)
           }
         })
@@ -85,7 +85,7 @@ export default function EditSalaryComponentPage() {
         type,
         is_taxable: isTaxable,
         gl_account_id: glAccountId,
-        formula: formula.trim() || null,
+        is_basic: type === "earning" ? isBasic : false,
         is_active: isActive,
       })
       .eq("id", componentId)
@@ -234,8 +234,13 @@ export default function EditSalaryComponentPage() {
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <label className="label">Formula (optional)</label>
-            <input className="input" value={formula} onChange={e => setFormula(e.target.value)} placeholder="e.g. basic * 0.3" />
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
+              <input type="checkbox" checked={isBasic} disabled={type !== "earning"} onChange={e => setIsBasic(e.target.checked)} />
+              This is the Basic Salary
+            </label>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+              Tick this on ONE earning (the Basic). Components that are a "% of Basic" use this amount. How much it pays is set in the Salary Structure.
+            </div>
           </div>
 
           <div style={{ marginBottom: 16 }}>

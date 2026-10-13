@@ -27,7 +27,7 @@ export async function POST(
   // The structure must belong to THIS company
   const { data: structure, error: structErr } = await supabase
     .from('salary_structures')
-    .select('id, company_id')
+    .select('id, company_id, salary_basis')
     .eq('id', structureId)
     .eq('company_id', companyId)
     .maybeSingle()
@@ -50,6 +50,7 @@ export async function POST(
     .insert({
       company_id: companyId,
       name,
+      salary_basis: structure.salary_basis || 'gross',
       is_active: true,
       updated_at: new Date().toISOString(),
     })

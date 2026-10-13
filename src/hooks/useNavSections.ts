@@ -40,19 +40,29 @@ const baseNavSections: NavSection[] = [
     { label: 'Products',       icon: '📦', href: '/dashboard/products'              },
     { label: 'Inventory Adj.', icon: '⚖️', href: '/dashboard/inventory/adjustments' },
   ]},
-  { section: 'PAYROLL', feature: 'payroll', items: [
-    { label: 'Employees',         icon: '👥', href: '/dashboard/payroll/employees' },
-    { label: 'Attendance',          icon: '📋', href: '/dashboard/payroll/attendance' },
-    { label: 'Attendance Verification', icon: '✅', href: '/dashboard/payroll/attendance/verify' },
-    { label: 'Leave Types',          icon: '🏖️', href: '/dashboard/payroll/leave-types' },    
-    { label: 'Leave Applications',  icon: '📝', href: '/dashboard/payroll/leave-applications' },
-    { label: 'Employee Loans',      icon: '💵', href: '/dashboard/payroll/loans' },
-    { label: 'Salary Advances',     icon: '💸', href: '/dashboard/payroll/advances' },
-    { label: 'Salary Components',  icon: '💰', href: '/dashboard/payroll/salary-components' },
-    { label: 'Salary Structures', icon: '📊', href: '/dashboard/payroll/salary-structures' },
-    { label: 'Payroll Runs',      icon: '📅', href: '/dashboard/payroll/runs' },
-    { label: 'Approval Workflow',     icon: '⚙️', href: '/dashboard/payroll/settings/approval-workflow' },
-    { label: 'Reports',               icon: '📊', href: '/dashboard/payroll/reports' },
+  { section: 'PAYROLL', feature: 'payroll', groups: [
+    { groupLabel: 'SETUP (do once, in order)', items: [
+      { label: 'Payroll Home',        icon: '\u{1F9ED}', href: '/dashboard/payroll' },
+      { label: '1. Salary Components', icon: '\u{1F4B0}', href: '/dashboard/payroll/salary-components' },
+      { label: '2. Salary Structures', icon: '\u{1F4CA}', href: '/dashboard/payroll/salary-structures' },
+      { label: '3. Leave Types',       icon: '\u{1F3D6}', href: '/dashboard/payroll/leave-types' },
+      { label: '4. Payroll Settings',  icon: '\u2699',    href: '/dashboard/payroll/settings/general' },
+      { label: '5. Approval Workflow', icon: '\u2705',    href: '/dashboard/payroll/settings/approval-workflow' },
+    ]},
+    { groupLabel: 'PEOPLE', items: [
+      { label: '6. Employees',        icon: '\u{1F465}', href: '/dashboard/payroll/employees' },
+      { label: 'Employee Loans',      icon: '\u{1F4B5}', href: '/dashboard/payroll/loans' },
+      { label: 'Salary Advances',     icon: '\u{1F4B8}', href: '/dashboard/payroll/advances' },
+    ]},
+    { groupLabel: 'EVERY MONTH', items: [
+      { label: 'Attendance',              icon: '\u{1F4CB}', href: '/dashboard/payroll/attendance' },
+      { label: 'Attendance Verification', icon: '\u2714',    href: '/dashboard/payroll/attendance/verify' },
+      { label: 'Leave Applications',      icon: '\u{1F4DD}', href: '/dashboard/payroll/leave-applications' },
+      { label: 'Payroll Runs',            icon: '\u{1F4C5}', href: '/dashboard/payroll/runs' },
+    ]},
+    { groupLabel: 'REPORTS', items: [
+      { label: 'Payroll Reports', icon: '\u{1F4CA}', href: '/dashboard/payroll/reports' },
+    ]},
   ]},
   { section: 'MATERIALS', feature: 'material_management', items: [
     { label: 'Overview', icon: '🏭', href: '/dashboard/materials' },

@@ -20,6 +20,7 @@ export default function NewSalaryStructurePage() {
 
   const [companyId, setCompanyId] = useState("")
   const [name, setName] = useState("")
+  const [salaryBasis, setSalaryBasis] = useState<"gross" | "basic">("gross")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState<string | null>(null)
@@ -37,12 +38,15 @@ export default function NewSalaryStructurePage() {
     setLoading(true)
     setError("")
 
-    const { error: insertErr } = await supabase
+    const { data: created, error: insertErr } = await supabase
       .from("salary_structures")
       .insert({
         company_id: companyId,
         name: name.trim(),
+        salary_basis: salaryBasis,
       })
+      .select("id")
+      .single()
 
     if (insertErr) {
       setError(insertErr.message)
@@ -53,7 +57,8 @@ export default function NewSalaryStructurePage() {
     setFlash(`✅ Salary Structure "${name.trim()}" created!`)
     setName("")
     setLoading(false)
-    setTimeout(() => router.push("/dashboard/payroll/salary-structures"), 1500)
+    // Go straight to the structure so its components can be added
+    setTimeout(() => router.push(created?.id ? `/dashboard/payroll/salary-structures/${created.id}` : "/dashboard/payroll/salary-structures"), 1200)
   }
 
   // PlanContext guard – stable, no extra queries
@@ -116,6 +121,16 @@ export default function NewSalaryStructurePage() {
             <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Officer Grade" />
           </div>
 
+          <div style={{ marginBottom: 16 }}>
+            <label className="label">Employee salary is entered as *</label>
+            <select className="input" value={salaryBasis} onChange={e => setSalaryBasis(e.target.value as any)}>
+              <option value="gross">Gross salary - the system splits it into Basic, House Rent...</option>
+              <option value="basic">Basic salary - allowances are added on top</option>
+            </select>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>
+              Next step after creating: add the components (Basic Salary, House Rent, Provident Fund...) and say how each is calculated.
+            </div>
+          </div>
           <button className="btn btn-submit" type="submit" disabled={loading}>
             {loading ? "Saving..." : <><Plus size={16} /> Create Structure</>}
           </button>

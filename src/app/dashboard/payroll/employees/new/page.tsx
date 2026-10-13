@@ -6,6 +6,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, UserPlus, Plus, X } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
+import SalaryPreview from "@/components/payroll/SalaryPreview"
 
 const EMPLOYMENT_TYPES = ["permanent", "contract", "daily_wage", "consultant"]
 const PAYMENT_METHODS = ["bank", "cash"]
@@ -120,6 +121,7 @@ export default function NewEmployeePage() {
   const [taxStatus, setTaxStatus] = useState("")
   const [salaryStructureId, setSalaryStructureId] = useState<number | null>(null)
   const [selectedSalaryStructure, setSelectedSalaryStructure] = useState<any>(null)
+  const [salaryAmount, setSalaryAmount] = useState("")
 
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
@@ -216,6 +218,8 @@ export default function NewEmployeePage() {
   const handleSubmit = async () => {
     if (!companyId) { showToast("Company not loaded", "error"); return }
     if (!fullName.trim()) { showToast("Full name is required", "error"); return }
+    if (salaryStructureId && !(Number(salaryAmount) > 0)) { showToast("Enter the salary amount for the selected structure", "error"); return }
+    if (!salaryStructureId && salaryAmount.trim()) { showToast("Select a salary structure for this salary", "error"); return }
 
     if (cnic.trim() && !CNIC_REGEX.test(cnic.trim())) {
       showToast("CNIC format must be 00000-0000000-0", "error")
@@ -260,6 +264,25 @@ export default function NewEmployeePage() {
       }
       setLoading(false)
       return
+    }
+
+    // The salary is saved as the employee's first salary revision (payroll reads revisions)
+    if (salaryStructureId && Number(salaryAmount) > 0) {
+      const { data: { user: revUser } } = await supabase.auth.getUser()
+      const { error: revErr } = await supabase.from("employee_salary_revisions").insert({
+        employee_id: data.id,
+        salary_structure_id: salaryStructureId,
+        basic_salary: Number(salaryAmount),
+        effective_date: `${joiningDate.slice(0, 7)}-01`,
+        reason: "Initial salary",
+        created_by: revUser?.id || null,
+      })
+      if (revErr) {
+        showToast("Employee created, but the salary could not be saved (" + revErr.message + "). Add it from the employee profile.", "error")
+        setLoading(false)
+        setTimeout(() => router.push("/dashboard/payroll/employees"), 3000)
+        return
+      }
     }
 
     showToast(`Employee ${data.employee_code} created successfully`, "success")
@@ -526,6 +549,7 @@ export default function NewEmployeePage() {
                 allowCreate={false}
               />
             </div>
+            <SalaryPreview structureId={salaryStructureId} amount={salaryAmount} onAmountChange={setSalaryAmount} />
             <div className="inline-group" style={{ marginBottom: 16 }}>
               <div>
                 <label className="label">Payment Method</label>

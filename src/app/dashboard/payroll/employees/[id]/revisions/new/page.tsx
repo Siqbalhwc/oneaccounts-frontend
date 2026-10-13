@@ -7,6 +7,7 @@ import { ArrowLeft, Plus, CheckCircle } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
 import EntityPicker from "@/components/entity-picker/EntityPicker"
+import SalaryPreview from "@/components/payroll/SalaryPreview"
 
 export default function NewSalaryRevisionPage() {
   const params = useParams()
@@ -54,7 +55,7 @@ export default function NewSalaryRevisionPage() {
 
   const handleSubmit = async () => {
     if (!companyId) { setError("Company not loaded"); return }
-    if (!basicSalary || isNaN(Number(basicSalary))) { setError("Basic salary is required"); return }
+    if (!basicSalary || isNaN(Number(basicSalary))) { setError("Salary amount is required"); return }
     if (!salaryStructureId) { setError("Salary structure is required"); return }
 
     setLoading(true)
@@ -132,7 +133,7 @@ export default function NewSalaryRevisionPage() {
         <button className="btn btn-back" onClick={() => router.push(`/dashboard/payroll/employees/${employeeId}`)}><ArrowLeft size={16} /></button>
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>💰 New Salary Revision</h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>{employeeName ? `For ${employeeName}` : "Set new basic salary"}</p>
+          <p style={{ color: "var(--text-muted)", fontSize: 13 }}>{employeeName ? `For ${employeeName}` : "Set the new salary"}</p>
         </div>
       </div>
 
@@ -146,10 +147,6 @@ export default function NewSalaryRevisionPage() {
             <input className="input" type="date" value={effectiveDate} onChange={e => setEffectiveDate(e.target.value)} />
           </div>
 
-          <div style={{ marginBottom: 16 }}>
-            <label className="label">Basic Salary *</label>
-            <input className="input" type="number" step="any" value={basicSalary} onChange={e => setBasicSalary(e.target.value)} placeholder="e.g. 50000" />
-          </div>
 
           <div style={{ marginBottom: 16 }}>
             <EntityPicker
@@ -164,6 +161,7 @@ export default function NewSalaryRevisionPage() {
               allowCreate={false}
             />
           </div>
+          <SalaryPreview structureId={salaryStructureId} amount={basicSalary} onAmountChange={setBasicSalary} />
 
           <div style={{ marginBottom: 16 }}>
             <label className="label">Reason (optional)</label>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteClient, resolvePayrollActor, logPayrollEvent } from '@/lib/payrollServer'
+import { computeSalary, dailyRate, settingsFromRow, type StructureLine } from '@/lib/payrollCalc'
 
 export async function POST(request: NextRequest) {
   const supabase = await createRouteClient()
@@ -72,6 +73,17 @@ export async function POST(request: NextRequest) {
 
   const runLines: any[] = []
 
+  // Company payroll settings (days used for the daily rate, daily rate base)
+  const { data: settingsRow } = await supabase
+    .from('payroll_settings')
+    .select('day_basis, daily_rate_base')
+    .eq('company_id', companyId)
+    .maybeSingle()
+  const payrollSettings = settingsFromRow(settingsRow)
+
+  // Each structure is read once, however many employees use it
+  const structureCache = new Map<number, { basis: 'gross' | 'basic'; lines: StructureLine[] }>()
+
   for (const emp of employees) {
     // Salary revision
     let { data: revision } = await supabase
@@ -93,43 +105,49 @@ export async function POST(request: NextRequest) {
 
     if (!revision.salary_structure_id) continue
 
-    // Structure components
-    const { data: components } = await supabase
-      .from('salary_structure_components')
-      .select('calculation_type, value, salary_component_id, salary_components!inner(id, name, type, gl_account_id)')
-      .eq('salary_structure_id', revision.salary_structure_id)
-
-    if (!components) continue
-
-    let gross = 0
-    let deductions = 0
-    const lineComponents: any[] = []
-
-    for (const comp of components) {
-      let amount = 0
-      if (comp.calculation_type === 'percentage') {
-        amount = (revision.basic_salary * comp.value) / 100
-      } else {
-        amount = comp.value
+    // Structure: how the salary figure is split into earnings and deductions
+    let structure = structureCache.get(revision.salary_structure_id)
+    if (!structure) {
+      const { data: st } = await supabase
+        .from('salary_structures')
+        .select('salary_basis')
+        .eq('id', revision.salary_structure_id)
+        .eq('company_id', companyId)
+        .maybeSingle()
+      const { data: comps, error: compsErr } = await supabase
+        .from('salary_structure_components')
+        .select('calculation_type, value, salary_component_id, salary_components!inner(id, name, type, gl_account_id, is_basic)')
+        .eq('salary_structure_id', revision.salary_structure_id)
+      if (compsErr) {
+        return NextResponse.json({ error: 'Could not read salary structure: ' + compsErr.message }, { status: 500 })
       }
-      amount = Math.round(amount * 100) / 100
-
-      lineComponents.push({
-        salary_component_id: comp.salary_component_id,
-        component_name: (comp.salary_components as any)?.name || 'Unknown',
-        amount,
-        type: (comp.salary_components as any)?.type,
-        gl_account_id: (comp.salary_components as any)?.gl_account_id,
-        source_type: null,
-        source_id: null,
-      })
-
-      if ((comp.salary_components as any)?.type === 'earning') {
-        gross += amount
-      } else {
-        deductions += amount
+      structure = {
+        basis: st?.salary_basis === 'gross' ? 'gross' : 'basic',
+        lines: (comps || []).map((c: any) => ({
+          key: c.salary_component_id,
+          name: c.salary_components?.name || 'Unknown',
+          type: c.salary_components?.type === 'earning' ? 'earning' : 'deduction',
+          isBasic: !!c.salary_components?.is_basic,
+          calcType: c.calculation_type,
+          value: Number(c.value || 0),
+          glAccountId: c.salary_components?.gl_account_id ?? null,
+        })) as StructureLine[],
       }
+      structureCache.set(revision.salary_structure_id, structure)
     }
+
+    const calc = computeSalary(structure.lines, structure.basis, Number(revision.basic_salary))
+    let gross = calc.gross
+    let deductions = calc.deductions
+    const lineComponents: any[] = calc.lines.map(l => ({
+      salary_component_id: l.key,
+      component_name: l.name,
+      amount: l.amount,
+      type: l.type,
+      gl_account_id: l.glAccountId ?? null,
+      source_type: null,
+      source_id: null,
+    }))
 
     // ----- Attendance Integration -----
     let absentDays = 0
@@ -153,8 +171,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const dailyRate = revision.basic_salary > 0 ? revision.basic_salary / daysInMonth : 0
-    const absenceDeduction = Math.round(dailyRate * (absentDays + halfDays * 0.5) * 100) / 100
+    // One day's value follows the company settings (days of month / fixed number, gross / basic)
+    const oneDay = dailyRate(payrollSettings, daysInMonth, calc.gross, calc.basic)
+    const absenceDeduction = Math.round(oneDay * (absentDays + halfDays * 0.5) * 100) / 100
 
     if (absenceDeduction > 0) {
       lineComponents.push({

@@ -25,7 +25,7 @@ export default function NewSalaryComponentPage() {
   const [type, setType] = useState("earning")
   const [isTaxable, setIsTaxable] = useState(false)
   const [glAccountId, setGlAccountId] = useState<number | null>(null)
-  const [formula, setFormula] = useState("")
+  const [isBasic, setIsBasic] = useState(false)
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -79,7 +79,7 @@ export default function NewSalaryComponentPage() {
       type,
       is_taxable: isTaxable,
       gl_account_id: glAccountId,
-      formula: formula.trim() || null,
+      is_basic: type === "earning" ? isBasic : false,
       is_active: true,
     }
 
@@ -88,7 +88,7 @@ export default function NewSalaryComponentPage() {
       .insert(payload)
 
     if (insertErr) {
-      setError(insertErr.message)
+      setError(insertErr.message.includes("uq_salary_components_one_basic") ? "Another component is already marked as the Basic Salary. Untick it there first (only one Basic Salary component is allowed)." : insertErr.message)
       setLoading(false)
       return
     }
@@ -98,7 +98,7 @@ export default function NewSalaryComponentPage() {
     setType("earning")
     setIsTaxable(false)
     setGlAccountId(null)
-    setFormula("")
+    setIsBasic(false)
     setLoading(false)
     setTimeout(() => router.push("/dashboard/payroll/salary-components"), 1500)
   }
@@ -235,8 +235,13 @@ export default function NewSalaryComponentPage() {
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <label className="label">Formula (optional)</label>
-            <input className="input" value={formula} onChange={e => setFormula(e.target.value)} placeholder="e.g. basic * 0.3" />
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
+              <input type="checkbox" checked={isBasic} disabled={type !== "earning"} onChange={e => setIsBasic(e.target.checked)} />
+              This is the Basic Salary
+            </label>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+              Tick this on ONE earning (the Basic). Components that are a "% of Basic" use this amount. How much it pays is set in the Salary Structure.
+            </div>
           </div>
 
           <button className="btn btn-submit" type="submit" disabled={loading}>
