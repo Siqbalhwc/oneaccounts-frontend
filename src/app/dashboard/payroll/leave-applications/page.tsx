@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 import { useRole } from "@/contexts/RoleContext"
 import { usePlan } from "@/contexts/PlanContext"
+import { countWorkingDays, DEFAULT_SETTINGS, type PayrollSettings } from "@/lib/payrollCalc"
 
 const PAGE_SIZE = 10
 const STATUS_OPTIONS = ["all", "pending", "approved", "rejected"]
@@ -60,7 +61,9 @@ export default function LeaveApplicationsPage() {
   const [formFlash, setFormFlash] = useState("")
 
   // Leave balance state
-  const [leaveBalances, setLeaveBalances] = useState<Record<string, { used: number; total: number }>>({})
+  // Weekly-off rules (from Payroll Settings) and the real leave balances of the employee in the form
+  const [leaveSettings, setLeaveSettings] = useState<PayrollSettings>(DEFAULT_SETTINGS)
+  const [balanceRows, setBalanceRows] = useState<any[]>([])
 
   // Data arrays for dropdowns
   const [employees, setEmployees] = useState<any[]>([])
@@ -112,7 +115,7 @@ export default function LeaveApplicationsPage() {
         // 3. Fetch leave types (independent)
         supabase
           .from("leave_types")
-          .select("id, name")
+          .select("id, name, is_paid, days_per_year")
           .eq("company_id", cid)
           .eq("is_active", true)
           .order("name")
@@ -157,39 +160,26 @@ export default function LeaveApplicationsPage() {
     fetchApplications()
   }, [role, canView, companyId, statusFilter, leaveTypeFilter, departmentFilter, dateFrom, dateTo, search])
 
-  // Fetch leave balances (simplified: for each employee and leave type, count approved days)
+  // Weekly off rules come from Payroll Settings (22-day basis = Saturday and Sunday off)
   useEffect(() => {
-    if (!companyId || employees.length === 0 || leaveTypes.length === 0) return
+    fetch("/api/payroll/settings")
+      .then(r => r.json())
+      .then(j => { if (j && j.settings) setLeaveSettings(j.settings) })
+      .catch(() => {})
+  }, [])
+
+  // Real leave balances of the employee chosen in the form (calculated by the database)
+  useEffect(() => {
+    if (!formEmployeeId) { setBalanceRows([]); return }
+    const year = formFromDate ? Number(formFromDate.slice(0, 4)) : new Date().getFullYear()
     supabase
-      .from("leave_applications")
-      .select("employee_id, leave_type_id, from_date, to_date")
-      .eq("status", "approved")
-      .then(({ data }) => {
-        const balances: Record<string, { used: number; total: number }> = {}
-        const totalDaysMap: Record<number, number> = {}
-        leaveTypes.forEach(lt => { totalDaysMap[lt.id] = 20 }) // placeholder
-        if (data) {
-          data.forEach(app => {
-            const key = `${app.employee_id}_${app.leave_type_id}`
-            if (!balances[key]) {
-              balances[key] = { used: 0, total: totalDaysMap[app.leave_type_id] || 20 }
-            }
-            const from = new Date(app.from_date)
-            const to = new Date(app.to_date)
-            const diff = Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1
-            balances[key].used += diff
-          })
-        }
-        setLeaveBalances(balances)
-      })
-  }, [companyId, employees, leaveTypes])
+      .rpc("get_leave_balances", { p_employee_id: formEmployeeId, p_year: year })
+      .then(({ data }) => setBalanceRows(Array.isArray(data) ? data : []))
+  }, [formEmployeeId, formFromDate])
 
   // --- Helpers ---
-  const getDurationDays = (from: string, to: string) => {
-    const f = new Date(from)
-    const t = new Date(to)
-    return Math.round((t.getTime() - f.getTime()) / (1000 * 60 * 60 * 24)) + 1
-  }
+  // Working days only (weekly offs are not counted)
+  const getDurationDays = (from: string, to: string) => countWorkingDays(from, to, leaveSettings)
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -222,29 +212,35 @@ export default function LeaveApplicationsPage() {
     }
   }
 
+  // Approve / reject through the database: it checks balance and overlaps and marks attendance
+  const decideOne = async (id: number, action: "approve" | "reject") => {
+    const { error: rpcErr } = await supabase.rpc("decide_leave_application", { p_application_id: id, p_action: action })
+    return rpcErr ? rpcErr.message : null
+  }
+
   const bulkAction = async (action: "approve" | "reject") => {
     if (selectedIds.size === 0) return
     setBulkProcessing(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    const updates = {
-      status: action === "approve" ? "approved" : "rejected",
-      approved_by: user?.id,
-      approved_at: new Date().toISOString(),
+    let done = 0
+    const problems: string[] = []
+    for (const id of Array.from(selectedIds)) {
+      const msg = await decideOne(id, action)
+      if (msg) problems.push(`#${id}: ${msg}`)
+      else done++
     }
-    await supabase.from("leave_applications").update(updates).in("id", Array.from(selectedIds))
     setBulkProcessing(false)
     fetchApplications()
+    if (problems.length > 0) {
+      setError(`${done} done, ${problems.length} not done - ${problems.slice(0, 3).join(" | ")}`)
+      return
+    }
     setFlash(`✅ ${selectedIds.size} applications ${action}d`)
   }
 
   // Single action from table
   const singleAction = async (id: number, action: "approve" | "reject") => {
-    const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from("leave_applications").update({
-      status: action === "approve" ? "approved" : "rejected",
-      approved_by: user?.id,
-      approved_at: new Date().toISOString(),
-    }).eq("id", id)
+    const msg = await decideOne(id, action)
+    if (msg) { setError(msg); fetchApplications(); return }
     fetchApplications()
     setFlash(`Application ${action}d`)
   }
@@ -288,16 +284,13 @@ export default function LeaveApplicationsPage() {
     setFormSaving(true)
     setFormError("")
 
-    const { error: insertErr } = await supabase
-      .from("leave_applications")
-      .insert({
-        employee_id: formEmployeeId,
-        leave_type_id: formLeaveTypeId,
-        from_date: formFromDate,
-        to_date: formToDate,
-        status: "pending",
-        reason: formReason.trim() || null,
-      })
+    const { error: insertErr } = await supabase.rpc("submit_leave_application", {
+      p_employee_id: formEmployeeId,
+      p_leave_type_id: formLeaveTypeId,
+      p_from_date: formFromDate,
+      p_to_date: formToDate,
+      p_reason: formReason.trim() || null,
+    })
 
     if (insertErr) {
       setFormError(insertErr.message)
@@ -319,9 +312,8 @@ export default function LeaveApplicationsPage() {
   // Leave balance for current employee/leave type
   const currentBalance = useMemo(() => {
     if (!formEmployeeId || !formLeaveTypeId) return null
-    const key = `${formEmployeeId}_${formLeaveTypeId}`
-    return leaveBalances[key] || { used: 0, total: 20 }
-  }, [formEmployeeId, formLeaveTypeId, leaveBalances])
+    return balanceRows.find((r: any) => r.leave_type_id === formLeaveTypeId) || null
+  }, [formEmployeeId, formLeaveTypeId, balanceRows])
 
   if (planLoading) {
     return <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
@@ -645,8 +637,14 @@ export default function LeaveApplicationsPage() {
                 </select>
                 {currentBalance && (
                   <div style={{ marginTop: 8, background: "var(--bg)", padding: 8, borderRadius: 6, fontSize: 12 }}>
-                    <div><strong>Balance:</strong> {currentBalance.total - currentBalance.used} days remaining (of {currentBalance.total})</div>
-                    <div style={{ color: "var(--text-muted)", marginTop: 2 }}>Used: {currentBalance.used} days</div>
+                    {Number(currentBalance.days_per_year) > 0 ? (
+                      <>
+                        <div><strong>Balance:</strong> {currentBalance.remaining} days remaining (of {currentBalance.days_per_year} per year)</div>
+                        <div style={{ color: "var(--text-muted)", marginTop: 2 }}>Used: {currentBalance.used} days, waiting for approval: {currentBalance.pending} days</div>
+                      </>
+                    ) : (
+                      <div><strong>No yearly limit</strong> for this leave type{currentBalance.is_paid ? "" : " (unpaid - the days are deducted from salary)"}.</div>
+                    )}
                   </div>
                 )}
               </div>
@@ -664,7 +662,7 @@ export default function LeaveApplicationsPage() {
             </div>
             {formFromDate && formToDate && (
               <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
-                Duration: {getDurationDays(formFromDate, formToDate)} days
+                Working days: {getDurationDays(formFromDate, formToDate)} (weekly offs are not counted)
               </div>
             )}
 

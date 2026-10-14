@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteClient, resolvePayrollActor, logPayrollEvent } from '@/lib/payrollServer'
-import { computeSalary, dailyRate, settingsFromRow, type StructureLine } from '@/lib/payrollCalc'
+import { computeSalary, dailyRate, settingsFromRow, countWorkingDays, type StructureLine } from '@/lib/payrollCalc'
 
 export async function POST(request: NextRequest) {
   const supabase = await createRouteClient()
@@ -186,6 +186,36 @@ export async function POST(request: NextRequest) {
         source_id: null,
       })
       deductions += absenceDeduction
+    }
+
+    // Unpaid leave: approved leave of an unpaid leave type that falls inside this month
+    const { data: leaveApps } = await supabase
+      .from('leave_applications')
+      .select('from_date, to_date, leave_types!inner(is_paid)')
+      .eq('employee_id', emp.id)
+      .eq('status', 'approved')
+      .lte('from_date', endDate)
+      .gte('to_date', startDate)
+    let unpaidLeaveDays = 0
+    for (const la of (leaveApps || []) as any[]) {
+      if (la.leave_types?.is_paid === false) {
+        const lf = la.from_date > startDate ? la.from_date : startDate
+        const lt = la.to_date < endDate ? la.to_date : endDate
+        unpaidLeaveDays += countWorkingDays(lf, lt, payrollSettings)
+      }
+    }
+    const unpaidLeaveDeduction = Math.round(oneDay * unpaidLeaveDays * 100) / 100
+    if (unpaidLeaveDeduction > 0) {
+      lineComponents.push({
+        salary_component_id: null,
+        component_name: 'Unpaid Leave Deduction',
+        amount: unpaidLeaveDeduction,
+        type: 'deduction',
+        gl_account_id: null,
+        source_type: 'absence',
+        source_id: null,
+      })
+      deductions += unpaidLeaveDeduction
     }
 
     if (overtimeTotal > 0) {

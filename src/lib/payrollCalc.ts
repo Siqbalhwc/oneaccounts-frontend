@@ -149,6 +149,19 @@ export function weeklyOffText(s: PayrollSettings): string {
   return s.dayBasis === 22 ? 'Saturday and Sunday are off' : 'Sunday is off'
 }
 
+// Working days (weekly offs excluded) between two dates, inclusive. Dates are 'YYYY-MM-DD'.
+export function countWorkingDays(from: string, to: string, s: PayrollSettings): number {
+  const off = weeklyOffDays(s)
+  const f = new Date(from + 'T00:00:00Z')
+  const t = new Date(to + 'T00:00:00Z')
+  if (isNaN(f.getTime()) || isNaN(t.getTime()) || f > t) return 0
+  let n = 0
+  for (const d = new Date(f); d <= t; d.setUTCDate(d.getUTCDate() + 1)) {
+    if (!off.includes(d.getUTCDay())) n++
+  }
+  return n
+}
+
 // Parse a settings row coming from the database.
 export function settingsFromRow(row: any): PayrollSettings {
   const d = row && row.day_basis ? Number(row.day_basis) : null

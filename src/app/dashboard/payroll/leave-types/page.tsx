@@ -42,6 +42,7 @@ export default function LeaveTypesPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState("")
   const [editIsPaid, setEditIsPaid] = useState(true)
+  const [editDays, setEditDays] = useState("")
   const [editIsActive, setEditIsActive] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
@@ -144,6 +145,7 @@ export default function LeaveTypesPage() {
   const openNewEditor = () => {
     setEditingId(null)
     setEditName("")
+    setEditDays("")
     setEditIsPaid(true)
     setEditIsActive(true)
     setShowEditor(true)
@@ -155,6 +157,7 @@ export default function LeaveTypesPage() {
     setEditingId(lt.id)
     setEditName(lt.name)
     setEditIsPaid(lt.is_paid)
+    setEditDays(lt.days_per_year && Number(lt.days_per_year) > 0 ? String(lt.days_per_year) : "")
     setEditIsActive(lt.is_active)
     setShowEditor(true)
     setError("")
@@ -163,6 +166,7 @@ export default function LeaveTypesPage() {
 
   const handleSave = async () => {
     if (!editName.trim()) { setError("Name is required"); return }
+    if (editDays.trim() && (isNaN(Number(editDays)) || Number(editDays) < 0 || Number(editDays) > 366)) { setError("Days per year must be a number between 0 and 366"); return }
     setSaving(true)
     setError("")
 
@@ -170,7 +174,7 @@ export default function LeaveTypesPage() {
       // UPDATE
       const { error: updateErr } = await supabase
         .from("leave_types")
-        .update({ name: editName.trim(), is_paid: editIsPaid, is_active: editIsActive })
+        .update({ name: editName.trim(), is_paid: editIsPaid, is_active: editIsActive, days_per_year: Number(editDays) || 0 })
         .eq("id", editingId)
         .eq("company_id", companyId)
       if (updateErr) { setError(updateErr.message); setSaving(false); return }
@@ -179,7 +183,7 @@ export default function LeaveTypesPage() {
       // INSERT
       const { error: insertErr } = await supabase
         .from("leave_types")
-        .insert({ company_id: companyId, name: editName.trim(), is_paid: editIsPaid, is_active: editIsActive })
+        .insert({ company_id: companyId, name: editName.trim(), is_paid: editIsPaid, is_active: editIsActive, days_per_year: Number(editDays) || 0 })
       if (insertErr) { setError(insertErr.message); setSaving(false); return }
       setFlash("Leave type created")
     }
@@ -414,7 +418,7 @@ export default function LeaveTypesPage() {
                       </td>
                       <td style={{ padding: "12px 16px", textAlign: "center" }}>
                         <span className="badge" style={{ background: lt.is_paid ? "#DCFCE7" : "#FEF3C7", color: lt.is_paid ? "#166534" : "#92400E" }}>
-                          {lt.is_paid ? "Paid" : "Unpaid"}
+                          {lt.is_paid ? "Paid" : "Unpaid"}{Number(lt.days_per_year) > 0 ? ` - ${lt.days_per_year} days/year` : ""}
                         </span>
                       </td>
                       <td style={{ padding: "12px 16px", textAlign: "center" }}>
@@ -486,6 +490,14 @@ export default function LeaveTypesPage() {
               <div>
                 <label className="kpi-label" style={{ marginBottom: 4, display: "block" }}>Name *</label>
                 <input className="input" value={editName} onChange={e => setEditName(e.target.value)} placeholder="e.g. Annual Leave" />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label className="kpi-label" style={{ marginBottom: 4, display: "block" }}>Days allowed per year</label>
+              <input className="input" type="number" min="0" value={editDays} onChange={e => setEditDays(e.target.value)} placeholder="e.g. 14 (leave empty for no limit)" />
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                The yearly entitlement for each employee. Applications above the balance are refused. Leave empty or 0 for no limit (for example Unpaid leave).
               </div>
             </div>
 
