@@ -77,6 +77,7 @@ export default function PayrollRunDetailPage() {
   const [showPostModal, setShowPostModal] = useState(false)
   const [showReverseModal, setShowReverseModal] = useState(false)
   const [reverseReason, setReverseReason] = useState("")
+  const [showDiscardModal, setShowDiscardModal] = useState(false)
 
   // Toast
   const showToast = (message: string, type: "success" | "error") => {
@@ -259,6 +260,7 @@ export default function PayrollRunDetailPage() {
     (approvalLevels === "3" && run.status === "approved" && postRoles.includes(role ?? ""))
   )
   const canReverse = run && (run.status === "posted" || run.status === "locked") && postRoles.includes(role ?? "")
+  const canDiscard = run && (run.status === "draft" || run.status === "submitted" || run.status === "approved") && (role === "admin" || role === "accountant")
 
   // ---------- Action handlers ----------
   const handleSubmit = async () => {
@@ -320,6 +322,23 @@ export default function PayrollRunDetailPage() {
       setRun((prev: any) => ({ ...prev, status: "reversed", reversal_reason: reverseReason }))
       setShowReverseModal(false)
       setReverseReason("")
+    } catch (err: any) { setError(err.message) }
+    setActionLoading("")
+  }
+
+  const handleDiscard = async () => {
+    setActionLoading("discard")
+    try {
+      const res = await fetch(`/api/payroll/runs/${runId}/discard`, { method: "POST" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data.error || "Could not discard the run")
+        setActionLoading("")
+        setShowDiscardModal(false)
+        return
+      }
+      router.push("/dashboard/payroll/runs")
+      return
     } catch (err: any) { setError(err.message) }
     setActionLoading("")
   }
@@ -415,6 +434,11 @@ export default function PayrollRunDetailPage() {
               <CheckCircle size={16} /> Post Payroll
             </button>
           )}
+          {canDiscard && (
+            <button className="btn" onClick={() => setShowDiscardModal(true)} disabled={actionLoading !== ""}>
+              Discard Run
+            </button>
+          )}
           {canReverse && (
             <button className="btn btn-danger" onClick={() => setShowReverseModal(true)} disabled={actionLoading !== ""}>
               ↩️ Reverse Payroll
@@ -423,7 +447,7 @@ export default function PayrollRunDetailPage() {
         </div>
       </div>
 
-      {error && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #FECACA" }}>{error}</div>}
+      {error && <div style={{ background: "var(--card)", color: "var(--text)", padding: "10px 14px", borderRadius: 8, marginBottom: 12, fontSize: 13, border: "1px solid #dc2626" }}>{error}</div>}
 
       {/* KPI Cards */}
       <div className="summary-grid">
@@ -626,6 +650,25 @@ export default function PayrollRunDetailPage() {
               <button className="btn" onClick={() => setShowPostModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={handlePost} disabled={!allValidationPassed || actionLoading !== ""}>
                 {actionLoading === "post" ? "Posting..." : "Confirm Post"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discard Modal */}
+      {showDiscardModal && (
+        <div className="modal-overlay" onClick={() => setShowDiscardModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Discard this payroll run?</h3>
+            <p style={{ margin: "12px 0", color: "var(--text-muted)" }}>
+              The run has not been posted, so nothing is booked in the accounts. It will be deleted and you can generate the month again.
+              Attendance, leave, loans and advances are not changed.
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setShowDiscardModal(false)}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleDiscard} disabled={actionLoading !== ""}>
+                {actionLoading === "discard" ? "Discarding..." : "Discard Run"}
               </button>
             </div>
           </div>

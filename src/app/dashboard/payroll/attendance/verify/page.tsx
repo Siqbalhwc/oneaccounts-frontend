@@ -138,11 +138,12 @@ export default function AttendanceApprovalPage() {
     if (selectedIds.size === 0) return
     setProcessing(true)
     const { data: { user } } = await supabase.auth.getUser()
-    await supabase
+    const { error: apprErr } = await supabase
       .from("attendance_records")
       .update({ verified_status: "approved", verified_by: user?.id, verified_at: new Date().toISOString() })
       .in("id", Array.from(selectedIds))
       .eq("company_id", companyId)
+    if (apprErr) { setFlash("Could not approve: " + apprErr.message); setProcessing(false); return }
     fetchRecords()
     setProcessing(false)
     setFlash(`✅ ${selectedIds.size} records approved`)
@@ -152,14 +153,15 @@ export default function AttendanceApprovalPage() {
     if (selectedIds.size === 0) return
     setProcessing(true)
     const { data: { user } } = await supabase.auth.getUser()
-    await supabase
+    const { error: rejErr } = await supabase
       .from("attendance_records")
-      .update({ verified_status: "approved", verified_by: user?.id, verified_at: new Date().toISOString() }) // For now, reject = approve (we'll add a real reject status later if needed)
+      .update({ verified_status: "rejected", verified_by: user?.id, verified_at: new Date().toISOString() })
       .in("id", Array.from(selectedIds))
       .eq("company_id", companyId)
+    if (rejErr) { setFlash("Could not reject: " + rejErr.message); setProcessing(false); return }
     fetchRecords()
     setProcessing(false)
-    setFlash(`✅ ${selectedIds.size} records approved`)
+    setFlash(`${selectedIds.size} records rejected - they are ignored by payroll until corrected and approved`)
   }
 
   // Open drawer
@@ -381,6 +383,8 @@ export default function AttendanceApprovalPage() {
                     <td style={{ padding: "10px 12px" }}>
                       {rec.verified_status === "approved" ? (
                         <span className="status-chip" style={{ background: "#DCFCE7", color: "#166534" }}>✓ Approved</span>
+                      ) : rec.verified_status === "rejected" ? (
+                        <span className="status-chip" style={{ background: "#FEE2E2", color: "#991B1B" }}>Rejected</span>
                       ) : (
                         <span className="status-chip" style={{ background: "#FEF3C7", color: "#92400E" }}>⏳ Pending</span>
                       )}
@@ -441,7 +445,7 @@ export default function AttendanceApprovalPage() {
                 </span>
               </div>
               <div><div className="kpi-label">Verification</div>
-                {drawerRecord.verified_status === "approved" ? "✓ Approved" : "⏳ Pending"}
+                {drawerRecord.verified_status === "approved" ? "✓ Approved" : drawerRecord.verified_status === "rejected" ? "Rejected" : "⏳ Pending"}
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 20 }}>

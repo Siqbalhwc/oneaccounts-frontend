@@ -65,6 +65,9 @@ export default function PayslipPage() {
       .select("id, month")
       .eq("company_id", companyId)
       .eq("month", month)
+      .neq("status", "reversed")
+      .order("id", { ascending: false })
+      .limit(1)
       .maybeSingle()
 
     if (!run) {

@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
     .select('id')
     .eq('company_id', companyId)
     .eq('month', month)
+    .neq('status', 'reversed')
   sameQuery = department_id ? sameQuery.eq('department_id', department_id) : sameQuery.is('department_id', null)
   const { data: sameRows } = await sameQuery.limit(1)
   if (sameRows && sameRows.length > 0) {
