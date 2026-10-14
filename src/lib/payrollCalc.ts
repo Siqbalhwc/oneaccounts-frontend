@@ -51,7 +51,9 @@ export function describeCalc(calcType: string, value: number): string {
 }
 
 // amount = the salary figure typed for the employee. basis says whether it is the Gross or the Basic.
-export function computeSalary(lines: StructureLine[], basis: SalaryBasis, amount: number): SalaryResult {
+// factor = share of the month the employee was employed (1 = full month). Earnings are scaled by it;
+// percentage deductions follow the scaled amounts; fixed deductions are not scaled.
+export function computeSalary(lines: StructureLine[], basis: SalaryBasis, amount: number, factor: number = 1): SalaryResult {
   const warnings: string[] = []
   const input = Number.isFinite(amount) && amount > 0 ? amount : 0
   const earnings = lines.filter(l => l.type === 'earning')
@@ -72,6 +74,7 @@ export function computeSalary(lines: StructureLine[], basis: SalaryBasis, amount
   // 2. Earnings
   const results: LineResult[] = []
   let gross = 0
+  let grossFull = 0
   for (const l of earnings) {
     const ct = normalizeCalcType(l.calcType)
     let amt = 0
@@ -87,19 +90,22 @@ export function computeSalary(lines: StructureLine[], basis: SalaryBasis, amount
       if (basis === 'gross') amt = (input * l.value) / 100
       else problem = '"% of Gross" earnings need a structure where the salary is entered as Gross'
     }
-    amt = round2(amt)
+    const amtFull = round2(amt)
+    amt = round2(amt * factor)
     gross += amt
+    grossFull += amtFull
     results.push({ ...l, amount: amt, problem })
   }
   gross = round2(gross)
 
   // 3. Deductions (can use the Basic or the Gross just calculated)
+  const basicP = round2(basic * factor)
   let deductions = 0
   for (const l of deductionLines) {
     const ct = normalizeCalcType(l.calcType)
     let amt = 0
     if (ct === 'fixed') amt = l.value
-    else if (ct === 'percentage_basic') amt = (basic * l.value) / 100
+    else if (ct === 'percentage_basic') amt = (basicP * l.value) / 100
     else amt = (gross * l.value) / 100
     amt = round2(amt)
     deductions += amt
@@ -120,13 +126,13 @@ export function computeSalary(lines: StructureLine[], basis: SalaryBasis, amount
     if (earnings.some(l => normalizeCalcType(l.calcType) === 'percentage_gross') && Math.abs(pct - 100) > 0.001 && !earnings.some(l => !l.isBasic && normalizeCalcType(l.calcType) === 'fixed')) {
       warnings.push(`The "% of Gross" earnings add up to ${round2(pct)}% (they should add up to 100%).`)
     }
-    if (input > 0 && Math.abs(gross - input) > 0.5) {
-      warnings.push(`Total earnings (${gross.toLocaleString()}) differ from the Gross entered (${input.toLocaleString()}) by ${round2(gross - input).toLocaleString()}.`)
+    if (input > 0 && Math.abs(grossFull - input) > 0.5) {
+      warnings.push(`Total earnings (${grossFull.toLocaleString()}) differ from the Gross entered (${input.toLocaleString()}) by ${round2(grossFull - input).toLocaleString()}.`)
     }
   }
   for (const r of results) if (r.problem) warnings.push(`${r.name}: ${r.problem}`)
 
-  return { lines: results, basic, gross, deductions, net: round2(gross - deductions), warnings }
+  return { lines: results, basic: basicP, gross, deductions, net: round2(gross - deductions), warnings }
 }
 
 // How many days the monthly salary is divided by to value one day.
@@ -160,6 +166,27 @@ export function countWorkingDays(from: string, to: string, s: PayrollSettings): 
     if (!off.includes(d.getUTCDay())) n++
   }
   return n
+}
+
+// Share of the month an employee was employed (joined or left part-way). Dates are 'YYYY-MM-DD'.
+// 1 = the whole month, 0 = not employed at all. Counting follows the company day rule:
+// a divisor below 28 (22, 26...) counts working days (weekly offs excluded); otherwise calendar days.
+export function prorationFactor(s: PayrollSettings, monthStart: string, monthEnd: string, joining?: string | null, exit?: string | null): number {
+  const effStart = joining && joining > monthStart ? joining : monthStart
+  const effEnd = exit && exit < monthEnd ? exit : monthEnd
+  if (effStart > effEnd) return 0
+  if (effStart === monthStart && effEnd === monthEnd) return 1
+  const daysInMonth = Number(monthEnd.slice(8, 10))
+  const divisor = daysDivisor(s, daysInMonth)
+  let employed: number
+  if (divisor < 28) {
+    employed = countWorkingDays(effStart, effEnd, s)
+  } else {
+    const f = new Date(effStart + 'T00:00:00Z')
+    const t = new Date(effEnd + 'T00:00:00Z')
+    employed = Math.round((t.getTime() - f.getTime()) / 86400000) + 1
+  }
+  return Math.min(1, employed / divisor)
 }
 
 // Parse a settings row coming from the database.

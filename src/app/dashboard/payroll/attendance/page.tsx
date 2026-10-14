@@ -71,9 +71,9 @@ export default function UnifiedAttendancePage() {
         // Fetch employees WITHOUT joining departments
         supabase
           .from("employees")
-          .select("id, employee_code, full_name, department_id")
+          .select("id, employee_code, full_name, department_id, exit_date")
           .eq("company_id", cid)
-          .eq("status", "active")
+          .in("status", ["active", "resigned", "terminated"])
           .order("full_name")
           .then(({ data }) => setEmployees(data || []))
         // Fetch departments separately for the filter dropdown
@@ -176,9 +176,12 @@ export default function UnifiedAttendancePage() {
         emp.full_name?.toLowerCase().includes(searchEmployee.toLowerCase()) ||
         emp.employee_code?.toLowerCase().includes(searchEmployee.toLowerCase())
       const matchDept = departmentFilter === "all" || emp.department_id?.toString() === departmentFilter
-      return matchSearch && matchDept
+      // people who left before this month are not shown
+      const monthStartStr = `${year}-${String(month + 1).padStart(2, "0")}-01`
+      const stillEmployed = !emp.exit_date || emp.exit_date >= monthStartStr
+      return matchSearch && matchDept && stillEmployed
     })
-  }, [employees, searchEmployee, departmentFilter])
+  }, [employees, year, month, searchEmployee, departmentFilter])
 
   // --- Save ---
   const handleSave = async () => {

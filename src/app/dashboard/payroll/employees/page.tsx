@@ -12,6 +12,8 @@ const statusColors: Record<string, string> = {
   active: "#22c55e",
   on_leave: "#f59e0b",
   draft: "#94a3b8",
+  resigned: "#7c3aed",
+  terminated: "#dc2626",
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -210,7 +212,7 @@ export default function EmployeesPage() {
           />
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {["all", "active", "on_leave", "draft"].map(s => (
+          {["all", "active", "on_leave", "draft", "resigned", "terminated"].map(s => (
             <div key={s} className={`filter-chip ${statusFilter === s ? "active" : ""}`} onClick={() => setStatusFilter(s)}>
               {s === "all" ? "All Status" : s.replace("_", " ")}
             </div>

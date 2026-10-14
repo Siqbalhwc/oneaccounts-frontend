@@ -76,7 +76,7 @@ export default function NewPayrollRunPage() {
           .from("employees")
           .select("id")
           .eq("company_id", companyId)
-          .eq("status", "active")
+          .or(`status.eq.active,and(status.in.(resigned,terminated),exit_date.gte.${selectedMonth}-01)`)
 
         if (departmentId) {
           employeeQuery = employeeQuery.eq("department_id", departmentId)

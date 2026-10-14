@@ -56,7 +56,7 @@ export default function AttendanceImportPage() {
           .from("employees")
           .select("id, employee_code")
           .eq("company_id", cid)
-          .eq("status", "active")
+          .in("status", ["active", "resigned", "terminated"])
           .then(({ data }) => {
             if (data) {
               const map: Record<string, number> = {}

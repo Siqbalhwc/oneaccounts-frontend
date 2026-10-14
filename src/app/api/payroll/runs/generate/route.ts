@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createRouteClient, resolvePayrollActor, logPayrollEvent } from '@/lib/payrollServer'
-import { computeSalary, dailyRate, settingsFromRow, countWorkingDays, type StructureLine } from '@/lib/payrollCalc'
+import { computeSalary, dailyRate, settingsFromRow, countWorkingDays, prorationFactor, type StructureLine } from '@/lib/payrollCalc'
 
 export async function POST(request: NextRequest) {
   const supabase = await createRouteClient()
@@ -56,9 +56,10 @@ export async function POST(request: NextRequest) {
   // 4. Fetch active employees
   let employeeQuery = supabase
     .from('employees')
-    .select('id, full_name, salary_structure_id')
+    .select('id, full_name, salary_structure_id, joining_date, exit_date')
     .eq('company_id', companyId)
-    .eq('status', 'active')
+    // active employees, plus people who resigned or were terminated during or after this month (their last month is still paid)
+    .or(`status.eq.active,and(status.in.(resigned,terminated),exit_date.gte.${month})`)
   if (department_id) {
     employeeQuery = employeeQuery.eq('department_id', department_id)
   }
@@ -137,7 +138,11 @@ export async function POST(request: NextRequest) {
       structureCache.set(revision.salary_structure_id, structure)
     }
 
-    const calc = computeSalary(structure.lines, structure.basis, Number(revision.basic_salary))
+    // Part-month employees (joined or left during this month) are paid for the days they were employed
+    const factor = prorationFactor(payrollSettings, startDate, endDate, emp.joining_date, emp.exit_date)
+    if (factor <= 0) continue
+    const fullCalc = computeSalary(structure.lines, structure.basis, Number(revision.basic_salary))
+    const calc = factor < 1 ? computeSalary(structure.lines, structure.basis, Number(revision.basic_salary), factor) : fullCalc
     let gross = calc.gross
     let deductions = calc.deductions
     const lineComponents: any[] = calc.lines.map(l => ({
@@ -173,7 +178,7 @@ export async function POST(request: NextRequest) {
     }
 
     // One day's value follows the company settings (days of month / fixed number, gross / basic)
-    const oneDay = dailyRate(payrollSettings, daysInMonth, calc.gross, calc.basic)
+    const oneDay = dailyRate(payrollSettings, daysInMonth, fullCalc.gross, fullCalc.basic)
     const absenceDeduction = Math.round(oneDay * (absentDays + halfDays * 0.5) * 100) / 100
 
     if (absenceDeduction > 0) {
