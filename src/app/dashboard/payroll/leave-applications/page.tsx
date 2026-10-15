@@ -406,8 +406,8 @@ export default function LeaveApplicationsPage() {
         )}
       </div>
 
-      {error && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: 10, borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
-      {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: 10, borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{flash}</div>}
+      {error && <div style={{ background: "var(--card)", color: "var(--text)", border: "1px solid #dc2626", padding: 10, borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{error}</div>}
+      {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "var(--text)", padding: 10, borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{flash}</div>}
 
       {/* KPI Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 20 }}>

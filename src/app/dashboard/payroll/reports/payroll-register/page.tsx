@@ -161,7 +161,7 @@ export default function PayrollRegisterPage() {
         <input type="month" className="input" value={month ? month.slice(0, 7) : ""} onChange={e => setMonth(e.target.value ? e.target.value + "-01" : "")} />
       </div>
 
-      {error && <div style={{ color: "#FCA5A5", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
       {runLines.length > 0 && (
         <div className="card">

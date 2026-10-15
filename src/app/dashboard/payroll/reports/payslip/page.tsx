@@ -171,7 +171,7 @@ export default function PayslipPage() {
         <input type="month" className="input" style={{ width: 200 }} value={month ? month.slice(0, 7) : ""} onChange={e => setMonth(e.target.value ? e.target.value + "-01" : "")} />
       </div>
 
-      {error && <div style={{ color: "#FCA5A5", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
       {payslip && (
         <div className="card payslip">

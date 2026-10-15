@@ -304,8 +304,8 @@ export default function LeaveTypesPage() {
         )}
       </div>
 
-      {error && <div style={{ background: "var(--card)", color: "#FCA5A5", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontSize: 13, border: "1px solid #FECACA" }}>{error}</div>}
-      {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "#6EE7B7", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><Check size={16} /> {flash}</div>}
+      {error && <div style={{ background: "var(--card)", color: "var(--text)", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontSize: 13, border: "1px solid #dc2626" }}>{error}</div>}
+      {flash && <div style={{ background: "var(--card)", border: "1px solid #065F46", color: "var(--text)", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><Check size={16} /> {flash}</div>}
 
       {/* Summary Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 20 }}>
