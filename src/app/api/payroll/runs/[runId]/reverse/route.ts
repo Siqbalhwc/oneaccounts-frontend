@@ -55,7 +55,7 @@ export async function POST(
   // 3. Get the original journal entry lines
   const { data: originalLines } = await supabase
     .from('journal_lines')
-    .select('account_id, debit, credit, project_id, activity_id, location_id, donor_id, employee_id')
+    .select('account_id, debit, credit, project_id, activity_id, location_id, donor_id, employee_id, narration')
     .eq('entry_id', run.journal_entry_id)
 
   if (!originalLines || originalLines.length === 0) {
@@ -99,6 +99,7 @@ export async function POST(
     location_id: line.location_id,
     donor_id: line.donor_id,
     employee_id: line.employee_id,
+    narration: line.narration ? `${line.narration} (reversed)` : 'Payroll reversal',
     source_type: 'payroll_reversal',
     source_id: runId,
   }))
@@ -127,6 +128,22 @@ export async function POST(
     })
     if (rpcErr) {
       console.error('Failed to update balance for account', accountId, rpcErr)
+    }
+  }
+
+  // Give back the loan / advance recoveries this run made, so the loan records agree with the ledger
+  const { data: recovered } = await supabase
+    .from('payroll_run_line_components')
+    .select('amount, source_type, source_id, payroll_run_lines!inner(payroll_run_id)')
+    .eq('payroll_run_lines.payroll_run_id', runId)
+    .in('source_type', ['loan', 'advance'])
+  for (const r of (recovered || []) as any[]) {
+    const table = r.source_type === 'loan' ? 'employee_loans' : 'salary_advances'
+    const { data: rec } = await supabase.from(table).select('balance').eq('id', r.source_id).maybeSingle()
+    if (rec) {
+      await supabase.from(table)
+        .update({ balance: Number(rec.balance) + Number(r.amount), status: 'active' })
+        .eq('id', r.source_id)
     }
   }
 

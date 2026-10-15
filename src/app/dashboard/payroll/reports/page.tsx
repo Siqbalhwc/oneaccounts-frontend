@@ -11,12 +11,13 @@ import {
 const reports = [
   { title: "Payslip",          description: "Individual employee payslip for a month",   icon: FileText,       href: "/dashboard/payroll/reports/payslip" },
   { title: "Payroll Register", description: "All employees' earnings and deductions",    icon: Calculator,     href: "/dashboard/payroll/reports/payroll-register" },
-  { title: "Tax Deduction",    description: "Taxable components report",                  icon: TrendingUp,     href: "/dashboard/payroll/reports/tax-deduction" },
+  { title: "Salary Tax",       description: "Taxable income and tax deducted per employee",                  icon: TrendingUp,     href: "/dashboard/payroll/reports/tax-deduction" },
   { title: "Bank Transfer",    description: "Net pay and bank details for transfers",   icon: CreditCard,     href: "/dashboard/payroll/reports/bank-transfer" },
   { title: "Salary Summary",   description: "Department‑wise payroll summary",           icon: PieChart,       href: "/dashboard/payroll/reports/salary-summary" },
   { title: "Attendance Register", description: "Attendance records for a month",        icon: ClipboardList,  href: "/dashboard/payroll/reports/attendance-register" },
-  { title: "Loan Ledger",      description: "Employee loan deduction history",           icon: DollarSign,     href: "/dashboard/payroll/reports/loan-ledger" },
-  { title: "Advance Ledger",   description: "Employee advance deduction history",        icon: DollarSign,     href: "/dashboard/payroll/reports/advance-ledger" },
+  { title: "Loan Ledger",      description: "Loans issued, recovered and still owed per employee",           icon: DollarSign,     href: "/dashboard/payroll/reports/loan-ledger" },
+  { title: "Employee Overtime", description: "Overtime paid to each employee, by month",   icon: Calculator,     href: "/dashboard/payroll/reports/employee-overtime" },
+  { title: "Advance Ledger",   description: "Advances issued, recovered and still owed per employee",        icon: DollarSign,     href: "/dashboard/payroll/reports/advance-ledger" },
 ]
 
 export default function ReportsPage() {

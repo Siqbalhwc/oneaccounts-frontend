@@ -67,7 +67,7 @@ export default function TaxDeductionPage() {
     // Fetch taxable components
     const { data: lines, error: lineErr } = await supabase
       .from("payroll_run_line_components")
-      .select("amount, payroll_run_lines!inner(employee_id, payroll_run_id, employees!inner(full_name, employee_code)), salary_components!inner(name, is_taxable)")
+      .select("amount, payroll_run_lines!inner(employee_id, payroll_run_id, employees!inner(full_name, employee_code, cnic)), salary_components!inner(name, is_taxable, type)")
       .eq("payroll_run_lines.payroll_run_id", run.id)
       .eq("salary_components.is_taxable", true)
 
@@ -78,7 +78,8 @@ export default function TaxDeductionPage() {
     }
 
     // Group by employee
-    const grouped: Record<number, { name: string; code: string; total: number }> = {}
+    // Taxable income = taxable EARNINGS. Tax deducted = taxable DEDUCTIONS (these are posted to Salary Tax Payable).
+    const grouped: Record<number, { name: string; code: string; cnic: string; income: number; total: number }> = {}
     for (const row of lines || []) {
       // Handle payroll_run_lines as array or single object
       const runLine = Array.isArray(row.payroll_run_lines) ? row.payroll_run_lines[0] : row.payroll_run_lines
@@ -92,9 +93,11 @@ export default function TaxDeductionPage() {
       const employeeCode = emp?.employee_code || "N/A"
 
       if (!grouped[empId]) {
-        grouped[empId] = { name: employeeName, code: employeeCode, total: 0 }
+        grouped[empId] = { name: employeeName, code: employeeCode, cnic: emp?.cnic || "", income: 0, total: 0 }
       }
-      grouped[empId].total += row.amount
+      const comp = Array.isArray(row.salary_components) ? row.salary_components[0] : row.salary_components
+      if (comp?.type === "earning") grouped[empId].income += row.amount
+      else grouped[empId].total += row.amount
     }
 
     setTaxRecords(Object.values(grouped))
@@ -106,6 +109,7 @@ export default function TaxDeductionPage() {
   }, [month, companyId])
 
   const totalTax = taxRecords.reduce((sum, r) => sum + r.total, 0)
+  const totalIncome = taxRecords.reduce((sum, r) => sum + r.income, 0)
 
   const downloadPDF = () => {
     if (taxRecords.length === 0) return
@@ -113,19 +117,19 @@ export default function TaxDeductionPage() {
     doc.setFontSize(16)
     doc.text(company?.name || "Company", 14, 20)
     doc.setFontSize(12)
-    doc.text("Tax Deduction Report", 14, 30)
+    doc.text("Salary Tax Report", 14, 30)
     doc.setFontSize(10)
     doc.text(`Month: ${new Date(month + "T00:00:00").toLocaleDateString("en-PK", { month: "long", year: "numeric" })}`, 14, 38)
 
-    const rows = taxRecords.map((r) => [r.code, r.name, r.total.toLocaleString()])
+    const rows = taxRecords.map((r) => [r.code, r.name, r.cnic || "", r.income.toLocaleString(), r.total.toLocaleString()])
     ;(doc as any).autoTable({
       startY: 45,
-      head: [["Code", "Employee", "Tax Deduction"]],
+      head: [["Code", "Employee", "CNIC", "Taxable Income", "Tax Deducted"]],
       body: rows,
     })
 
     const finalY = (doc as any).lastAutoTable.finalY + 10
-    doc.text(`Total Tax Deductions: PKR ${totalTax.toLocaleString()}`, 14, finalY)
+    doc.text(`Total taxable income: PKR ${totalIncome.toLocaleString()}   Total tax deducted: PKR ${totalTax.toLocaleString()}`, 14, finalY)
     doc.save(`Tax_Deduction_${month}.pdf`)
   }
 
@@ -154,11 +158,12 @@ export default function TaxDeductionPage() {
         .table th, .table td { padding: 10px 14px; border-bottom: 1px solid var(--border); text-align: left; font-size: 13px; }
         .table th { background: var(--card-hover); font-weight: 700; font-size: 11px; text-transform: uppercase; color: var(--text-muted); }
         .totals { margin-top: 16px; font-weight: 700; }
+        .card { overflow-x: auto; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <button className="oa-btn" onClick={() => router.push("/dashboard/payroll/reports")}><ArrowLeft size={16} /></button>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🧾 Tax Deduction Report</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>🧾 Salary Tax Report</h1>
       </div>
 
       <div className="card">
@@ -174,7 +179,9 @@ export default function TaxDeductionPage() {
               <tr>
                 <th>Code</th>
                 <th>Employee</th>
-                <th>Tax Deduction</th>
+                <th>CNIC</th>
+                <th>Taxable Income</th>
+                <th>Tax Deducted</th>
               </tr>
             </thead>
             <tbody>
@@ -182,12 +189,14 @@ export default function TaxDeductionPage() {
                 <tr key={idx}>
                   <td>{r.code}</td>
                   <td>{r.name}</td>
+                  <td>{r.cnic || "-"}</td>
+                  <td>PKR {r.income.toLocaleString()}</td>
                   <td>PKR {r.total.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <div className="totals">Total Tax Deductions: PKR {totalTax.toLocaleString()}</div>
+          <div className="totals">Total taxable income: PKR {totalIncome.toLocaleString()} &nbsp;|&nbsp; Total tax deducted: PKR {totalTax.toLocaleString()}</div>
           <button className="oa-btn oa-btn-outline" style={{ marginTop: 16 }} onClick={downloadPDF}><Download size={14} /> PDF</button>
         </div>
       )}
