@@ -71,9 +71,9 @@ export default function PayrollHomePage() {
 
   const next = steps.find(s => s.done === false)
   const monthly = [
-    { title: "Attendance", href: "/dashboard/payroll/attendance", why: "Mark who was present, absent or on leave." },
+    { title: "Leave Applications", href: "/dashboard/payroll/leave-applications", why: "First enter and approve the month's leave requests." },
+    { title: "Attendance", href: "/dashboard/payroll/attendance", why: "Then mark who was present, absent or on leave." },
     { title: "Attendance Verification", href: "/dashboard/payroll/attendance/verify", why: "Approve the attendance. Payroll only counts approved days." },
-    { title: "Leave Applications", href: "/dashboard/payroll/leave-applications", why: "Approve or reject leave requests." },
     { title: "Payroll Runs", href: "/dashboard/payroll/runs", why: "Generate the month's payroll, approve it and post it." },
     { title: "Reports", href: "/dashboard/payroll/reports", why: "Payslips, register, bank transfer sheet and more." },
   ]

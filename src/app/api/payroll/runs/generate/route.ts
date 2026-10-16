@@ -199,8 +199,8 @@ export async function POST(request: NextRequest) {
       .eq('company_id', companyId)
       .eq('employee_id', emp.id)
       .eq('verified_status', 'approved')
-      .gte('date', startDate)
-      .lte('date', endDate)
+      .gte('date', emp.joining_date && emp.joining_date > startDate ? emp.joining_date : startDate)
+      .lte('date', emp.exit_date && emp.exit_date < endDate ? emp.exit_date : endDate)
 
     if (attRecords) {
       for (const rec of attRecords) {

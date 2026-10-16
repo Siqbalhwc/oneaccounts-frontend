@@ -71,7 +71,7 @@ export default function UnifiedAttendancePage() {
         // Fetch employees WITHOUT joining departments
         supabase
           .from("employees")
-          .select("id, employee_code, full_name, department_id, exit_date")
+          .select("id, employee_code, full_name, department_id, joining_date, exit_date")
           .eq("company_id", cid)
           .in("status", ["active", "resigned", "terminated"])
           .order("full_name")
@@ -152,6 +152,10 @@ export default function UnifiedAttendancePage() {
     })
     setDirty(true)
   }
+
+  // A day before the joining date or after the exit date is not an attendance day for that employee
+  const isOutsideEmployment = (emp: any, dateStr: string) =>
+    !!((emp.joining_date && dateStr < emp.joining_date) || (emp.exit_date && dateStr > emp.exit_date))
 
   const cycleStatus = (empId: number, dateStr: string, currentStatus: string) => {
     const idx = STATUS_ORDER.indexOf(currentStatus)
@@ -413,6 +417,13 @@ export default function UnifiedAttendancePage() {
                     const date = new Date(year, month, day)
                     const isWeekend = date.getDay() === 0 || date.getDay() === 6
                     const isToday = date.toDateString() === new Date().toDateString()
+                    if (isOutsideEmployment(emp, dateStr)) {
+                      return (
+                        <div key={day} className="calendar-cell" title="Not employed on this day" style={{ width: 40, height: 48, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", background: "var(--card-hover)", opacity: 0.6 }}>
+                          -
+                        </div>
+                      )
+                    }
                     return (
                       <div key={day} className={`calendar-cell ${isWeekend ? "weekend" : ""} ${isToday ? "today" : ""}`} style={{ width: 40, height: 48, display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <div
@@ -451,6 +462,7 @@ export default function UnifiedAttendancePage() {
                 Array.from({ length: daysInMonth }, (_, i) => {
                   const day = i + 1
                   const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+                  if (isOutsideEmployment(emp, dateStr)) return null
                   const cell = getCell(emp.id, dateStr)
                   const { bg, text, label } = STATUS_PILLS[cell.raw_status] || STATUS_PILLS.present
                   return (

@@ -55,9 +55,9 @@ const baseNavSections: NavSection[] = [
       { label: 'Salary Advances',     icon: '\u{1F4B8}', href: '/dashboard/payroll/advances' },
     ]},
     { groupLabel: 'EVERY MONTH', items: [
+      { label: 'Leave Applications',      icon: '\u{1F4DD}', href: '/dashboard/payroll/leave-applications' },
       { label: 'Attendance',              icon: '\u{1F4CB}', href: '/dashboard/payroll/attendance' },
       { label: 'Attendance Verification', icon: '\u2714',    href: '/dashboard/payroll/attendance/verify' },
-      { label: 'Leave Applications',      icon: '\u{1F4DD}', href: '/dashboard/payroll/leave-applications' },
       { label: 'Payroll Runs',            icon: '\u{1F4C5}', href: '/dashboard/payroll/runs' },
     ]},
     { groupLabel: 'REPORTS', items: [
