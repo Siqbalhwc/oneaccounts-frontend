@@ -87,73 +87,106 @@ export async function POST(request: NextRequest) {
   const structureCache = new Map<number, { basis: 'gross' | 'basic'; lines: StructureLine[] }>()
 
   for (const emp of employees) {
-    // Salary revision
-    let { data: revision } = await supabase
+    // Salary revisions: every revision effective up to the end of this month, oldest first
+    const { data: revRows } = await supabase
       .from('employee_salary_revisions')
-      .select('id, salary_structure_id, basic_salary')
+      .select('id, salary_structure_id, basic_salary, effective_date')
       .eq('employee_id', emp.id)
-      .lte('effective_date', month)
-      .order('effective_date', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (!revision) {
-      revision = {
-        id: 0,
-        salary_structure_id: emp.salary_structure_id,
-        basic_salary: 0,
-      }
-    }
-
-    if (!revision.salary_structure_id) continue
-
-    // Structure: how the salary figure is split into earnings and deductions
-    let structure = structureCache.get(revision.salary_structure_id)
-    if (!structure) {
-      const { data: st } = await supabase
-        .from('salary_structures')
-        .select('salary_basis')
-        .eq('id', revision.salary_structure_id)
-        .eq('company_id', companyId)
+      .lte('effective_date', endDate)
+      .order('effective_date', { ascending: true })
+    let revs: any[] = revRows || []
+    if (revs.length === 0) {
+      // The only revision(s) start after this month: the earliest one is the opening salary
+      const { data: firstRev } = await supabase
+        .from('employee_salary_revisions')
+        .select('id, salary_structure_id, basic_salary, effective_date')
+        .eq('employee_id', emp.id)
+        .order('effective_date', { ascending: true })
+        .limit(1)
         .maybeSingle()
-      const { data: comps, error: compsErr } = await supabase
-        .from('salary_structure_components')
-        .select('calculation_type, value, salary_component_id, salary_components!inner(id, name, type, gl_account_id, is_basic)')
-        .eq('salary_structure_id', revision.salary_structure_id)
-      if (compsErr) {
-        return NextResponse.json({ error: 'Could not read salary structure: ' + compsErr.message }, { status: 500 })
-      }
-      structure = {
-        basis: st?.salary_basis === 'gross' ? 'gross' : 'basic',
-        lines: (comps || []).map((c: any) => ({
-          key: c.salary_component_id,
-          name: c.salary_components?.name || 'Unknown',
-          type: c.salary_components?.type === 'earning' ? 'earning' : 'deduction',
-          isBasic: !!c.salary_components?.is_basic,
-          calcType: c.calculation_type,
-          value: Number(c.value || 0),
-          glAccountId: c.salary_components?.gl_account_id ?? null,
-        })) as StructureLine[],
-      }
-      structureCache.set(revision.salary_structure_id, structure)
+      if (firstRev) revs = [firstRev]
+      else if (emp.salary_structure_id) revs = [{ id: 0, salary_structure_id: emp.salary_structure_id, basic_salary: 0, effective_date: startDate }]
     }
+    if (revs.length === 0) continue
 
-    // Part-month employees (joined or left during this month) are paid for the days they were employed
-    const factor = prorationFactor(payrollSettings, startDate, endDate, emp.joining_date, emp.exit_date)
-    if (factor <= 0) continue
-    const fullCalc = computeSalary(structure.lines, structure.basis, Number(revision.basic_salary))
-    const calc = factor < 1 ? computeSalary(structure.lines, structure.basis, Number(revision.basic_salary), factor) : fullCalc
-    let gross = calc.gross
-    let deductions = calc.deductions
-    const lineComponents: any[] = calc.lines.map(l => ({
-      salary_component_id: l.key,
-      component_name: l.name,
-      amount: l.amount,
-      type: l.type,
-      gl_account_id: l.glAccountId ?? null,
-      source_type: null,
-      source_id: null,
-    }))
+    // Split the month at each revision date: the new salary applies from its effective date
+    const dayBefore = (d: string) => {
+      const t = new Date(d + 'T00:00:00Z')
+      t.setUTCDate(t.getUTCDate() - 1)
+      return t.toISOString().slice(0, 10)
+    }
+    let revision: any = null
+    let fullCalc: any = null
+    let gross = 0
+    let deductions = 0
+    const lineComponents: any[] = []
+    for (let i = 0; i < revs.length; i++) {
+      const rev = revs[i]
+      if (!rev.salary_structure_id) continue
+      const segStart = i === 0 || rev.effective_date <= startDate ? startDate : rev.effective_date
+      const segEnd = i < revs.length - 1 ? dayBefore(revs[i + 1].effective_date) : endDate
+      if (segStart > segEnd || segEnd < startDate) continue
+
+      // Structure: how the salary figure is split into earnings and deductions
+      let structure = structureCache.get(rev.salary_structure_id)
+      if (!structure) {
+        const { data: st } = await supabase
+          .from('salary_structures')
+          .select('salary_basis')
+          .eq('id', rev.salary_structure_id)
+          .eq('company_id', companyId)
+          .maybeSingle()
+        const { data: comps, error: compsErr } = await supabase
+          .from('salary_structure_components')
+          .select('calculation_type, value, salary_component_id, salary_components!inner(id, name, type, gl_account_id, is_basic)')
+          .eq('salary_structure_id', rev.salary_structure_id)
+        if (compsErr) {
+          return NextResponse.json({ error: 'Could not read salary structure: ' + compsErr.message }, { status: 500 })
+        }
+        structure = {
+          basis: st?.salary_basis === 'gross' ? 'gross' : 'basic',
+          lines: (comps || []).map((c: any) => ({
+            key: c.salary_component_id,
+            name: c.salary_components?.name || 'Unknown',
+            type: c.salary_components?.type === 'earning' ? 'earning' : 'deduction',
+            isBasic: !!c.salary_components?.is_basic,
+            calcType: c.calculation_type,
+            value: Number(c.value || 0),
+            glAccountId: c.salary_components?.gl_account_id ?? null,
+          })) as StructureLine[],
+        }
+        structureCache.set(rev.salary_structure_id, structure)
+      }
+
+      // Share of the month this salary applies to (also covers joining / leaving part-way)
+      const segJoin = emp.joining_date && emp.joining_date > segStart ? emp.joining_date : segStart
+      const segExit = emp.exit_date && emp.exit_date < segEnd ? emp.exit_date : segEnd
+      const factor = prorationFactor(payrollSettings, startDate, endDate, segJoin, segExit)
+      if (factor <= 0) continue
+      const segFull = computeSalary(structure.lines, structure.basis, Number(rev.basic_salary))
+      const calc = computeSalary(structure.lines, structure.basis, Number(rev.basic_salary), factor)
+      revision = rev
+      fullCalc = segFull
+      gross += calc.gross
+      deductions += calc.deductions
+      for (const l of calc.lines) {
+        const existing = lineComponents.find(x => x.salary_component_id === l.key && x.type === l.type)
+        if (existing) {
+          existing.amount = Math.round((existing.amount + l.amount) * 100) / 100
+        } else {
+          lineComponents.push({
+            salary_component_id: l.key,
+            component_name: l.name,
+            amount: l.amount,
+            type: l.type,
+            gl_account_id: l.glAccountId ?? null,
+            source_type: null,
+            source_id: null,
+          })
+        }
+      }
+    }
+    if (!revision || !fullCalc) continue
 
     // ----- Attendance Integration -----
     let absentDays = 0

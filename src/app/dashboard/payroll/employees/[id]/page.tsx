@@ -323,12 +323,12 @@ export default function EmployeeProfilePage() {
                 </tr>
               </thead>
               <tbody>
-                {revisions.map((r: any) => (
+                {revisions.map((r: any, idx: number) => (
                   <tr key={r.id}>
                     <td>{r.effective_date}</td>
                     <td style={{ fontWeight: 600 }}>{Number(r.basic_salary).toLocaleString()}</td>
                     <td>{r.salary_structures?.name || "-"}</td>
-                    <td>{r.reason || "-"}</td>
+                    <td>{idx === revisions.length - 1 ? "Opening salary" + (r.reason && r.reason !== "Initial salary" ? " - " + r.reason : "") : (r.reason || "-")}</td>
                   </tr>
                 ))}
               </tbody>

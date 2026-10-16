@@ -67,7 +67,7 @@ export default function SalarySummaryPage() {
     // Fetch run lines with employee departments
     const { data: lines } = await supabase
       .from("payroll_run_lines")
-      .select("gross_amount, total_deductions, net_amount, employees!inner(department_id, departments(name))")
+      .select("gross_amount, total_deductions, net_amount, employees!inner(department_id)")
       .eq("payroll_run_id", run.id)
 
     if (!lines || lines.length === 0) {
@@ -78,11 +78,11 @@ export default function SalarySummaryPage() {
 
     // Group by department
     const groups: Record<string, { dept: string; gross: number; deductions: number; net: number; count: number }> = {}
+    const { data: deptRows } = await supabase.from("departments").select("id, name").eq("company_id", companyId)
+    const deptMap = new Map((deptRows || []).map((d: any) => [d.id, d.name]))
     for (const line of lines) {
       const emp = Array.isArray(line.employees) ? line.employees[0] : line.employees
-      // departments could also be an array
-      const dept = Array.isArray(emp?.departments) ? emp.departments[0] : emp?.departments
-      const deptName = dept?.name || "Unassigned"
+      const deptName = (emp?.department_id != null ? deptMap.get(emp.department_id) : null) || "Unassigned"
       if (!groups[deptName]) {
         groups[deptName] = { dept: deptName, gross: 0, deductions: 0, net: 0, count: 0 }
       }

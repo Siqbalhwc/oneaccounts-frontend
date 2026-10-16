@@ -73,6 +73,7 @@ export default function LeaveApplicationsPage() {
   // Error / flash
   const [error, setError] = useState("")
   const [flash, setFlash] = useState("")
+  const [listError, setListError] = useState("")
 
   // Fetch initial data
   useEffect(() => {
@@ -82,6 +83,7 @@ export default function LeaveApplicationsPage() {
         setCompanyId(cid)
 
         // 1. Fetch departments
+        let deptRowsLocal: any[] = []
         supabase
           .from("departments")
           .select("id, name")
@@ -89,6 +91,7 @@ export default function LeaveApplicationsPage() {
           .order("name")
           .then(({ data: depts }) => {
             const deptList = depts || []
+            deptRowsLocal = deptList
             setDepartments(deptList)
 
             // 2. Fetch employees without join, then enrich locally
@@ -101,10 +104,9 @@ export default function LeaveApplicationsPage() {
           })
           .then(({ data: emps }) => {
             if (emps) {
-              const deptList = departments // departments state may still be updating, but we'll use the freshly set one
               const enriched = emps.map((emp: any) => ({
                 ...emp,
-                departments: deptList.find(d => d.id === emp.department_id) || null,
+                departments: deptRowsLocal.find((d: any) => d.id === emp.department_id) || null,
               }))
               setEmployees(enriched)
             } else {
@@ -129,7 +131,7 @@ export default function LeaveApplicationsPage() {
     setLoading(true)
     let query = supabase
       .from("leave_applications")
-      .select("*, employees!inner(full_name, employee_code, department_id, departments(name)), leave_types!inner(name)")
+      .select("*, employees!inner(full_name, employee_code, department_id), leave_types!inner(name)")
       .order("created_at", { ascending: false })
 
     if (statusFilter !== "all") query = query.eq("status", statusFilter)
@@ -137,8 +139,14 @@ export default function LeaveApplicationsPage() {
     if (dateFrom) query = query.gte("from_date", dateFrom)
     if (dateTo) query = query.lte("to_date", dateTo)
 
-    query.then(({ data }) => {
-      let filtered = data || []
+    query.then(async ({ data, error: qErr }) => {
+      setListError(qErr ? "Could not load leave applications: " + qErr.message : "")
+      const { data: deptRows } = await supabase.from("departments").select("id, name").eq("company_id", companyId)
+      const deptMap = new Map((deptRows || []).map((d: any) => [d.id, d]))
+      let filtered = (data || []).map((row: any) => ({
+        ...row,
+        employees: row.employees ? { ...row.employees, departments: deptMap.get(row.employees.department_id) || null } : row.employees,
+      }))
       if (search.trim()) {
         const q = search.toLowerCase()
         filtered = filtered.filter((app: any) => {
@@ -478,6 +486,9 @@ export default function LeaveApplicationsPage() {
             </tr>
           </thead>
           <tbody>
+            {listError && (
+              <tr><td colSpan={20} style={{ padding: 16, color: "var(--danger)", background: "var(--card-hover)", fontSize: 13 }}>{listError}</td></tr>
+            )}
             {loading ? (
               <tr><td colSpan={7} style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading…</td></tr>
             ) : paginated.length === 0 ? (

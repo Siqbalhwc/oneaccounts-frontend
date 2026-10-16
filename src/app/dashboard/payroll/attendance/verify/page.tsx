@@ -36,6 +36,7 @@ export default function AttendanceApprovalPage() {
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState("")
+  const [listError, setListError] = useState("")
 
   // Filters
   const [search, setSearch] = useState("")
@@ -71,7 +72,7 @@ export default function AttendanceApprovalPage() {
     setLoading(true)
     let query = supabase
       .from("attendance_records")
-      .select("id, employee_id, date, raw_status, check_in, check_out, source, verified_status, verified_by, verified_at, employees!inner(full_name, employee_code, department_id), departments(name)")
+      .select("id, employee_id, date, raw_status, check_in, check_out, source, verified_status, verified_by, verified_at, employees!inner(full_name, employee_code, department_id)")
       .eq("company_id", companyId)
       .order("date", { ascending: false })
 
@@ -84,8 +85,11 @@ export default function AttendanceApprovalPage() {
     if (dateFrom) query = query.gte("date", dateFrom)
     if (dateTo) query = query.lte("date", dateTo)
 
-    query.then(({ data }) => {
-      let filtered = data || []
+    query.then(async ({ data, error: qErr }) => {
+      setListError(qErr ? "Could not load attendance records: " + qErr.message : "")
+      const { data: deptRows } = await supabase.from("departments").select("id, name").eq("company_id", companyId)
+      const deptMap = new Map((deptRows || []).map((d: any) => [d.id, d]))
+      let filtered = (data || []).map((r: any) => ({ ...r, departments: deptMap.get(r.employees?.department_id) || null }))
       if (search.trim()) {
         const q = search.toLowerCase()
         filtered = filtered.filter((r: any) =>
@@ -349,6 +353,9 @@ export default function AttendanceApprovalPage() {
             </tr>
           </thead>
           <tbody>
+            {listError && (
+              <tr><td colSpan={20} style={{ padding: 16, color: "var(--danger)", background: "var(--card-hover)", fontSize: 13 }}>{listError}</td></tr>
+            )}
             {loading ? (
               <tr><td colSpan={10} style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading…</td></tr>
             ) : records.length === 0 ? (

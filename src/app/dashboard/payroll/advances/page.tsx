@@ -47,6 +47,7 @@ export default function SalaryAdvancesPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState("")
+  const [listError, setListError] = useState("")
 
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null)
 
@@ -68,11 +69,16 @@ export default function SalaryAdvancesPage() {
         // Fetch employees without join
         supabase
           .from("employees")
-          .select("id, employee_code, full_name, department_id, departments(name)")
+          .select("id, employee_code, full_name, department_id")
           .eq("company_id", cid)
           .eq("status", "active")
           .order("full_name")
-          .then(({ data }) => setEmployees(data || []))
+          .then(async ({ data, error: empErr }) => {
+            if (empErr) { setListError("Could not load employees: " + empErr.message); return }
+            const { data: deptRows } = await supabase.from("departments").select("id, name").eq("company_id", cid)
+            const deptMap = new Map((deptRows || []).map((d: any) => [d.id, d]))
+            setEmployees((data || []).map((e: any) => ({ ...e, departments: deptMap.get(e.department_id) || null })))
+          })
       }
     })
   }, [])
@@ -82,11 +88,17 @@ export default function SalaryAdvancesPage() {
     setLoading(true)
     let query = supabase
       .from("salary_advances")
-      .select("*, employees!inner(full_name, employee_code, department_id, departments(name))")
+      .select("*, employees!inner(full_name, employee_code, department_id)")
       .order("created_at", { ascending: false })
     if (statusFilter !== "all") query = query.eq("status", statusFilter)
-    query.then(({ data }) => {
-      let filtered = data || []
+    query.then(async ({ data, error: qErr }) => {
+      setListError(qErr ? "Could not load the list: " + qErr.message : "")
+      const { data: deptRows } = await supabase.from("departments").select("id, name").eq("company_id", companyId)
+      const deptMap = new Map((deptRows || []).map((d: any) => [d.id, d]))
+      let filtered = (data || []).map((row: any) => ({
+        ...row,
+        employees: row.employees ? { ...row.employees, departments: deptMap.get(row.employees.department_id) || null } : row.employees,
+      }))
       if (search.trim()) {
         const q = search.toLowerCase()
         filtered = filtered.filter((adv: any) => {
@@ -333,6 +345,9 @@ export default function SalaryAdvancesPage() {
             </tr>
           </thead>
           <tbody>
+            {listError && (
+              <tr><td colSpan={9} style={{ padding: 16, color: "var(--danger)", background: "var(--card-hover)", fontSize: 13 }}>{listError}</td></tr>
+            )}
             {loading ? (
               <tr><td colSpan={9} style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading…</td></tr>
             ) : advances.length === 0 ? (

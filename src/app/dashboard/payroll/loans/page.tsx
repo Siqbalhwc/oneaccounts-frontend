@@ -53,6 +53,7 @@ export default function EmployeeLoansPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [flash, setFlash] = useState("")
+  const [listError, setListError] = useState("")
 
   // Menu state
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null)
@@ -75,6 +76,7 @@ export default function EmployeeLoansPage() {
           .then(({ data }) => setPayAccounts(data || []))
 
         // Fetch departments and employees (without join, then merge)
+        let deptRowsLocal: any[] = []
         supabase
           .from("departments")
           .select("id, name")
@@ -82,6 +84,7 @@ export default function EmployeeLoansPage() {
           .order("name")
           .then(({ data: depts }) => {
             const deptList = depts || []
+            deptRowsLocal = deptList
             setDepartments(deptList)
 
             return supabase
@@ -95,7 +98,7 @@ export default function EmployeeLoansPage() {
             if (emps) {
               const enriched = emps.map((emp: any) => ({
                 ...emp,
-                departments: departments.find(d => d.id === emp.department_id) || null,
+                departments: deptRowsLocal.find((d: any) => d.id === emp.department_id) || null,
               }))
               setEmployees(enriched)
             } else {
@@ -112,13 +115,19 @@ export default function EmployeeLoansPage() {
 
     let query = supabase
       .from("employee_loans")
-      .select("*, employees!inner(full_name, employee_code, department_id, departments(name))")
+      .select("*, employees!inner(full_name, employee_code, department_id)")
       .order("created_at", { ascending: false })
 
     if (statusFilter !== "all") query = query.eq("status", statusFilter)
 
-    query.then(({ data }) => {
-      let filtered = data || []
+    query.then(async ({ data, error: qErr }) => {
+      setListError(qErr ? "Could not load the list: " + qErr.message : "")
+      const { data: deptRows } = await supabase.from("departments").select("id, name").eq("company_id", companyId)
+      const deptMap = new Map((deptRows || []).map((d: any) => [d.id, d]))
+      let filtered = (data || []).map((row: any) => ({
+        ...row,
+        employees: row.employees ? { ...row.employees, departments: deptMap.get(row.employees.department_id) || null } : row.employees,
+      }))
       if (search.trim()) {
         const q = search.toLowerCase()
         filtered = filtered.filter((loan: any) => {
@@ -375,6 +384,9 @@ export default function EmployeeLoansPage() {
             </tr>
           </thead>
           <tbody>
+            {listError && (
+              <tr><td colSpan={9} style={{ padding: 16, color: "var(--danger)", background: "var(--card-hover)", fontSize: 13 }}>{listError}</td></tr>
+            )}
             {loading ? (
               <tr><td colSpan={9} style={{ padding: 40, textAlign: "center", color: "var(--text-muted)" }}>Loading…</td></tr>
             ) : loans.length === 0 ? (
