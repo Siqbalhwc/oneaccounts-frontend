@@ -11,9 +11,13 @@ async function getAccount(supabase: any, code: string, companyId: string) {
 }
 
 // ── Generate sequential payment number ───────────────
-async function generatePaymentNo(supabase: any, companyId: string): Promise<string> {
+async function generatePaymentNo(supabase: any, companyId: string, docDate?: string): Promise<string> {
+  // Number follows the month of the SELECTED payment date (not today's month)
+  const m = /^(\d{4})-(\d{2})-\d{2}/.exec(docDate || '')
   const now = new Date()
-  const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`
+  const ym = m
+    ? `${m[1]}${m[2]}`
+    : `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`
   const prefix = `PAY/${ym}/`
   const { data } = await supabase
     .from('payments')
@@ -174,7 +178,7 @@ export async function POST(request: NextRequest) {
     let payment: any = null
 
     for (let attempt = 0; attempt < 3; attempt++) {
-      payNo = await generatePaymentNo(supabase, companyId)
+      payNo = await generatePaymentNo(supabase, companyId, date)
       const result = await supabase.from("payments").insert({
         company_id: companyId,
         payment_no: payNo,
