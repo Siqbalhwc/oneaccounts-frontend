@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation"
 import { createBrowserClient } from "@supabase/ssr"
 import { loadYearBudgetRows } from "@/lib/budgetPeriod"
 import * as XLSX from "xlsx"
-import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
+import { generateBudgetSummaryPDF } from "@/lib/pdf/budgetSummaryPDF"
+import { fetchCompanyContact } from "@/lib/pdf/reportCommon"
+import { useCompany } from "@/contexts/CompanyContext"
 import { Download } from "lucide-react"
 
 export default function BudgetSummaryPage() {
   const router = useRouter()
+  const { companyName, companyTagline, logoUrl } = useCompany()
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -113,20 +115,16 @@ export default function BudgetSummaryPage() {
     XLSX.writeFile(wb, `budget_summary_${fiscalYear}.xlsx`)
   }
 
-  const exportPDF = () => {
-    const doc = new jsPDF()
-    doc.setFontSize(16)
-    doc.text("Budget Summary", 14, 20)
-    doc.setFontSize(10)
-    doc.text(`Fiscal Year: ${fiscalYear}`, 14, 28)
-    const body = rows.map(r => [
-      r.project, r.donor, r.activity, r.location,
-      r.account_code, r.account_name, r.amount?.toLocaleString()
-    ])
-    autoTable(doc, {
-      head: [["Project","Donor","Activity","Location","Code","Account","Budget"]],
-      body,
-      startY: 35,
+  const exportPDF = async () => {
+    const contact = await fetchCompanyContact(supabase, companyId)
+    const doc = await generateBudgetSummaryPDF({
+      companyName: companyName || "OneAccounts",
+      companyTagline: companyTagline || "",
+      logoUrl: logoUrl || null,
+      ...contact,
+      fiscalYear,
+      projectName: projects.find(p => String(p.id) === String(selectedProjectId))?.name || "",
+      rows,
     })
     doc.save(`budget_summary_${fiscalYear}.pdf`)
   }

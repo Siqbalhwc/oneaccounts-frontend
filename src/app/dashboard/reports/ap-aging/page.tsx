@@ -4,8 +4,8 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Download, Search, X, Check, ChevronRight, AlertTriangle } from "lucide-react"
 import { useRouter } from "next/navigation"
-import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
+import { generateAgingPDF } from "@/lib/pdf/agingPDF"
+import { fetchCompanyContact } from "@/lib/pdf/reportCommon"
 import { useCompany } from "@/contexts/CompanyContext"
 import { fmtMoney } from "@/lib/money"
 
@@ -112,7 +112,7 @@ function Cell({ value, muted, danger }: { value: number; muted?: boolean; danger
 // ── Main Page ──
 export default function APAgingPage() {
   const router = useRouter()
-  const { companyId } = useCompany()
+  const { companyId, companyName, companyTagline, logoUrl } = useCompany()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
   const [groups, setGroups] = useState<SupplierGroup[]>([])
@@ -288,97 +288,34 @@ export default function APAgingPage() {
     s.name.toLowerCase().includes(supplierSearch.toLowerCase())
   )
 
-  // PDF export
+  // PDF export (shared aging generator - same layout as General Ledger)
   const exportPDF = async () => {
     if (groups.length === 0) return alert("No data to export")
-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
-    const PW = 297, ML = 14, MR = 14, LOGO_SIZE = 20, LOGO_X = ML, LOGO_Y = 7
-    const { logoUrl, companyName, companyTagline } = useCompany()
-    if (logoUrl) {
-      try {
-        const r = await fetch(logoUrl)
-        if (r.ok) {
-          const b = await r.blob()
-          const reader = new FileReader()
-          const dataUrl = await new Promise<string>((res) => { reader.onload = () => res(reader.result as string); reader.onerror = () => res(""); reader.readAsDataURL(b) })
-          if (dataUrl) doc.addImage(dataUrl, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
-        }
-      } catch {}
-    }
-    const textX = logoUrl ? LOGO_X + LOGO_SIZE + 5 : ML
-    doc.setTextColor(7,8,91).setFont("helvetica","bold").setFontSize(14)
-    doc.text(companyName||"", textX, LOGO_Y+7)
-    doc.setFont("helvetica","normal").setFontSize(8.5).setTextColor(107,114,128)
-    doc.text(companyTagline||"", textX, LOGO_Y+13)
-    doc.setFont("helvetica","bold").setFontSize(24).setTextColor(7,8,91)
-    doc.text("AP AGING REPORT", PW-MR, LOGO_Y+8, {align:"right"})
-    const supplierFilter = selectedSupplierIds.length===1 ? suppliers.find(s=>s.id===selectedSupplierIds[0])?.name||"Selected Supplier" : "All Suppliers"
-    doc.setFont("helvetica","normal").setFontSize(8.5).setTextColor(107,114,128)
-    doc.text(`Supplier: ${supplierFilter}`, PW-MR, LOGO_Y+16, {align:"right"})
-    doc.text(`As of: ${asOfDate}`, PW-MR, LOGO_Y+21, {align:"right"})
-    const HEADER_BOTTOM = LOGO_Y+LOGO_SIZE+5
-    doc.setDrawColor(7,8,91).setLineWidth(0.6).line(ML, HEADER_BOTTOM, PW-MR, HEADER_BOTTOM)
-    let Y = HEADER_BOTTOM+6
-    const headers = ["Supplier","Invoice #","Inv Date","Current","1-30","31-60","61-90",">90","Total"]
-    const body: any[] = []
-    groups.forEach(g=>{
-      body.push([{content:g.supplierName,styles:{fontStyle:"bold",fillColor:[245,247,250]}},"","","","","","","",""])
-      g.invoices.forEach(inv=>{
-        body.push(["",inv.invoiceNo,inv.invoiceDate,inv.current>0?fmt(inv.current):"",inv.days1to30>0?fmt(inv.days1to30):"",inv.days31to60>0?fmt(inv.days31to60):"",inv.days61to90>0?fmt(inv.days61to90):"",inv.over90>0?fmt(inv.over90):"",inv.total>0?fmt(inv.total):""])
-      })
-      body.push([{content:"Subtotal",styles:{fontStyle:"bold",fillColor:[240,242,245]}},"","",g.current>0?fmt(g.current):"",g.days1to30>0?fmt(g.days1to30):"",g.days31to60>0?fmt(g.days31to60):"",g.days61to90>0?fmt(g.days61to90):"",g.over90>0?fmt(g.over90):"",g.total>0?fmt(g.total):""])
+    const contact = await fetchCompanyContact(supabase, companyId)
+    const filterLabel =
+      selectedSupplierIds.length === 0 ? "All Suppliers"
+      : selectedSupplierIds.length === 1 ? (suppliers.find((s) => s.id === selectedSupplierIds[0])?.name || "Selected Supplier")
+      : `${selectedSupplierIds.length} Suppliers`
+    const doc = await generateAgingPDF({
+      kind: "AP",
+      companyName: companyName || "OneAccounts",
+      companyTagline: companyTagline || "",
+      logoUrl: logoUrl || null,
+      ...contact,
+      asOfDate,
+      filterLabel,
+      groups: groups.map((g) => ({
+        name: g.supplierName,
+        current: g.current, days1to30: g.days1to30, days31to60: g.days31to60,
+        days61to90: g.days61to90, over90: g.over90, total: g.total,
+        rows: g.invoices.map((inv) => ({
+          docNo: inv.invoiceNo, docDate: inv.invoiceDate,
+          current: inv.current, days1to30: inv.days1to30, days31to60: inv.days31to60,
+          days61to90: inv.days61to90, over90: inv.over90, total: inv.total,
+        })),
+      })),
+      totals,
     })
-
-    autoTable(doc, {
-      startY: Y,
-      margin: { left: ML, right: MR },
-      tableWidth: 'auto',
-      head: [headers],
-      body,
-      styles: {
-        fontSize: 7.5,
-        cellPadding: { top: 2, bottom: 2, left: 2, right: 2 },
-        textColor: [17, 24, 39],
-        lineColor: [229, 231, 235],
-        lineWidth: 0.2,
-        overflow: 'linebreak',
-      },
-      headStyles: {
-        fillColor: [7, 8, 91],
-        textColor: [255, 255, 255],
-        fontStyle: "bold",
-        fontSize: 8,
-      },
-      alternateRowStyles: { fillColor: [248, 249, 252] },
-      columnStyles: {
-        0: { halign: 'left' },
-        1: { halign: 'left' },
-        2: { halign: 'left' },
-        3: { halign: 'right' },
-        4: { halign: 'right' },
-        5: { halign: 'right' },
-        6: { halign: 'right' },
-        7: { halign: 'right' },
-        8: { halign: 'right' },
-      },
-      didParseCell: (hookData: any) => {
-        if (hookData.section === 'head' && hookData.column.index >= 3) {
-          hookData.cell.styles.halign = 'center'
-        }
-        if (hookData.section === 'body') {
-          const row = hookData.row.raw
-          if (row && Array.isArray(row) && row[0] === "Subtotal") {
-            hookData.cell.styles.fillColor = [240, 242, 245]
-            hookData.cell.styles.fontStyle = "bold"
-          }
-        }
-      },
-    })
-
-    const PH = 210
-    doc.setDrawColor(7,8,91).setLineWidth(0.4).line(ML,PH-14,PW-MR,PH-14)
-    doc.setFont("helvetica","normal").setFontSize(7.5).setTextColor(107,114,128)
-    doc.text(`Generated by ${companyName||"OneAccounts"}  ·  ${companyTagline||""}`, PW/2, PH-8, {align:"center"})
     doc.save("ap-aging-report.pdf")
   }
 

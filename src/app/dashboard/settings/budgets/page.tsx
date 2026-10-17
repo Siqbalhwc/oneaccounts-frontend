@@ -9,6 +9,7 @@ import { Upload, Download, Edit, Send, CheckCircle, History, X, AlertTriangle } 
 import BudgetHistory from "@/components/BudgetHistory"
 import { useCompany } from "@/contexts/CompanyContext"
 import { generateBudgetVsActualPDF } from "@/lib/pdf/budgetVsActualPDF"
+import { fetchCompanyContact } from "@/lib/pdf/reportCommon"
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
 
@@ -745,9 +746,11 @@ export default function BudgetsPage() {
     const projectName = projects.find(p => p.id == selectedProjectId)?.name || ""
     const donorName = donors.find(d => d.id == selectedDonorId)?.name || ""
 
+    const contact = await fetchCompanyContact(supabase, companyId)
     const doc = await generateBudgetVsActualPDF({
       companyName: companyName || "OneAccounts",
       companyTagline: companyTagline || "",
+      ...contact,
       logoUrl: logoUrl || null,
       projectName,
       donorName,

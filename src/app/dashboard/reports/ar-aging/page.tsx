@@ -4,8 +4,8 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { ArrowLeft, Download, Search, X, Check, ChevronRight, AlertTriangle } from "lucide-react"
 import { useRouter } from "next/navigation"
-import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
+import { generateAgingPDF } from "@/lib/pdf/agingPDF"
+import { fetchCompanyContact } from "@/lib/pdf/reportCommon"
 import { useCompany } from "@/contexts/CompanyContext"
 import { fmtMoney } from "@/lib/money"
 
@@ -111,7 +111,7 @@ function Cell({ value, muted, danger }: { value: number; muted?: boolean; danger
 // ── Main Page ──
 export default function ARAgingPage() {
   const router = useRouter()
-  const { companyId } = useCompany()
+  const { companyId, companyName, companyTagline, logoUrl } = useCompany()
   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
   const [groups, setGroups] = useState<CustomerGroup[]>([])
@@ -283,57 +283,34 @@ export default function ARAgingPage() {
     c.name.toLowerCase().includes(customerSearch.toLowerCase())
   )
 
-  // PDF export (unchanged)
-  const exportPDF = () => {
-    const doc = new jsPDF()
-    doc.setFontSize(14)
-    doc.text("AR Aging Report", 14, 16)
-    doc.setFontSize(10)
-    doc.text(`As of ${asOfDate}`, 14, 22)
-
-    const body: any[] = []
-    groups.forEach((g) => {
-      body.push([
-        { content: g.customerName, styles: { fontStyle: "bold" } },
-        fmt(g.current),
-        fmt(g.days1to30),
-        fmt(g.days31to60),
-        fmt(g.days61to90),
-        fmt(g.over90),
-        { content: fmt(g.total), styles: { fontStyle: "bold" } },
-      ])
-      g.invoices.forEach((inv) => {
-        body.push([
-          `  ${inv.invoiceNo} (${inv.invoiceDate})`,
-          fmt(inv.current),
-          fmt(inv.days1to30),
-          fmt(inv.days31to60),
-          fmt(inv.days61to90),
-          fmt(inv.over90),
-          fmt(inv.total),
-        ])
-      })
-      body.push([
-        { content: `  Total ${g.customerName}`, styles: { fontStyle: "bold" } },
-        { content: fmt(g.current), styles: { fontStyle: "bold" } },
-        { content: fmt(g.days1to30), styles: { fontStyle: "bold" } },
-        { content: fmt(g.days31to60), styles: { fontStyle: "bold" } },
-        { content: fmt(g.days61to90), styles: { fontStyle: "bold" } },
-        { content: fmt(g.over90), styles: { fontStyle: "bold" } },
-        { content: fmt(g.total), styles: { fontStyle: "bold" } },
-      ])
+  // PDF export (shared aging generator - same layout as General Ledger)
+  const exportPDF = async () => {
+    if (groups.length === 0) return alert("No data to export")
+    const contact = await fetchCompanyContact(supabase, companyId)
+    const filterLabel =
+      selectedCustomerIds.length === 0 ? "All Customers"
+      : selectedCustomerIds.length === 1 ? (customers.find((c) => c.id === selectedCustomerIds[0])?.name || "Selected Customer")
+      : `${selectedCustomerIds.length} Customers`
+    const doc = await generateAgingPDF({
+      kind: "AR",
+      companyName: companyName || "OneAccounts",
+      companyTagline: companyTagline || "",
+      logoUrl: logoUrl || null,
+      ...contact,
+      asOfDate,
+      filterLabel,
+      groups: groups.map((g) => ({
+        name: g.customerName,
+        current: g.current, days1to30: g.days1to30, days31to60: g.days31to60,
+        days61to90: g.days61to90, over90: g.over90, total: g.total,
+        rows: g.invoices.map((inv) => ({
+          docNo: inv.invoiceNo, docDate: inv.invoiceDate,
+          current: inv.current, days1to30: inv.days1to30, days31to60: inv.days31to60,
+          days61to90: inv.days61to90, over90: inv.over90, total: inv.total,
+        })),
+      })),
+      totals,
     })
-
-    autoTable(doc, {
-      startY: 28,
-      head: [["Customer / Invoice", "Current", "1-30", "31-60", "61-90", "90+", "Total"]],
-      body,
-      foot: [["Grand total", fmt(totals.current), fmt(totals.days1to30), fmt(totals.days31to60), fmt(totals.days61to90), fmt(totals.over90), fmt(totals.total)]],
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [30, 41, 59] },
-      footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold" },
-    })
-
     doc.save(`ar-aging-${asOfDate}.pdf`)
   }
 

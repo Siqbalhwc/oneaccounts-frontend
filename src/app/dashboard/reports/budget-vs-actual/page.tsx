@@ -7,6 +7,7 @@ import { useCompany } from "@/contexts/CompanyContext"
 import * as XLSX from "xlsx"
 import { Download, FileText, ClipboardList } from "lucide-react"
 import { generateBudgetVsActualPDF } from "@/lib/pdf/budgetVsActualPDF"
+import { fetchCompanyContact } from "@/lib/pdf/reportCommon"
 
 export default function BudgetVsActualReportPage() {
   const supabase = createBrowserClient(
@@ -181,9 +182,11 @@ export default function BudgetVsActualReportPage() {
     const projectName = selectedProject?.name || ""
     const donorName = donors.find(d => d.id == selectedDonorId)?.name || ""
 
+    const contact = await fetchCompanyContact(supabase, companyId)
     const doc = await generateBudgetVsActualPDF({
       companyName: companyName || "OneAccounts",
       companyTagline: companyTagline || "",
+      ...contact,
       logoUrl: logoUrl || null,
       projectName,
       donorName,

@@ -1,0 +1,793 @@
+diff --git a/src/app/dashboard/reports/ap-aging/page.tsx b/src/app/dashboard/reports/ap-aging/page.tsx
+index ffbda3b..422ce9a 100644
+--- a/src/app/dashboard/reports/ap-aging/page.tsx
++++ b/src/app/dashboard/reports/ap-aging/page.tsx
+@@ -4,8 +4,8 @@ import { useState, useEffect, useRef, useMemo } from "react"
+ import { createBrowserClient } from "@supabase/ssr"
+ import { ArrowLeft, Download, Search, X, Check, ChevronRight, AlertTriangle } from "lucide-react"
+ import { useRouter } from "next/navigation"
+-import jsPDF from "jspdf"
+-import autoTable from "jspdf-autotable"
++import { generateAgingPDF } from "@/lib/pdf/agingPDF"
++import { fetchCompanyContact } from "@/lib/pdf/reportCommon"
+ import { useCompany } from "@/contexts/CompanyContext"
+ import { fmtMoney } from "@/lib/money"
+ 
+@@ -112,7 +112,7 @@ function Cell({ value, muted, danger }: { value: number; muted?: boolean; danger
+ // ── Main Page ──
+ export default function APAgingPage() {
+   const router = useRouter()
+-  const { companyId } = useCompany()
++  const { companyId, companyName, companyTagline, logoUrl } = useCompany()
+   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+ 
+   const [groups, setGroups] = useState<SupplierGroup[]>([])
+@@ -288,97 +288,34 @@ export default function APAgingPage() {
+     s.name.toLowerCase().includes(supplierSearch.toLowerCase())
+   )
+ 
+-  // PDF export
++  // PDF export (shared aging generator - same layout as General Ledger)
+   const exportPDF = async () => {
+     if (groups.length === 0) return alert("No data to export")
+-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
+-    const PW = 297, ML = 14, MR = 14, LOGO_SIZE = 20, LOGO_X = ML, LOGO_Y = 7
+-    const { logoUrl, companyName, companyTagline } = useCompany()
+-    if (logoUrl) {
+-      try {
+-        const r = await fetch(logoUrl)
+-        if (r.ok) {
+-          const b = await r.blob()
+-          const reader = new FileReader()
+-          const dataUrl = await new Promise<string>((res) => { reader.onload = () => res(reader.result as string); reader.onerror = () => res(""); reader.readAsDataURL(b) })
+-          if (dataUrl) doc.addImage(dataUrl, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
+-        }
+-      } catch {}
+-    }
+-    const textX = logoUrl ? LOGO_X + LOGO_SIZE + 5 : ML
+-    doc.setTextColor(7,8,91).setFont("helvetica","bold").setFontSize(14)
+-    doc.text(companyName||"", textX, LOGO_Y+7)
+-    doc.setFont("helvetica","normal").setFontSize(8.5).setTextColor(107,114,128)
+-    doc.text(companyTagline||"", textX, LOGO_Y+13)
+-    doc.setFont("helvetica","bold").setFontSize(24).setTextColor(7,8,91)
+-    doc.text("AP AGING REPORT", PW-MR, LOGO_Y+8, {align:"right"})
+-    const supplierFilter = selectedSupplierIds.length===1 ? suppliers.find(s=>s.id===selectedSupplierIds[0])?.name||"Selected Supplier" : "All Suppliers"
+-    doc.setFont("helvetica","normal").setFontSize(8.5).setTextColor(107,114,128)
+-    doc.text(`Supplier: ${supplierFilter}`, PW-MR, LOGO_Y+16, {align:"right"})
+-    doc.text(`As of: ${asOfDate}`, PW-MR, LOGO_Y+21, {align:"right"})
+-    const HEADER_BOTTOM = LOGO_Y+LOGO_SIZE+5
+-    doc.setDrawColor(7,8,91).setLineWidth(0.6).line(ML, HEADER_BOTTOM, PW-MR, HEADER_BOTTOM)
+-    let Y = HEADER_BOTTOM+6
+-    const headers = ["Supplier","Invoice #","Inv Date","Current","1-30","31-60","61-90",">90","Total"]
+-    const body: any[] = []
+-    groups.forEach(g=>{
+-      body.push([{content:g.supplierName,styles:{fontStyle:"bold",fillColor:[245,247,250]}},"","","","","","","",""])
+-      g.invoices.forEach(inv=>{
+-        body.push(["",inv.invoiceNo,inv.invoiceDate,inv.current>0?fmt(inv.current):"",inv.days1to30>0?fmt(inv.days1to30):"",inv.days31to60>0?fmt(inv.days31to60):"",inv.days61to90>0?fmt(inv.days61to90):"",inv.over90>0?fmt(inv.over90):"",inv.total>0?fmt(inv.total):""])
+-      })
+-      body.push([{content:"Subtotal",styles:{fontStyle:"bold",fillColor:[240,242,245]}},"","",g.current>0?fmt(g.current):"",g.days1to30>0?fmt(g.days1to30):"",g.days31to60>0?fmt(g.days31to60):"",g.days61to90>0?fmt(g.days61to90):"",g.over90>0?fmt(g.over90):"",g.total>0?fmt(g.total):""])
++    const contact = await fetchCompanyContact(supabase, companyId)
++    const filterLabel =
++      selectedSupplierIds.length === 0 ? "All Suppliers"
++      : selectedSupplierIds.length === 1 ? (suppliers.find((s) => s.id === selectedSupplierIds[0])?.name || "Selected Supplier")
++      : `${selectedSupplierIds.length} Suppliers`
++    const doc = await generateAgingPDF({
++      kind: "AP",
++      companyName: companyName || "OneAccounts",
++      companyTagline: companyTagline || "",
++      logoUrl: logoUrl || null,
++      ...contact,
++      asOfDate,
++      filterLabel,
++      groups: groups.map((g) => ({
++        name: g.supplierName,
++        current: g.current, days1to30: g.days1to30, days31to60: g.days31to60,
++        days61to90: g.days61to90, over90: g.over90, total: g.total,
++        rows: g.invoices.map((inv) => ({
++          docNo: inv.invoiceNo, docDate: inv.invoiceDate,
++          current: inv.current, days1to30: inv.days1to30, days31to60: inv.days31to60,
++          days61to90: inv.days61to90, over90: inv.over90, total: inv.total,
++        })),
++      })),
++      totals,
+     })
+-
+-    autoTable(doc, {
+-      startY: Y,
+-      margin: { left: ML, right: MR },
+-      tableWidth: 'auto',
+-      head: [headers],
+-      body,
+-      styles: {
+-        fontSize: 7.5,
+-        cellPadding: { top: 2, bottom: 2, left: 2, right: 2 },
+-        textColor: [17, 24, 39],
+-        lineColor: [229, 231, 235],
+-        lineWidth: 0.2,
+-        overflow: 'linebreak',
+-      },
+-      headStyles: {
+-        fillColor: [7, 8, 91],
+-        textColor: [255, 255, 255],
+-        fontStyle: "bold",
+-        fontSize: 8,
+-      },
+-      alternateRowStyles: { fillColor: [248, 249, 252] },
+-      columnStyles: {
+-        0: { halign: 'left' },
+-        1: { halign: 'left' },
+-        2: { halign: 'left' },
+-        3: { halign: 'right' },
+-        4: { halign: 'right' },
+-        5: { halign: 'right' },
+-        6: { halign: 'right' },
+-        7: { halign: 'right' },
+-        8: { halign: 'right' },
+-      },
+-      didParseCell: (hookData: any) => {
+-        if (hookData.section === 'head' && hookData.column.index >= 3) {
+-          hookData.cell.styles.halign = 'center'
+-        }
+-        if (hookData.section === 'body') {
+-          const row = hookData.row.raw
+-          if (row && Array.isArray(row) && row[0] === "Subtotal") {
+-            hookData.cell.styles.fillColor = [240, 242, 245]
+-            hookData.cell.styles.fontStyle = "bold"
+-          }
+-        }
+-      },
+-    })
+-
+-    const PH = 210
+-    doc.setDrawColor(7,8,91).setLineWidth(0.4).line(ML,PH-14,PW-MR,PH-14)
+-    doc.setFont("helvetica","normal").setFontSize(7.5).setTextColor(107,114,128)
+-    doc.text(`Generated by ${companyName||"OneAccounts"}  ·  ${companyTagline||""}`, PW/2, PH-8, {align:"center"})
+     doc.save("ap-aging-report.pdf")
+   }
+ 
+diff --git a/src/app/dashboard/reports/ar-aging/page.tsx b/src/app/dashboard/reports/ar-aging/page.tsx
+index 8adfd8e..97f5ef7 100644
+--- a/src/app/dashboard/reports/ar-aging/page.tsx
++++ b/src/app/dashboard/reports/ar-aging/page.tsx
+@@ -4,8 +4,8 @@ import { useState, useEffect, useRef, useMemo } from "react"
+ import { createBrowserClient } from "@supabase/ssr"
+ import { ArrowLeft, Download, Search, X, Check, ChevronRight, AlertTriangle } from "lucide-react"
+ import { useRouter } from "next/navigation"
+-import jsPDF from "jspdf"
+-import autoTable from "jspdf-autotable"
++import { generateAgingPDF } from "@/lib/pdf/agingPDF"
++import { fetchCompanyContact } from "@/lib/pdf/reportCommon"
+ import { useCompany } from "@/contexts/CompanyContext"
+ import { fmtMoney } from "@/lib/money"
+ 
+@@ -111,7 +111,7 @@ function Cell({ value, muted, danger }: { value: number; muted?: boolean; danger
+ // ── Main Page ──
+ export default function ARAgingPage() {
+   const router = useRouter()
+-  const { companyId } = useCompany()
++  const { companyId, companyName, companyTagline, logoUrl } = useCompany()
+   const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+ 
+   const [groups, setGroups] = useState<CustomerGroup[]>([])
+@@ -283,57 +283,34 @@ export default function ARAgingPage() {
+     c.name.toLowerCase().includes(customerSearch.toLowerCase())
+   )
+ 
+-  // PDF export (unchanged)
+-  const exportPDF = () => {
+-    const doc = new jsPDF()
+-    doc.setFontSize(14)
+-    doc.text("AR Aging Report", 14, 16)
+-    doc.setFontSize(10)
+-    doc.text(`As of ${asOfDate}`, 14, 22)
+-
+-    const body: any[] = []
+-    groups.forEach((g) => {
+-      body.push([
+-        { content: g.customerName, styles: { fontStyle: "bold" } },
+-        fmt(g.current),
+-        fmt(g.days1to30),
+-        fmt(g.days31to60),
+-        fmt(g.days61to90),
+-        fmt(g.over90),
+-        { content: fmt(g.total), styles: { fontStyle: "bold" } },
+-      ])
+-      g.invoices.forEach((inv) => {
+-        body.push([
+-          `  ${inv.invoiceNo} (${inv.invoiceDate})`,
+-          fmt(inv.current),
+-          fmt(inv.days1to30),
+-          fmt(inv.days31to60),
+-          fmt(inv.days61to90),
+-          fmt(inv.over90),
+-          fmt(inv.total),
+-        ])
+-      })
+-      body.push([
+-        { content: `  Total ${g.customerName}`, styles: { fontStyle: "bold" } },
+-        { content: fmt(g.current), styles: { fontStyle: "bold" } },
+-        { content: fmt(g.days1to30), styles: { fontStyle: "bold" } },
+-        { content: fmt(g.days31to60), styles: { fontStyle: "bold" } },
+-        { content: fmt(g.days61to90), styles: { fontStyle: "bold" } },
+-        { content: fmt(g.over90), styles: { fontStyle: "bold" } },
+-        { content: fmt(g.total), styles: { fontStyle: "bold" } },
+-      ])
+-    })
+-
+-    autoTable(doc, {
+-      startY: 28,
+-      head: [["Customer / Invoice", "Current", "1-30", "31-60", "61-90", "90+", "Total"]],
+-      body,
+-      foot: [["Grand total", fmt(totals.current), fmt(totals.days1to30), fmt(totals.days31to60), fmt(totals.days61to90), fmt(totals.over90), fmt(totals.total)]],
+-      styles: { fontSize: 8 },
+-      headStyles: { fillColor: [30, 41, 59] },
+-      footStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: "bold" },
++  // PDF export (shared aging generator - same layout as General Ledger)
++  const exportPDF = async () => {
++    if (groups.length === 0) return alert("No data to export")
++    const contact = await fetchCompanyContact(supabase, companyId)
++    const filterLabel =
++      selectedCustomerIds.length === 0 ? "All Customers"
++      : selectedCustomerIds.length === 1 ? (customers.find((c) => c.id === selectedCustomerIds[0])?.name || "Selected Customer")
++      : `${selectedCustomerIds.length} Customers`
++    const doc = await generateAgingPDF({
++      kind: "AR",
++      companyName: companyName || "OneAccounts",
++      companyTagline: companyTagline || "",
++      logoUrl: logoUrl || null,
++      ...contact,
++      asOfDate,
++      filterLabel,
++      groups: groups.map((g) => ({
++        name: g.customerName,
++        current: g.current, days1to30: g.days1to30, days31to60: g.days31to60,
++        days61to90: g.days61to90, over90: g.over90, total: g.total,
++        rows: g.invoices.map((inv) => ({
++          docNo: inv.invoiceNo, docDate: inv.invoiceDate,
++          current: inv.current, days1to30: inv.days1to30, days31to60: inv.days31to60,
++          days61to90: inv.days61to90, over90: inv.over90, total: inv.total,
++        })),
++      })),
++      totals,
+     })
+-
+     doc.save(`ar-aging-${asOfDate}.pdf`)
+   }
+ 
+diff --git a/src/app/dashboard/reports/budget-summary/page.tsx b/src/app/dashboard/reports/budget-summary/page.tsx
+index 2568cba..7caa1e1 100644
+--- a/src/app/dashboard/reports/budget-summary/page.tsx
++++ b/src/app/dashboard/reports/budget-summary/page.tsx
+@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation"
+ import { createBrowserClient } from "@supabase/ssr"
+ import { loadYearBudgetRows } from "@/lib/budgetPeriod"
+ import * as XLSX from "xlsx"
+-import jsPDF from "jspdf"
+-import autoTable from "jspdf-autotable"
++import { generateBudgetSummaryPDF } from "@/lib/pdf/budgetSummaryPDF"
++import { fetchCompanyContact } from "@/lib/pdf/reportCommon"
++import { useCompany } from "@/contexts/CompanyContext"
+ import { Download } from "lucide-react"
+ 
+ export default function BudgetSummaryPage() {
+   const router = useRouter()
++  const { companyName, companyTagline, logoUrl } = useCompany()
+   const supabase = createBrowserClient(
+     process.env.NEXT_PUBLIC_SUPABASE_URL!,
+     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+@@ -113,20 +115,16 @@ export default function BudgetSummaryPage() {
+     XLSX.writeFile(wb, `budget_summary_${fiscalYear}.xlsx`)
+   }
+ 
+-  const exportPDF = () => {
+-    const doc = new jsPDF()
+-    doc.setFontSize(16)
+-    doc.text("Budget Summary", 14, 20)
+-    doc.setFontSize(10)
+-    doc.text(`Fiscal Year: ${fiscalYear}`, 14, 28)
+-    const body = rows.map(r => [
+-      r.project, r.donor, r.activity, r.location,
+-      r.account_code, r.account_name, r.amount?.toLocaleString()
+-    ])
+-    autoTable(doc, {
+-      head: [["Project","Donor","Activity","Location","Code","Account","Budget"]],
+-      body,
+-      startY: 35,
++  const exportPDF = async () => {
++    const contact = await fetchCompanyContact(supabase, companyId)
++    const doc = await generateBudgetSummaryPDF({
++      companyName: companyName || "OneAccounts",
++      companyTagline: companyTagline || "",
++      logoUrl: logoUrl || null,
++      ...contact,
++      fiscalYear,
++      projectName: projects.find(p => String(p.id) === String(selectedProjectId))?.name || "",
++      rows,
+     })
+     doc.save(`budget_summary_${fiscalYear}.pdf`)
+   }
+diff --git a/src/app/dashboard/reports/budget-vs-actual/page.tsx b/src/app/dashboard/reports/budget-vs-actual/page.tsx
+index 9bfacb7..ae135f9 100644
+--- a/src/app/dashboard/reports/budget-vs-actual/page.tsx
++++ b/src/app/dashboard/reports/budget-vs-actual/page.tsx
+@@ -7,6 +7,7 @@ import { useCompany } from "@/contexts/CompanyContext"
+ import * as XLSX from "xlsx"
+ import { Download, FileText, ClipboardList } from "lucide-react"
+ import { generateBudgetVsActualPDF } from "@/lib/pdf/budgetVsActualPDF"
++import { fetchCompanyContact } from "@/lib/pdf/reportCommon"
+ 
+ export default function BudgetVsActualReportPage() {
+   const supabase = createBrowserClient(
+@@ -181,9 +182,11 @@ export default function BudgetVsActualReportPage() {
+     const projectName = selectedProject?.name || ""
+     const donorName = donors.find(d => d.id == selectedDonorId)?.name || ""
+ 
++    const contact = await fetchCompanyContact(supabase, companyId)
+     const doc = await generateBudgetVsActualPDF({
+       companyName: companyName || "OneAccounts",
+       companyTagline: companyTagline || "",
++      ...contact,
+       logoUrl: logoUrl || null,
+       projectName,
+       donorName,
+diff --git a/src/app/dashboard/settings/budgets/page.tsx b/src/app/dashboard/settings/budgets/page.tsx
+index 965d8a2..bcc8099 100644
+--- a/src/app/dashboard/settings/budgets/page.tsx
++++ b/src/app/dashboard/settings/budgets/page.tsx
+@@ -9,6 +9,7 @@ import { Upload, Download, Edit, Send, CheckCircle, History, X, AlertTriangle }
+ import BudgetHistory from "@/components/BudgetHistory"
+ import { useCompany } from "@/contexts/CompanyContext"
+ import { generateBudgetVsActualPDF } from "@/lib/pdf/budgetVsActualPDF"
++import { fetchCompanyContact } from "@/lib/pdf/reportCommon"
+ import jsPDF from "jspdf"
+ import autoTable from "jspdf-autotable"
+ 
+@@ -745,9 +746,11 @@ export default function BudgetsPage() {
+     const projectName = projects.find(p => p.id == selectedProjectId)?.name || ""
+     const donorName = donors.find(d => d.id == selectedDonorId)?.name || ""
+ 
++    const contact = await fetchCompanyContact(supabase, companyId)
+     const doc = await generateBudgetVsActualPDF({
+       companyName: companyName || "OneAccounts",
+       companyTagline: companyTagline || "",
++      ...contact,
+       logoUrl: logoUrl || null,
+       projectName,
+       donorName,
+diff --git a/src/lib/pdf/agingPDF.ts b/src/lib/pdf/agingPDF.ts
+new file mode 100644
+index 0000000..fed1579
+--- /dev/null
++++ b/src/lib/pdf/agingPDF.ts
+@@ -0,0 +1,129 @@
++// AR Aging and AP Aging PDF - one generator so both always look identical.
++import jsPDF from "jspdf"
++import autoTable from "jspdf-autotable"
++import { fmtMoney } from "../money"
++import {
++  NAVY, DARK, WHITE, BORDER, ROW_ALT, ML, MR,
++  drawReportHeader, addFooterAndPageNumbers, CompanyHeaderInfo,
++} from "./reportCommon"
++
++export interface AgingDocRow {
++  docNo: string
++  docDate: string
++  current: number
++  days1to30: number
++  days31to60: number
++  days61to90: number
++  over90: number
++  total: number
++}
++
++export interface AgingGroupData {
++  name: string
++  current: number
++  days1to30: number
++  days31to60: number
++  days61to90: number
++  over90: number
++  total: number
++  rows: AgingDocRow[]
++}
++
++export interface AgingPDFData extends CompanyHeaderInfo {
++  kind: "AR" | "AP"
++  asOfDate: string
++  filterLabel: string          // e.g. "All Customers" / "Junaid Said"
++  groups: AgingGroupData[]
++  totals: { current: number; days1to30: number; days31to60: number; days61to90: number; over90: number; total: number }
++}
++
++const f = (n: number) => (n ? fmtMoney(n) : "\u2013")
++
++export async function generateAgingPDF(data: AgingPDFData): Promise<jsPDF> {
++  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
++  const isAR = data.kind === "AR"
++
++  const startY = await drawReportHeader(
++    doc,
++    data,
++    isAR ? "AR AGING REPORT" : "AP AGING REPORT",
++    [
++      `${isAR ? "Customer" : "Supplier"}: ${data.filterLabel}`,
++      `As of: ${data.asOfDate}`,
++    ]
++  )
++
++  const headers = [
++    isAR ? "Customer" : "Supplier",
++    isAR ? "Invoice #" : "Bill #",
++    "Date",
++    "Current",
++    "1-30",
++    "31-60",
++    "61-90",
++    "90+",
++    "Total (PKR)",
++  ]
++
++  const body: any[] = []
++  const types: ("group" | "doc" | "sub" | "grand")[] = []
++
++  data.groups.forEach(g => {
++    body.push([g.name, "", "", "", "", "", "", "", ""]); types.push("group")
++    g.rows.forEach(r => {
++      body.push(["", r.docNo, r.docDate, f(r.current), f(r.days1to30), f(r.days31to60), f(r.days61to90), f(r.over90), f(r.total)])
++      types.push("doc")
++    })
++    body.push(["Subtotal", "", "", f(g.current), f(g.days1to30), f(g.days31to60), f(g.days61to90), f(g.over90), f(g.total)])
++    types.push("sub")
++  })
++  body.push(["Grand Total", "", "", f(data.totals.current), f(data.totals.days1to30), f(data.totals.days31to60), f(data.totals.days61to90), f(data.totals.over90), f(data.totals.total)])
++  types.push("grand")
++
++  autoTable(doc, {
++    startY,
++    margin: { top: 14, left: ML, right: MR, bottom: 18 },
++    head: [headers],
++    body,
++    styles: {
++      fontSize: 7.5,
++      cellPadding: { top: 2, bottom: 2, left: 2, right: 2 },
++      textColor: DARK,
++      lineColor: BORDER,
++      lineWidth: 0.2,
++      overflow: "linebreak",
++    },
++    headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: "bold", fontSize: 8 },
++    alternateRowStyles: { fillColor: ROW_ALT },
++    columnStyles: {
++      0: { halign: "left" },
++      1: { halign: "left", cellWidth: 36 },
++      2: { halign: "left", cellWidth: 26 },
++      3: { halign: "right", cellWidth: 28 },
++      4: { halign: "right", cellWidth: 28 },
++      5: { halign: "right", cellWidth: 28 },
++      6: { halign: "right", cellWidth: 28 },
++      7: { halign: "right", cellWidth: 28 },
++      8: { halign: "right", cellWidth: 32, fontStyle: "bold" },
++    },
++    didParseCell: (h: any) => {
++      if (h.section === "head" && h.column.index >= 3) h.cell.styles.halign = "center"
++      if (h.section !== "body") return
++      const t = types[h.row.index]
++      if (t === "group") {
++        h.cell.styles.fontStyle = "bold"
++        h.cell.styles.fillColor = [235, 238, 250]
++      } else if (t === "sub") {
++        h.cell.styles.fontStyle = "bold"
++        h.cell.styles.fillColor = [219, 224, 245]
++      } else if (t === "grand") {
++        h.cell.styles.fontStyle = "bold"
++        h.cell.styles.fillColor = NAVY
++        h.cell.styles.textColor = WHITE
++      }
++    },
++  })
++
++  addFooterAndPageNumbers(doc, data.companyName, data.companyTagline)
++  return doc
++}
+diff --git a/src/lib/pdf/budgetSummaryPDF.ts b/src/lib/pdf/budgetSummaryPDF.ts
+new file mode 100644
+index 0000000..6c3819c
+--- /dev/null
++++ b/src/lib/pdf/budgetSummaryPDF.ts
+@@ -0,0 +1,73 @@
++// Budget Summary (flat Budget Report) PDF - General Ledger style.
++import jsPDF from "jspdf"
++import autoTable from "jspdf-autotable"
++import { fmtMoney } from "../money"
++import {
++  NAVY, DARK, WHITE, BORDER, ROW_ALT, ML, MR,
++  drawReportHeader, addFooterAndPageNumbers, CompanyHeaderInfo,
++} from "./reportCommon"
++
++export interface BudgetSummaryRow {
++  project: string
++  donor: string
++  activity: string
++  location: string
++  account_code: string
++  account_name: string
++  amount: number
++}
++
++export interface BudgetSummaryPDFData extends CompanyHeaderInfo {
++  fiscalYear: number | string
++  projectName?: string          // blank = all projects
++  rows: BudgetSummaryRow[]
++}
++
++export async function generateBudgetSummaryPDF(data: BudgetSummaryPDFData): Promise<jsPDF> {
++  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
++
++  const startY = await drawReportHeader(doc, data, "BUDGET SUMMARY", [
++    `Project: ${data.projectName || "All Projects"}`,
++    `Fiscal Year: ${data.fiscalYear}`,
++  ])
++
++  const headers = ["Project", "Donor", "Activity", "Location", "Code", "Account", "Budget (PKR)"]
++  const body: any[] = data.rows.map(r => [
++    r.project, r.donor, r.activity, r.location, r.account_code, r.account_name, fmtMoney(r.amount || 0),
++  ])
++  const grand = data.rows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
++  body.push(["Grand Total", "", "", "", "", "", fmtMoney(grand)])
++  const lastIdx = body.length - 1
++
++  autoTable(doc, {
++    startY,
++    margin: { top: 14, left: ML, right: MR, bottom: 18 },
++    head: [headers],
++    body,
++    styles: {
++      fontSize: 7.5,
++      cellPadding: { top: 2, bottom: 2, left: 2, right: 2 },
++      textColor: DARK,
++      lineColor: BORDER,
++      lineWidth: 0.2,
++      overflow: "linebreak",
++    },
++    headStyles: { fillColor: NAVY, textColor: WHITE, fontStyle: "bold", fontSize: 8 },
++    alternateRowStyles: { fillColor: ROW_ALT },
++    columnStyles: {
++      4: { cellWidth: 20 },
++      6: { cellWidth: 36, halign: "right", fontStyle: "bold" },
++    },
++    didParseCell: (h: any) => {
++      if (h.section === "head" && h.column.index === 6) h.cell.styles.halign = "center"
++      if (h.section === "body" && h.row.index === lastIdx) {
++        h.cell.styles.fontStyle = "bold"
++        h.cell.styles.fillColor = NAVY
++        h.cell.styles.textColor = WHITE
++      }
++    },
++  })
++
++  addFooterAndPageNumbers(doc, data.companyName, data.companyTagline)
++  return doc
++}
+diff --git a/src/lib/pdf/budgetVsActualPDF.ts b/src/lib/pdf/budgetVsActualPDF.ts
+index dd23d40..4434937 100644
+--- a/src/lib/pdf/budgetVsActualPDF.ts
++++ b/src/lib/pdf/budgetVsActualPDF.ts
+@@ -1,5 +1,6 @@
+ ﻿import jsPDF from "jspdf"
+ import autoTable from "jspdf-autotable"
++import { addFooterAndPageNumbers } from "./reportCommon"
+ 
+ const NAVY    = [7, 8, 91]      as [number, number, number]
+ const DARK    = [17, 24, 39]    as [number, number, number]
+@@ -42,6 +43,9 @@ export interface BudgetVsActualRow {
+ export interface BudgetVsActualPDFData {
+   companyName: string
+   companyTagline: string
++  companyAddress?: string
++  companyPhone?: string
++  companyEmail?: string
+   logoUrl?: string | null
+   projectName: string
+   donorName?: string
+@@ -76,6 +80,12 @@ export async function generateBudgetVsActualPDF(data: BudgetVsActualPDFData): Pr
+   doc.setTextColor(...MUTED)
+   doc.text(data.companyTagline || "", textX, LOGO_Y + 13)
+ 
++  let infoY = LOGO_Y + 19
++  let lastTextY = LOGO_Y + 13
++  if (data.companyAddress) { doc.text(data.companyAddress, textX, infoY); lastTextY = infoY; infoY += 4 }
++  if (data.companyPhone)   { doc.text("Phone: " + data.companyPhone, textX, infoY); lastTextY = infoY; infoY += 4 }
++  if (data.companyEmail)   { doc.text("Email: " + data.companyEmail, textX, infoY); lastTextY = infoY; infoY += 4 }
++
+   doc.setFont("helvetica", "bold")
+   doc.setFontSize(22)
+   doc.setTextColor(...NAVY)
+@@ -85,14 +95,16 @@ export async function generateBudgetVsActualPDF(data: BudgetVsActualPDFData): Pr
+   doc.setFontSize(8.5)
+   doc.setTextColor(...MUTED)
+   doc.text(`Project: ${data.projectName}`, PW - MR, LOGO_Y + 19, { align: "right" })
+-  if (data.donorName) doc.text(`Donor: ${data.donorName}`, PW - MR, LOGO_Y + 24, { align: "right" })
++  lastTextY = Math.max(lastTextY, LOGO_Y + 19)
++  if (data.donorName) { doc.text(`Donor: ${data.donorName}`, PW - MR, LOGO_Y + 24, { align: "right" }); lastTextY = Math.max(lastTextY, LOGO_Y + 24) }
+   if (data.periodStart || data.periodEnd) {
+     const s = data.periodStart ? new Date(data.periodStart).toLocaleDateString("en-PK") : "-"
+     const e = data.periodEnd ? new Date(data.periodEnd).toLocaleDateString("en-PK") : "-"
+     doc.text(`Project Period: ${s} to ${e}`, PW - MR, LOGO_Y + 29, { align: "right" })
++    lastTextY = Math.max(lastTextY, LOGO_Y + 29)
+   }
+ 
+-  const HEADER_BOTTOM = LOGO_Y + LOGO_SIZE + 5
++  const HEADER_BOTTOM = Math.max(LOGO_Y + LOGO_SIZE + 5, lastTextY + 3)
+   doc.setDrawColor(...NAVY)
+   doc.setLineWidth(0.6)
+   doc.line(ML, HEADER_BOTTOM, PW - MR, HEADER_BOTTOM)
+@@ -141,7 +153,7 @@ export async function generateBudgetVsActualPDF(data: BudgetVsActualPDFData): Pr
+ 
+   autoTable(doc, {
+     startY: Y,
+-    margin: { left: ML, right: MR },
++    margin: { top: 14, left: ML, right: MR, bottom: 18 },
+     head: [["Activity / Location", "Account", "Budget (PKR)", "Actual (PKR)", "Variance (PKR)"]],
+     body: tableRows.map(r => [r.description, r.account, r.budget, r.actual, r.variance]),
+     columnStyles: {
+@@ -198,16 +210,7 @@ export async function generateBudgetVsActualPDF(data: BudgetVsActualPDFData): Pr
+     },
+   })
+ 
+-  doc.setDrawColor(...NAVY)
+-  doc.setLineWidth(0.4)
+-  doc.line(ML, PH - 14, PW - MR, PH - 14)
+-  doc.setFont("helvetica", "normal")
+-  doc.setFontSize(7.5)
+-  doc.setTextColor(...MUTED)
+-  doc.text(
+-    `Generated by ${data.companyName} - ${data.companyTagline}`,
+-    PW / 2, PH - 8, { align: "center" }
+-  )
++  addFooterAndPageNumbers(doc, data.companyName, data.companyTagline)
+ 
+   return doc
+ }
+\ No newline at end of file
+diff --git a/src/lib/pdf/reportCommon.ts b/src/lib/pdf/reportCommon.ts
+new file mode 100644
+index 0000000..e6ffc46
+--- /dev/null
++++ b/src/lib/pdf/reportCommon.ts
+@@ -0,0 +1,136 @@
++// Shared header / footer / page-number helpers for report PDFs.
++// Style = General Ledger PDF (landscape A4, navy, logo left, report name right).
++import jsPDF from "jspdf"
++
++export const NAVY    = [7, 8, 91]      as [number, number, number]
++export const DARK    = [17, 24, 39]    as [number, number, number]
++export const MUTED   = [107, 114, 128] as [number, number, number]
++export const BORDER  = [229, 231, 235] as [number, number, number]
++export const WHITE   = [255, 255, 255] as [number, number, number]
++export const ROW_ALT = [248, 249, 252] as [number, number, number]
++
++export const PW = 297
++export const PH = 210
++export const ML = 14
++export const MR = 14
++
++export interface CompanyHeaderInfo {
++  companyName: string
++  companyTagline?: string
++  companyAddress?: string
++  companyPhone?: string
++  companyEmail?: string
++  logoUrl?: string | null
++}
++
++export async function loadImage(url: string): Promise<string | null> {
++  try {
++    const res = await fetch(url)
++    if (!res.ok) return null
++    const blob = await res.blob()
++    return await new Promise<string>(resolve => {
++      const reader = new FileReader()
++      reader.onload = () => resolve(reader.result as string)
++      reader.onerror = () => resolve("")
++      reader.readAsDataURL(blob)
++    })
++  } catch {
++    return null
++  }
++}
++
++// Reads address / phone / email saved in Settings > Company.
++// Never throws: if nothing can be read, the three lines are simply left out.
++export async function fetchCompanyContact(
++  supabase: any,
++  companyId: string
++): Promise<{ companyAddress: string; companyPhone: string; companyEmail: string }> {
++  const blank = { companyAddress: "", companyPhone: "", companyEmail: "" }
++  if (!companyId) return blank
++  try {
++    const { data } = await supabase
++      .from("company_settings")
++      .select("address, phone, email")
++      .eq("company_id", companyId)
++      .maybeSingle()
++    if (!data) return blank
++    return {
++      companyAddress: data.address || "",
++      companyPhone: data.phone || "",
++      companyEmail: data.email || "",
++    }
++  } catch {
++    return blank
++  }
++}
++
++// Draws the standard header. Returns the Y position where the table should start.
++export async function drawReportHeader(
++  doc: jsPDF,
++  info: CompanyHeaderInfo,
++  title: string,
++  subtitleLines: string[]
++): Promise<number> {
++  const LOGO_SIZE = 20, LOGO_X = ML, LOGO_Y = 7
++
++  let logoData: string | null = null
++  if (info.logoUrl) logoData = await loadImage(info.logoUrl)
++  if (logoData) doc.addImage(logoData, "PNG", LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE)
++
++  const textX = logoData ? LOGO_X + LOGO_SIZE + 5 : ML
++  doc.setTextColor(...NAVY)
++  doc.setFont("helvetica", "bold")
++  doc.setFontSize(14)
++  doc.text(info.companyName || "", textX, LOGO_Y + 7)
++
++  doc.setFont("helvetica", "normal")
++  doc.setFontSize(8.5)
++  doc.setTextColor(...MUTED)
++  doc.text(info.companyTagline || "", textX, LOGO_Y + 13)
++
++  let infoY = LOGO_Y + 19
++  let lastY = LOGO_Y + 13
++  if (info.companyAddress) { doc.text(info.companyAddress, textX, infoY); lastY = infoY; infoY += 4 }
++  if (info.companyPhone)   { doc.text("Phone: " + info.companyPhone, textX, infoY); lastY = infoY; infoY += 4 }
++  if (info.companyEmail)   { doc.text("Email: " + info.companyEmail, textX, infoY); lastY = infoY; infoY += 4 }
++
++  // Report name (right)
++  doc.setFont("helvetica", "bold")
++  doc.setFontSize(24)
++  doc.setTextColor(...NAVY)
++  doc.text(title, PW - MR, LOGO_Y + 8, { align: "right" })
++
++  doc.setFont("helvetica", "normal")
++  doc.setFontSize(8.5)
++  doc.setTextColor(...MUTED)
++  let subY = LOGO_Y + 16
++  subtitleLines.filter(Boolean).forEach(line => {
++    doc.text(line, PW - MR, subY, { align: "right" })
++    lastY = Math.max(lastY, subY)
++    subY += 5
++  })
++
++  // Divider sits below the logo AND below the last text line (so nothing overlaps it)
++  const HEADER_BOTTOM = Math.max(LOGO_Y + LOGO_SIZE + 5, lastY + 3)
++  doc.setDrawColor(...NAVY)
++  doc.setLineWidth(0.6)
++  doc.line(ML, HEADER_BOTTOM, PW - MR, HEADER_BOTTOM)
++  return HEADER_BOTTOM + 6
++}
++
++// Footer line + "Generated by ..." + "Page X of Y" on every page. Call after the table(s).
++export function addFooterAndPageNumbers(doc: jsPDF, companyName: string, companyTagline?: string) {
++  const total = doc.getNumberOfPages()
++  for (let i = 1; i <= total; i++) {
++    doc.setPage(i)
++    doc.setDrawColor(...NAVY)
++    doc.setLineWidth(0.4)
++    doc.line(ML, PH - 14, PW - MR, PH - 14)
++    doc.setFont("helvetica", "normal")
++    doc.setFontSize(7.5)
++    doc.setTextColor(...MUTED)
++    const tag = companyTagline ? `  \u00B7  ${companyTagline}` : ""
++    doc.text(`Generated by ${companyName || "OneAccounts"}${tag}`, PW / 2, PH - 8, { align: "center" })
++    doc.text(`Page ${i} of ${total}`, PW - MR, PH - 8, { align: "right" })
++  }
++}
