@@ -328,6 +328,14 @@ function ApplyAdvanceInner() {
         {partyId > 0 && !loadingDocs && advance <= 0 && (
           <div className="aa-note" style={{ marginTop: 10 }}>This {partyLabel.toLowerCase()} has no unapplied advance.</div>
         )}
+        {partyId > 0 && !loadingDocs && advance > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <button className="oa-btn" onClick={() => router.push(`/dashboard/advance-refunds/new?type=${type}&party=${partyId}`)}>
+              Refund Advance
+            </button>
+            <span className="aa-note" style={{ marginLeft: 8 }}>Return the unused advance in cash or bank</span>
+          </div>
+        )}
       </div>
 
       {partyId > 0 && (

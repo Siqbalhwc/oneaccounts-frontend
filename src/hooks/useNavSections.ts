@@ -31,6 +31,7 @@ const baseNavSections: NavSection[] = [
     { label: 'Purchase Bills', icon: '📦', href: '/dashboard/bills'     },
     { label: 'Purchase Orders',icon: '📋', href: '/dashboard/purchase-orders', feature: 'purchase_orders' },
     { label: 'Payments',       icon: '💳', href: '/dashboard/payments'  },
+    { label: 'Advance Refunds', icon: '↩️', href: '/dashboard/advance-refunds' },
   ]},
   { section: 'BANKING', items: [
     { label: 'Bank Accounts',  icon: '🏦', href: '/dashboard/banking/bank-accounts'  },

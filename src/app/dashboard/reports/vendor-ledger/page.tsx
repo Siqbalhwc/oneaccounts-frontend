@@ -162,6 +162,31 @@ export default function VendorLedgerPage() {
       .eq("source_id", selectedSupplierId)
       : { data: [] as any[] }
 
+      // 4c. Advance refunds returned to us by this supplier (and their reversals)
+      const { data: supplierRefunds } = await supabase
+        .from("advance_refunds")
+        .select("id, refund_no")
+        .eq("company_id", companyId)
+        .eq("party_type", "supplier")
+        .eq("party_id", selectedSupplierId)
+
+      const refundIds = (supplierRefunds || []).map(r => r.id)
+      const refundNoById = new Map((supplierRefunds || []).map(r => [r.id, r.refund_no]))
+
+      const { data: refundLines } = apAccount && refundIds.length
+        ? await supabase
+            .from("journal_lines")
+            .select(`
+              id, debit, credit, entry_id, source_type, source_id,
+              journal_entries ( date, description, entry_no, created_at )
+            `)
+            .eq("company_id", companyId)
+            .eq("account_id", apAccount.id)
+            .in("source_type", ["supplier_refund", "supplier_refund_reversal"])
+            .in("source_id", refundIds)
+            .order("entry_id", { ascending: true })
+        : { data: [] as any[] }
+
       // 5. Build ledger lines
       const periodLines: any[] = []
       let openingDebit = 0
@@ -245,6 +270,36 @@ export default function VendorLedgerPage() {
       credit,
       running_balance: 0,
       })
+      }
+
+      for (const line of refundLines || []) {
+        const je = (line as any).journal_entries
+        const lineDate: string | undefined = je?.date
+        if (!lineDate) continue
+
+        const debit = line.debit || 0
+        const credit = line.credit || 0
+
+        if (lineDate < startDate) {
+          openingDebit += debit
+          openingCredit += credit
+          continue
+        }
+        if (lineDate > endDate) continue
+
+        const refundNo = refundNoById.get(line.source_id) || "SRF"
+        const isReversal = line.source_type === "supplier_refund_reversal"
+
+        periodLines.push({
+          id: `srf-${line.id}`,
+          entry_no: isReversal ? `Rev-${refundNo}` : refundNo,
+          date: lineDate,
+          created_at: je?.created_at || `${lineDate}T00:00:00`,
+          description: isReversal ? `Advance Refund Reversal - ${refundNo}` : `Advance Refund - ${refundNo}`,
+          debit,
+          credit,
+          running_balance: 0,
+        })
       }
 
       periodLines.sort((a, b) => {
